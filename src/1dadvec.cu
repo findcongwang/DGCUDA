@@ -37,7 +37,7 @@ __global__ void calcFlux(float *u, float *f, int Np, float aspeed, float time, i
     float ul, ur;
 
     if (idx == 0) {
-        f[idx] = 0;//-sin(aspeed * time);
+        f[idx] = aspeed*(u[0] + sin(aspeed*time)) / 2;
     }
     if (idx > 0) {
         // Flux calculations
@@ -45,10 +45,10 @@ __global__ void calcFlux(float *u, float *f, int Np, float aspeed, float time, i
         ur = u[idx*Np];
 
         // Central flux
-        f[idx] = (ul - ur) / 2;
+        f[idx] = aspeed * (ur - ul) / 2;
     }
     if (idx == K) {
-        f[idx] = 0;
+        f[idx] = 10;
     }
 }
 
@@ -69,9 +69,9 @@ __global__ void rhs(float *u, float *k, float *f, float *Dr, float *rx, float a,
     }
 
     // Initialize rhs to 0
-    for (i = 0; i < Np; i++) {
-        rhs[i] = 0;
-    }
+    //for (i = 0; i < Np; i++) {
+        //rhs[i] = 0;
+    //}
 
     // Calculate Dr * u
     // I think these are wrong
@@ -89,13 +89,13 @@ __global__ void rhs(float *u, float *k, float *f, float *Dr, float *rx, float a,
         //}
     //}
 
-    lflux  = f[idx];
-    rflux  = f[idx+1];
-
     // Scale RHS up
     for (i = 0; i < Np; i++) {
         rhs[i] *= -a*rx[Np*idx + i];
     }
+
+    lflux  = -f[idx];
+    rflux  = f[idx+1];
 
     // LIFT
     rhs[0]    -= lflux;
@@ -111,7 +111,7 @@ __global__ void rhs(float *u, float *k, float *f, float *Dr, float *rx, float a,
  * 
  * I need to store u + alpha * k_i into some temporary variable called k*.
  */
-__global__ void rk4_tempstorage(float *u, float *kstar, float*k, float alpha) {
+__global__ void rk4_tempstorage(float *u, float *kstar, float*k, float alpha, float dt) {
     int idx = gridDim.x * blockIdx.x + threadIdx.x;
     kstar[idx] = u[idx] + alpha * k[idx];
 }
@@ -148,7 +148,7 @@ void timeIntegrate(float *u, float a, int K, float dt, int Np, double t) {
     rhs<<<nBlocks, nThreadsRHS>>>(d_u, d_k1, d_f, d_Dr, d_rx, a, Np, dt);
     cudaThreadSynchronize();
     // k* <- u + k1/2
-    rk4_tempstorage<<<nBlocks, nThreadsRK>>>(d_u, d_kstar, d_k1, 0.5);
+    rk4_tempstorage<<<nBlocks, nThreadsRK>>>(d_u, d_kstar, d_k1, 0.5, dt);
     cudaThreadSynchronize();
 
     // Stage 2
@@ -159,7 +159,7 @@ void timeIntegrate(float *u, float a, int K, float dt, int Np, double t) {
     rhs<<<nBlocks, nThreadsRHS>>>(d_kstar, d_k2, d_f, d_Dr, d_rx, a, Np, dt);
     cudaThreadSynchronize();
     // k* <- u + k2/2
-    rk4_tempstorage<<<nBlocks, nThreadsRK>>>(d_u, d_kstar, d_k2, 0.5);
+    rk4_tempstorage<<<nBlocks, nThreadsRK>>>(d_u, d_kstar, d_k2, 0.5, dt);
     cudaThreadSynchronize();
 
     // Stage 3
@@ -170,7 +170,7 @@ void timeIntegrate(float *u, float a, int K, float dt, int Np, double t) {
     rhs<<<nBlocks, nThreadsRHS>>>(d_kstar, d_k3, d_f, d_Dr, d_rx, a, Np, dt);
     cudaThreadSynchronize();
     // k* <- u + k3
-    rk4_tempstorage<<<nBlocks, nThreadsRK>>>(d_u, d_kstar, d_k3, 1);
+    rk4_tempstorage<<<nBlocks, nThreadsRK>>>(d_u, d_kstar, d_k3, 1, dt);
     cudaThreadSynchronize();
 
     // Stage 4
@@ -234,7 +234,7 @@ int main() {
 
     float CFL = .75;
     float dt = 0.5* (CFL/aspeed * h);
-    timesteps = 1000;
+    timesteps = 10000;
 
     int Np = 2;  // polynomial order
 
