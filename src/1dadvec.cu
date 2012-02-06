@@ -37,7 +37,7 @@ __global__ void calcFlux(float *u, float *f, int Np, float aspeed, float time, i
     float ul, ur;
 
     if (idx == 0) {
-        f[idx] = aspeed*(u[0] + sin(aspeed*time)) / 2;
+        f[idx] = aspeed*(-sin(aspeed*time) - u[0]) / 2;
     }
     if (idx > 0) {
         // Flux calculations
@@ -45,10 +45,10 @@ __global__ void calcFlux(float *u, float *f, int Np, float aspeed, float time, i
         ur = u[idx*Np];
 
         // Central flux
-        f[idx] = aspeed * (ur - ul) / 2;
+        f[idx] = aspeed * (ul - ur) / 2;
     }
     if (idx == K) {
-        f[idx] = 10;
+        f[idx] = 0;
     }
 }
 
@@ -64,42 +64,31 @@ __global__ void rhs(float *u, float *k, float *f, float *Dr, float *rx, float a,
     float rhs[2], r_u[2];
     float lflux, rflux;
 
+    // Read the global u into a register variable and set rhs = 0.
     for (i = 0; i < Np; i++) {
         r_u[i] = u[Np*idx + i];
+        rhs[i] = 0;
     }
 
-    // Initialize rhs to 0
-    //for (i = 0; i < Np; i++) {
-        //rhs[i] = 0;
-    //}
+    // Calculate Dr * u.
+    for (i = 0; i < Np; i++) {
+        for (j = 0; j < Np; j++) {
+            rhs[i] += Dr[i*Np + j] * r_u[j];
+        }
+    }
 
-    // Calculate Dr * u
-    // I think these are wrong
-    //for (i = 0; i < Np; i++) {
-        //for (j = 0; j < Np; j++) {
-            //rhs[i] += Dr[i*Np + j] * u[Np*idx + j];
-        //}
-    //}
-    rhs[0] = Dr[0] * r_u[0] + Dr[1] * r_u[1];
-    rhs[1] = Dr[2] * r_u[0] + Dr[3] * r_u[1];
-    // And this is OK
-    //for (i = 0; i < Np; i++) {
-        //for (j = 0; j < Np; j++) {
-            //rhs[i] += Dr[i*Np + j] * r_u[j];
-        //}
-    //}
-
-    // Scale RHS up
+    // Scale RHS up.
     for (i = 0; i < Np; i++) {
         rhs[i] *= -a*rx[Np*idx + i];
     }
 
-    lflux  = -f[idx];
+    // Read the flux contributions.
+    lflux  = f[idx];
     rflux  = f[idx+1];
 
     // LIFT
-    rhs[0]    -= lflux;
-    rhs[Np-1] += rflux;
+    rhs[0]    += rx[Np*idx] * lflux;
+    rhs[Np-1] += rx[Np*(idx + 1) - 1] * rflux;
 
     // Store result
     for (i = 0; i < Np; i++) {
@@ -227,7 +216,7 @@ int main() {
     float *rx;    // the mapping
     float aspeed = 2*3.14159;      // the wave speed
     
-    float K = 2*50; // the mesh size
+    float K = 2*100; // the mesh size
     float a = 0;  // left boundary
     float b = 1;  // right boundary
     float h = (b - a) / K; // size of cell
