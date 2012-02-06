@@ -6,6 +6,7 @@
 float *d_u;
 float *d_f;
 float *d_rx;
+float *d_x;
 float *d_Dr;
 
 // Runge-Kutta time integration storage
@@ -23,6 +24,37 @@ void checkCudaError(const char *message)
         exit(-1);
     }
 }
+
+/* calculate the rx mapping for the gl nodes
+ *
+ * this should calculate Np of the points since we do this on an element by element basis.
+ */
+__global__ void calcRx(float *rx, float *x, float *Dr, int Np) {
+    int idx = gridDim.x * blockIdx.x + threadIdx.x;
+    int i, j;
+
+    float rhs[2];
+    float r_x[2];
+
+    // Set rhs to zero and read the global x into register x.
+    for (i = 0; i < Np; i++) {
+        rhs[i] = 0;
+        r_x[i] = x[idx*Np+ i];
+    }
+
+    // Calculate Dr * register x
+    for (i = 0; i < Np; i++) {
+        for (j = 0; j < Np; j++) {
+            rhs[i] += Dr[i*Np + j] * r_x[j];
+        }
+    }
+
+    // Store the mapping in rx
+    for (i = 0; i < Np; i++) {
+        rx[Np*idx + i] = 1./rhs[i];
+    }
+}
+
 
 /* flux calculations for each node 
  *
@@ -196,6 +228,7 @@ void initGPU(int Np, int K) {
     cudaMalloc((void **) &d_Dr, Np * Np * sizeof(float));
     cudaMalloc((void **) &d_f,  (K + 1) * sizeof(float));
     cudaMalloc((void **) &d_rx, size * sizeof(float));
+    cudaMalloc((void **) &d_x, size * sizeof(float));
 
     // Runge-Kutta storage
     cudaMalloc((void **) &d_kstar , size * sizeof(float));
@@ -216,9 +249,9 @@ int main() {
     float *rx;    // the mapping
     float aspeed = 2*3.14159;      // the wave speed
     
-    float K = 2*100; // the mesh size
+    int K = 2*100; // the mesh size
     float a = 0;  // left boundary
-    float b = 1;  // right boundary
+    float b = 2*3.14159;  // right boundary
     float h = (b - a) / K; // size of cell
 
     float CFL = .75;
@@ -247,60 +280,69 @@ int main() {
         x[Np*i + 1] = mesh[i+ 1];
     }
 
-    //printf("x = ");
-    //for (i = 0; i < Np * K; i++) {
-        //printf("%f, ", x[i]);
-    //}
-    //printf("\n");
-
     // Initialize u0
     for (i = 0; i < Np*K; i++) {
         u[i] = sin(x[i]);
-        printf("%f ", u[i]);
     }
-    printf("\n");
 
     // set Dr
     setDr(Dr, Np);
 
-    // compute rx
-    //for (i = 0; i < Np; i++) {
-        //for (j = 0; j < Np; j++) {
-            //rhs[i] += Dr[i*Np + j] * u[Np*idx + j];
-        //}
-    //}
-    for (i = 0; i < Np; i++) {
-        for (j = 0; j < K; j++) {
-            for (k = 0; k < Np; k++) {        
-                // rx[i,j] += Dr[i,k] * x[k,j]
-                rx[Np*i + j] += Dr[i*Np + k] * x[k*Np + j];
-                //Dr[j*p + k] * x[i*p + k
-                ////rx[i] = 1 / 
-            }
-        }
+    for (i = 0; i < K * Np; i++) {
+        rx[i] = 0;
     }
 
+    // Calculate the mapping rx
+    //for (i = 0; i < Np; i++) {
+        //for (j = 0; j < K; j++) {
+            //// rx[i,j] += Dr[i,k] * x[k,j]
+            //for (k = 0; k < Np; k++) {
+                //printf("%i\n", K*i + j);
+                //rx[K*i + j] += Dr[i*Np + k] * x[k*K + j];
+            //}
+        //}
+    //}
+
     //printf("rx = ");
-    for (i = 0; i < Np * K; i++) {
-        rx[i] = 20;
-        //printf("%f, ", rx[i]);
-    }
+    //for (i = 0; i < Np * K; i++) {
+        //rx[i] = 20;
+    //    printf("%f, ", 1/rx[i]);
+    //}
     //printf("\n");
 
     initGPU(Np, K);
     cudaMemcpy(d_u,  u,  size * sizeof(float) , cudaMemcpyHostToDevice); 
     cudaMemcpy(d_Dr, Dr, Np * Np * sizeof(float), cudaMemcpyHostToDevice); 
-    cudaMemcpy(d_rx, rx, size * sizeof(float) , cudaMemcpyHostToDevice); 
+    //cudaMemcpy(d_rx, rx, size * sizeof(float) , cudaMemcpyHostToDevice); 
+    cudaMemcpy(d_x, x, size * sizeof(float) , cudaMemcpyHostToDevice); 
     checkCudaError("error in memcpy");
 
+    dim3 blocks = dim3(1);
+    dim3 threads = dim3(K);
+
+    calcRx<<<blocks,threads>>>(d_rx, d_x, d_Dr, Np);
+    checkCudaError("error");
+    cudaThreadSynchronize();
+
+    cudaMemcpy(rx, d_rx, size * sizeof(float), cudaMemcpyDeviceToHost);
+    cudaThreadSynchronize();
+    printf("rx = ");
+    for (i = 0; i < Np * K; i++) {
+        printf("%f, ", rx[i]);
+    }
+    printf("\n");
+
+    FILE *data;
+    data = fopen("data.txt", "w");
     for (t = 0; t < timesteps; t++) {
         //printf("u%i =", t);
         timeIntegrate(u, aspeed, K, dt, Np, dt*t);
         for (i = 0; i < size; i++) {
-            printf(" %f ", u[i]);
+            fprintf(data," %f ", u[i]);
         }
-        printf("\n");
+        fprintf(data, "\n");
     }
+    fclose(data);
 
     free(u);
     free(x);
@@ -313,6 +355,7 @@ int main() {
     cudaFree(d_Dr);
     cudaFree(d_f);
     cudaFree(d_rx);
+    cudaFree(d_x);
 
     cudaFree(d_kstar);
     cudaFree(d_k1);
