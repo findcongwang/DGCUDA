@@ -1,20 +1,7 @@
 #include <cuda.h>
 #include <math.h>
 #include <stdio.h>
-
-// Important variables for GPU shit
-float *d_u;
-float *d_f;
-float *d_rx;
-float *d_x;
-float *d_Dr;
-
-// Runge-Kutta time integration storage
-float *d_kstar;
-float *d_k1;
-float *d_k2;
-float *d_k3;
-float *d_k4;
+#include "1dadvec_kernels.cu"
 
 void checkCudaError(const char *message)
 {
@@ -25,210 +12,101 @@ void checkCudaError(const char *message)
     }
 }
 
-/* calculate the rx mapping for the gl nodes
- *
- * this should calculate Np of the points since we do this on an element by element basis.
- */
-__global__ void calcRx(float *rx, float *x, float *Dr, int Np) {
-    int idx = gridDim.x * blockIdx.x + threadIdx.x;
-    int i, j;
-
-    float rhs[2];
-    float r_x[2];
-
-    // Set rhs to zero and read the global x into register x.
-    for (i = 0; i < Np; i++) {
-        rhs[i] = 0;
-        r_x[i] = x[idx*Np+ i];
-    }
-
-    // Calculate Dr * register x
-    for (i = 0; i < Np; i++) {
-        for (j = 0; j < Np; j++) {
-            rhs[i] += Dr[i*Np + j] * r_x[j];
-        }
-    }
-
-    // Store the mapping in rx
-    for (i = 0; i < Np; i++) {
-        rx[Np*idx + i] = 1./rhs[i];
-    }
-}
-
-
-/* flux calculations for each node 
- *
- *  | endpoint - f0 - f1 -  ... - fm-1 - endpoint |
- *
- * That is, fi is the flux between nodes i and i+1,
- * making f a m-1 length vector.
- * Store results into f
- */
-__global__ void calcFlux(float *u, float *f, int Np, float aspeed, float time, int K) {
-    int idx = gridDim.x * blockIdx.x + threadIdx.x;
-    float ul, ur;
-
-    if (idx == 0) {
-        f[idx] = aspeed*(-sin(aspeed*time) - u[0]) / 2;
-    }
-    if (idx > 0) {
-        // Flux calculations
-        ul = u[idx*Np - 1];
-        ur = u[idx*Np];
-
-        // Central flux
-        f[idx] = aspeed * (ul - ur) / 2;
-    }
-    if (idx == K) {
-        f[idx] = 0;
-    }
-}
-
-/* right hand side calculations
- *
- * Calculates the volume and boundary contributions and adds them to the rhs
- * Gets called during time integration
- * Store results into u
- */
-__global__ void rhs(float *u, float *k, float *f, float *Dr, float *rx, float a, int Np, float dt) {
-    int idx = gridDim.x * blockIdx.x + threadIdx.x;
-    int i,j;
-    float rhs[2], r_u[2];
-    float lflux, rflux;
-
-    // Read the global u into a register variable and set rhs = 0.
-    for (i = 0; i < Np; i++) {
-        r_u[i] = u[Np*idx + i];
-        rhs[i] = 0;
-    }
-
-    // Calculate Dr * u.
-    for (i = 0; i < Np; i++) {
-        for (j = 0; j < Np; j++) {
-            rhs[i] += Dr[i*Np + j] * r_u[j];
-        }
-    }
-
-    // Scale RHS up.
-    for (i = 0; i < Np; i++) {
-        rhs[i] *= -a*rx[Np*idx + i];
-    }
-
-    // Read the flux contributions.
-    lflux  = f[idx];
-    rflux  = f[idx+1];
-
-    // LIFT
-    rhs[0]    += rx[Np*idx] * lflux;
-    rhs[Np-1] += rx[Np*(idx + 1) - 1] * rflux;
-
-    // Store result
-    for (i = 0; i < Np; i++) {
-        k[Np*idx + i] = dt * rhs[i];
-    }
-}
-
-/* tempstorage for RK4
- * 
- * I need to store u + alpha * k_i into some temporary variable called k*.
- */
-__global__ void rk4_tempstorage(float *u, float *kstar, float*k, float alpha, float dt) {
-    int idx = gridDim.x * blockIdx.x + threadIdx.x;
-    kstar[idx] = u[idx] + alpha * k[idx];
-}
-
-/* rk4
- *
- * computes the runge-kutta solution 
- * u_n+1 = u_n + k1/6 + k2/3 + k3/3 + k4/6
- */
-__global__ void rk4(float *u, float *k1, float *k2, float *k3, float *k4) {
-    int idx = gridDim.x * blockIdx.x + threadIdx.x;
-
-    u[idx] += k1[idx]/6 + k2[idx]/3 + k3[idx]/3 + k4[idx]/6;
-}
-
-
 /* integrate in time
  *
  * take one time step; calls the kernel functions to compute in parallel.
  */
-void timeIntegrate(float *u, float a, int K, float dt, int Np, double t) {
+void timeIntegrate(float *u, float a, int K, float dt, double t, int Np) {
     int size = K * Np;
 
-    dim3 nBlocks      = dim3(1);
-    dim3 nThreadsRHS  = dim3(K);
-    dim3 nThreadsFlux = dim3(K+1);
-    dim3 nThreadsRK   = dim3(size);
+    int nThreads = 128;
+
+    int nBlocksRHS   = K / nThreads + ((K % nThreads) ? 1 : 0);
+    int nBlocksFlux  = (K + 1) / nThreads + (((K + 1) % nThreads) ? 1 : 0);
+    int nBlocksRK    = (Np*K) / nThreads + (((Np* K) % nThreads) ? 1 : 0);
 
     // Stage 1
     // f <- flux(u)
-    calcFlux<<<nBlocks, nThreadsFlux>>>(d_u, d_f, Np, a, t, K);
+    calcFlux<<<nBlocksFlux, nThreads>>>(d_u, d_f, a, t, K, Np);
     cudaThreadSynchronize();
     // k1 <- dt*rhs(u)
-    rhs<<<nBlocks, nThreadsRHS>>>(d_u, d_k1, d_f, d_Dr, d_rx, a, Np, dt);
+    rhs<<<nBlocksRHS, nThreads>>>(d_u, d_k1, d_f, d_Dr, d_rx, a, dt, K, Np);
     cudaThreadSynchronize();
     // k* <- u + k1/2
-    rk4_tempstorage<<<nBlocks, nThreadsRK>>>(d_u, d_kstar, d_k1, 0.5, dt);
+    rk4_tempstorage<<<nBlocksRK, nThreads>>>(d_u, d_kstar, d_k1, 0.5, dt, Np, K);
     cudaThreadSynchronize();
 
     // Stage 2
     // f <- flux(k*)
-    calcFlux<<<nBlocks, nThreadsFlux>>>(d_kstar, d_f, Np, a, t, K);
+    calcFlux<<<nBlocksFlux, nThreads>>>(d_kstar, d_f, a, t, K, Np);
     cudaThreadSynchronize();
     // k2 <- dt*rhs(k*)
-    rhs<<<nBlocks, nThreadsRHS>>>(d_kstar, d_k2, d_f, d_Dr, d_rx, a, Np, dt);
+    rhs<<<nBlocksRHS, nThreads>>>(d_kstar, d_k2, d_f, d_Dr, d_rx, a, dt, K, Np);
     cudaThreadSynchronize();
     // k* <- u + k2/2
-    rk4_tempstorage<<<nBlocks, nThreadsRK>>>(d_u, d_kstar, d_k2, 0.5, dt);
+    rk4_tempstorage<<<nBlocksRK, nThreads>>>(d_u, d_kstar, d_k2, 0.5, dt, Np, K);
     cudaThreadSynchronize();
 
     // Stage 3
     // f <- flux(k*)
-    calcFlux<<<nBlocks, nThreadsFlux>>>(d_kstar, d_f, Np, a, t, K);
+    calcFlux<<<nBlocksFlux, nThreads>>>(d_kstar, d_f, a, t, K, Np);
     cudaThreadSynchronize();
     // k3 <- dt*rhs(k*)
-    rhs<<<nBlocks, nThreadsRHS>>>(d_kstar, d_k3, d_f, d_Dr, d_rx, a, Np, dt);
+    rhs<<<nBlocksRHS, nThreads>>>(d_kstar, d_k3, d_f, d_Dr, d_rx, a, dt, K, Np);
     cudaThreadSynchronize();
     // k* <- u + k3
-    rk4_tempstorage<<<nBlocks, nThreadsRK>>>(d_u, d_kstar, d_k3, 1, dt);
+    rk4_tempstorage<<<nBlocksRK, nThreads>>>(d_u, d_kstar, d_k3, 1, dt, Np, K);
     cudaThreadSynchronize();
 
     // Stage 4
     // f <- flux(k*)
-    calcFlux<<<nBlocks, nThreadsFlux>>>(d_kstar, d_f, Np, a, t, K);
+    calcFlux<<<nBlocksFlux, nThreads>>>(d_kstar, d_f, a, t, K, Np);
     cudaThreadSynchronize();
     // k4 <- dt*rhs(k*)
-    rhs<<<nBlocks, nThreadsRHS>>>(d_kstar, d_k4, d_f, d_Dr, d_rx, a, Np, dt);
+    rhs<<<nBlocksRHS, nThreads>>>(d_kstar, d_k4, d_f, d_Dr, d_rx, a, dt, K, Np);
     cudaThreadSynchronize();
 
     checkCudaError("error after rk4");
 
-    rk4<<<nBlocks, nThreadsRK>>>(d_u, d_k1, d_k2, d_k3, d_k4);
+    rk4<<<nBlocksRK, nThreads>>>(d_u, d_k1, d_k2, d_k3, d_k4, Np, K);
     cudaMemcpy(u, d_u, size * sizeof(float), cudaMemcpyDeviceToHost);
 }
 
 /* returns the Dr matrix
  */
-void setDr(float *Dr, int Np) {
-    Dr[0] = -0.5;
-    Dr[1] =  0.5;
-    Dr[2] = -0.5;
-    Dr[3] =  0.5;
+void setDr(float *Dr) {
+    //Dr[0] = -0.5;
+    //Dr[1] =  0.5;
+    //Dr[2] = -0.5;
+    //Dr[3] =  0.5;
+
+    // This is for Np == 3
+    Dr[0] = -1.50;
+    Dr[1] = 2.00;
+    Dr[2] = -0.50;
+    Dr[3] = -0.50;
+    Dr[4] = 0.00;
+    Dr[5] = 0.50;
+    Dr[6] = 0.50;
+    Dr[7] = -2.00;
+    Dr[8] = 1.50;
 }
 
 /* allocate memory on the GPU
  */
-void initGPU(int Np, int K) {
+void initGPU(int K, int Np) {
     int size = K * Np;
     cudaDeviceReset();
     checkCudaError("error after reset?");
+
     // Main variables
     cudaMalloc((void **) &d_u , size * sizeof(float));
     cudaMalloc((void **) &d_Dr, Np * Np * sizeof(float));
     cudaMalloc((void **) &d_f,  (K + 1) * sizeof(float));
     cudaMalloc((void **) &d_rx, size * sizeof(float));
+    cudaMalloc((void **) &d_mesh, K * sizeof(float));
     cudaMalloc((void **) &d_x, size * sizeof(float));
+    cudaMalloc((void **) &d_r, Np * sizeof(float));
 
     // Runge-Kutta storage
     cudaMalloc((void **) &d_kstar , size * sizeof(float));
@@ -236,107 +114,84 @@ void initGPU(int Np, int K) {
     cudaMalloc((void **) &d_k2 , size * sizeof(float));
     cudaMalloc((void **) &d_k3 , size * sizeof(float));
     cudaMalloc((void **) &d_k4 , size * sizeof(float));
+
     checkCudaError("error in init");
 }
 
 int main() {
-    int i, j, k, size, t, timesteps;
+    int i, size, t, timesteps;
     float *Dr;    // diff matrix
     float *u;     // the computed result
-    float *f;     // the flux
-    float *mesh;  // the mesh's endpoints
-    float *x;     // the mesh
-    float *rx;    // the mapping
-    float aspeed = 2*3.14159;      // the wave speed
+    float *r;     // the GLL points
     
-    int K = 2*100; // the mesh size
-    float a = 0;  // left boundary
-    float b = 2*3.14159;  // right boundary
-    float h = (b - a) / K; // size of cell
+    int Np  = 3;              // polynomial order of the approximation
+    int K   = 2*80;           // the mesh size
+    float a = 0;              // left boundary
+    float b = 2*3.14159;      // right boundary
+    float h = (b - a) / K;    // size of cell
+    float aspeed = 2*3.14159; // the wave speed
 
-    float CFL = .75;
-    float dt = 0.5* (CFL/aspeed * h);
-    timesteps = 10000;
-
-    int Np = 2;  // polynomial order
+    float CFL = .75;  // CFL number (duh)
+    float dt = 0.5* (CFL/aspeed * h); // timestep
+    timesteps = 1000; 
 
     size = Np * K;  // size of u
 
     Dr    = (float *) malloc(Np * Np * sizeof(float));
     u     = (float *) malloc(K * Np * sizeof(float));
-    mesh  = (float *) malloc((K + 1) * sizeof(float));
-    x     = (float *) malloc(K * Np * sizeof(float));
-    rx    = (float *) malloc(K * Np * sizeof(float));
-    f     = (float *) malloc((K + 1) * sizeof(float));
+    r     = (float *) malloc(Np * sizeof(float));
+
+    int nThreads    = 128;
+    int nBlocksMesh = (K + 1) / nThreads + (((K + 1) % nThreads) ? 1 : 0);
+    int nBlocksU    = size / nThreads + ((size % nThreads) ? 1 : 0);
+
+    // Allocate space on the GPU
+    initGPU(K, Np);
 
     // Init the mesh's endpoints
-    for (i = 0; i < K + 1; i++) {
-        mesh[i]   = a + h * i;
-    }
+    initMesh<<<nBlocksMesh, nThreads>>>(d_mesh, d_x, h, a, K);
+    cudaThreadSynchronize();
+
+    // Copy over r
+    r[0] = -1;
+    r[1] = 0;
+    r[2] = 1;
+    cudaMemcpy(d_r, r, Np * sizeof(float), cudaMemcpyHostToDevice);
 
     // Init the mesh
-    for (i = 0; i < K + 1; i++) {
-        x[Np*i] = mesh[i];
-        x[Np*i + 1] = mesh[i+ 1];
-    }
+    initX<<<nBlocksMesh, nThreads>>>(d_mesh, d_x, d_r, h, K, Np);
+    cudaThreadSynchronize();
 
     // Initialize u0
-    for (i = 0; i < Np*K; i++) {
-        u[i] = sin(x[i]);
-    }
+    initU<<<nBlocksU, nThreads>>>(d_u, d_x, K, Np);
+    cudaThreadSynchronize();
 
-    // set Dr
-    setDr(Dr, Np);
-
-    for (i = 0; i < K * Np; i++) {
-        rx[i] = 0;
-    }
-
-    // Calculate the mapping rx
-    //for (i = 0; i < Np; i++) {
-        //for (j = 0; j < K; j++) {
-            //// rx[i,j] += Dr[i,k] * x[k,j]
-            //for (k = 0; k < Np; k++) {
-                //printf("%i\n", K*i + j);
-                //rx[K*i + j] += Dr[i*Np + k] * x[k*K + j];
-            //}
-        //}
-    //}
-
-    //printf("rx = ");
-    //for (i = 0; i < Np * K; i++) {
-        //rx[i] = 20;
-    //    printf("%f, ", 1/rx[i]);
-    //}
-    //printf("\n");
-
-    initGPU(Np, K);
-    cudaMemcpy(d_u,  u,  size * sizeof(float) , cudaMemcpyHostToDevice); 
+    // Set the Dr matrix and copy it over
+    setDr(Dr);
     cudaMemcpy(d_Dr, Dr, Np * Np * sizeof(float), cudaMemcpyHostToDevice); 
-    //cudaMemcpy(d_rx, rx, size * sizeof(float) , cudaMemcpyHostToDevice); 
-    cudaMemcpy(d_x, x, size * sizeof(float) , cudaMemcpyHostToDevice); 
-    checkCudaError("error in memcpy");
 
-    dim3 blocks = dim3(1);
-    dim3 threads = dim3(K);
-
-    calcRx<<<blocks,threads>>>(d_rx, d_x, d_Dr, Np);
-    checkCudaError("error");
+    //  Calculate the rx mapping on the GPU
+    int nBlocksRx = (K / nThreads) + ((K % nThreads) ? 1 : 0);
+    initRx<<<nBlocksRx,nThreads>>>(d_rx, d_x, d_Dr, K, Np);
     cudaThreadSynchronize();
 
-    cudaMemcpy(rx, d_rx, size * sizeof(float), cudaMemcpyDeviceToHost);
-    cudaThreadSynchronize();
-    printf("rx = ");
-    for (i = 0; i < Np * K; i++) {
+    float *rx = (float *)malloc(size*sizeof(float));
+    cudaMemcpy(rx, d_rx, size*sizeof(float), cudaMemcpyDeviceToHost);
+    for (i = 0; i < size; i++ ) {
         printf("%f, ", rx[i]);
     }
+    free(rx);
     printf("\n");
 
+
+    checkCudaError("error after initialization");
+    // File for output
     FILE *data;
     data = fopen("data.txt", "w");
+
+    // Run the integrator 
     for (t = 0; t < timesteps; t++) {
-        //printf("u%i =", t);
-        timeIntegrate(u, aspeed, K, dt, Np, dt*t);
+        timeIntegrate(u, aspeed, K, dt, dt*t, Np);
         for (i = 0; i < size; i++) {
             fprintf(data," %f ", u[i]);
         }
@@ -344,18 +199,18 @@ int main() {
     }
     fclose(data);
 
+    // Free host data
     free(u);
-    free(x);
-    free(f);
-    free(Dr);
-    free(mesh);
-    free(rx);
+    free(r);
 
+    // Free GPU data
     cudaFree(d_u);
     cudaFree(d_Dr);
     cudaFree(d_f);
     cudaFree(d_rx);
+    cudaFree(d_mesh);
     cudaFree(d_x);
+    cudaFree(d_r);
 
     cudaFree(d_kstar);
     cudaFree(d_k1);
