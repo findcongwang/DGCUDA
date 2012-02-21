@@ -7,9 +7,9 @@ float *d_u;
 float *d_f;
 float *d_rx;
 float *d_x;
-float *d_Dr;
 float *d_mesh;
 float *d_r;
+float *d_w;
 
 // Runge-Kutta time integration storage
 float *d_kstar;
@@ -17,6 +17,14 @@ float *d_k1;
 float *d_k2;
 float *d_k3;
 float *d_k4;
+
+/* flux function f(u)
+ *
+ * evaluate the flux function f(u)
+ */
+__device__ float(u) {
+    return u;
+}
 
 /* calculate the initial data for U
  *
@@ -96,74 +104,114 @@ __global__ void initRx(float *rx, float *x, float *Dr, int K, int Np) {
  *
  *  | endpoint - f0 - f1 -  ... - fm-1 - endpoint |
  *
- * That is, fi is the flux between nodes i and i+1,
- * making f a m-1 length vector.
+ * That is, fi is the flux between nodes i and i+1, making f a m+1 length vector.
  * Store results into f
  */
 __global__ void calcFlux(float *u, float *f, float aspeed, float time, int K, int Np) {
     int idx = blockDim.x * blockIdx.x + threadIdx.x;
     float ul, ur;
+    float c[Np];
+
+    for (i = 0; i < Np; i++) {
+        c[i] = u[Np*idx + i];
+    }
 
     if (idx < K+1) {
+        // Inflow conditions
         if (idx == 0) {
             f[idx] = aspeed*(-sin(aspeed*time) - u[idx]) / 2;
         }
         if (idx > 0) {
-            // Flux calculations
-            ul = u[idx*Np - 1];
-            ur = u[idx*Np];
+            // Left value
+            ul = 0;
+            for (i = 0; i < Np; i++) {
+                ul += pow(-1, n) * c[i];
+            }
+            // Evaluate flux 
+            ul = f(ul);
 
-            // Central flux
-            f[idx] = aspeed * (ul - ur) / 2;
+            // Right value
+            ur = 0;
+            for (i = 0 i < Np; i++) {
+                ur += c[i];
+            }
+            // Evaluate flux 
+            ur = f(ur);
+
+            // Upwind flux
+            f[idx] = ul;
         }
+        // Outflow conditions
         if (idx == K) {
             f[idx] = 0;
         }
     }
 }
 
+/* legendre polynomials
+ *
+ * Calculates the value of P_i(x) 
+ */
+__device__ float legendre(x, i) {
+    switch (i) {
+        case 0: return 1;
+        case 1: return x;
+        case 2: return (3*pow(x,2) -1) / 2;
+    }
+    return -1;
+}
+
+/* legendre polynomials derivatives
+ *
+ * Calculates the value of d/dx P_i(x) 
+ */
+__device__ float legendreDeriv(x, i) {
+    switch (i) {
+        case 0: return 0;
+        case 1: return 1;
+        case 2: return 3*x;
+    }
+    return -1;
+}
+
+
 /* right hand side calculations
  *
- * Calculates the volume and boundary contributions and adds them to the rhs
- * Gets called during time integration
- * Store results into u
+ * Calculates the flux integral 
+ *  int_k (u * vprime) dx
+ * and adds it to the flux boundary integral.
+ * Store results into k, the RK variable
  */
-__global__ void rhs(float *u, float *k, float *f, float *Dr, float *rx, float a, float dt, int K, int Np) {
+__global__ void rhs(float *c, float *k, float *f, float *w, float *x, float a, float dt, float dx, int K, int Np) {
     int idx = blockDim.x * blockIdx.x + threadIdx.x;
     int i,j;
-    float rhs[3], r_u[3];
-    float lflux, rflux;
+    float rhs[2], register_c[2];
+    float lflux, rflux, u;
 
     if (idx < K) {
         // Read the global u into a register variable and set rhs = 0.
         for (i = 0; i < Np; i++) {
-            r_u[i] = u[Np*idx + i];
-            rhs[i] = 0;
+            register_c[i] = c[Np*idx + i];
+            rhs[i]        = 0;
         }
 
-        // Calculate Dr * u.
+        // Perform quadrature W*P'*f(U) at integration points
         for (i = 0; i < Np; i++) {
+            // Evaluate f(U) at integration points x_i and P_j'(x_i)
+            u = 0;
             for (j = 0; j < Np; j++) {
-                rhs[i] += Dr[i*Np + j] * r_u[j];
+                u += legendre(x[i], j) * register_c[j];
             }
-        }
-
-        // Scale RHS up.
-        for (i = 0; i < Np; i++) {
-            rhs[i] *= -a*rx[Np*idx + i];
+            rhs[i] = w[i] * legendreDeriv(x[i], i) * f(u);
         }
 
         // Read the flux contributions.
         lflux  = f[idx];
         rflux  = f[idx+1];
 
-        // LIFT
-        rhs[0]    += rx[Np*idx] * lflux;
-        rhs[Np-1] += rx[Np*(idx + 1) - 1] * rflux;
-
         // Store result
         for (i = 0; i < Np; i++) {
-            k[Np*idx + i] = dt * rhs[i];
+            k[Np*idx + i] = (2*i + 1) / dx * dt * (rflux - pow(-1, i) * lflux - rhs[i]);
         }
     }
 }
