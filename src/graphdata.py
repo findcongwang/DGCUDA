@@ -5,7 +5,7 @@ f = open("data.txt", "rb")
 
 def graph(data):
     val = list()
-    for i in xrange(0, len(data), 2):
+    for i in xrange(0, len(data), 3):
         val.append(data[i] - data[i+1])
         #val.append(data[i] + data[i+1])
     return val

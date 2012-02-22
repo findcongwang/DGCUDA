@@ -99,13 +99,182 @@ void initGPU(int K, int Np) {
     checkCudaError("error in init");
 }
 
+void setIntegrationPoints(int Np, float *w, float *r) {
+    switch (Np) {
+        case 1:
+            r[0] = 0;
+            w[0] = 2.;
+            break;
+
+        case 2:
+            r[0] = -1./sqrt(3);
+            r[1] =  1./sqrt(3);
+            w[0] =  1.;
+            w[1] =  1.;
+            break;
+
+        case 3:
+            r[0] =  0;
+            r[1] = -sqrt(3./5);
+            r[2] =  sqrt(3./5);
+            w[0] =  8./9;
+            w[1] =  5./9;
+            w[2] =  5./9;
+            break;
+
+        case 4:
+            r[0] = -sqrt((3-2*sqrt(6/5))/7);
+            r[1] =  sqrt((3-2*sqrt(6/5))/7);
+            r[2] = -sqrt((3+2*sqrt(6/5))/7);
+            r[3] =  sqrt((3+2*sqrt(6/5))/7);
+            w[0] =  (18+sqrt(30))/36;
+            w[1] =  (18+sqrt(30))/36;
+            w[2] =  (18-sqrt(30))/36;
+            w[3] =  (18-sqrt(30))/36;
+            break;
+
+        case 5:
+            r[0] =  0;
+            r[1] = -sqrt(5-2*sqrt(10/7))/3;
+            r[2] =  sqrt(5-2*sqrt(10/7))/3;
+            r[3] = -sqrt(5+2*sqrt(10/7))/3;
+            r[4] =  sqrt(5+2*sqrt(10/7))/3;
+            w[0] =  128/225;
+            w[1] =  (322+13*sqrt(70))/900;
+            w[2] =  (322+13*sqrt(70))/900;
+            w[3] =  (322-13*sqrt(70))/900;
+            w[4] =  (322-13*sqrt(70))/900;
+            break;
+
+        case 6:
+            r[0] = -0.23861918;
+            r[1] =  0.23861918;
+            r[2] = -0.66120939;
+            r[3] =  0.66120939;
+            r[4] = -0.93246951;
+            r[5] =  0.93246951;
+            w[0] =  0.46791393;
+            w[1] =  0.46791393;
+            w[2] =  0.36076157;
+            w[3] =  0.36076157;
+            w[4] =  0.17132449;
+            w[5] =  0.17132449;
+            break;
+
+        case 7:
+            r[0] =  0;
+            r[1] = -0.40584515;
+            r[2] =  0.40584515;
+            r[3] = -0.74153119;
+            r[4] =  0.74153119;
+            r[5] = -0.94910791;
+            r[6] =  0.94910791;
+            w[0] =  0.41795918;
+            w[1] =  0.38183005;
+            w[2] =  0.38183005;
+            w[3] =  0.27970539;
+            w[4] =  0.27970539;
+            w[5] =  0.12948497;
+            w[6] =  0.12948497;
+            break;
+
+        case 8:
+            r[0] = -0.18343464;
+            r[1] =  0.18343464;
+            r[2] = -0.52553241;
+            r[3] =  0.52553241;
+            r[4] = -0.79666648;
+            r[5] =  0.79666648;
+            r[6] = -0.96028986;
+            r[7] =  0.96028986;
+            w[0] =  0.36268378;
+            w[1] =  0.36268378;
+            w[2] =  0.31370665;
+            w[3] =  0.31370665;
+            w[4] =  0.22238103;
+            w[5] =  0.22238103;
+            w[6] =  0.10122854;
+            w[7] =  0.10122854;
+            break;
+
+        case 9:
+            r[0] = -0.14887434;
+            r[1] =  0.14887434;
+            r[2] = -0.43339539;
+            r[3] =  0.43339539;
+            r[4] = -0.67940957;
+            r[5] =  0.67940957;
+            r[6] = -0.86506337;
+            r[7] =  0.86506337;
+            r[8] = -0.97390653;
+            r[9]=  0.97390653;
+            w[0] =  0.29552422;
+            w[1] =  0.29552422;
+            w[2] =  0.26926672;
+            w[3] =  0.26926672;
+            w[4] =  0.21908636;
+            w[5] =  0.21908636;
+            w[6] =  0.14945135;
+            w[7] =  0.14945135;
+            w[8] =  0.06667134;
+            w[9]=  0.06667134;
+            break;
+
+        case 10:
+            r[0] = -0.14887434;
+            r[1] =  0.14887434;
+            r[2] = -0.43339539;
+            r[3] =  0.43339539;
+            r[4] = -0.67940957;
+            r[5] =  0.67940957;
+            r[6] = -0.86506337;
+            r[7] =  0.86506337;
+            r[8] = -0.97390653;
+            r[9]=  0.97390653;
+            w[0] =  0.29552422;
+            w[1] =  0.29552422;
+            w[2] =  0.26926672;
+            w[3] =  0.26926672;
+            w[4] =  0.21908636;
+            w[5] =  0.21908636;
+            w[6] =  0.14945135;
+            w[7] =  0.14945135;
+            w[8] =  0.06667134;
+            w[9]=  0.06667134;
+            break;
+
+        case 11:
+            r[0] = -0.14887434;
+            r[1] =  0.14887434;
+            r[2] = -0.43339539;
+            r[3] =  0.43339539;
+            r[4] = -0.67940957;
+            r[5] =  0.67940957;
+            r[6] = -0.86506337;
+            r[7] =  0.86506337;
+            r[8] = -0.97390653;
+            r[9]=  0.97390653;
+            w[0] =  0.29552422;
+            w[1] =  0.29552422;
+            w[2] =  0.26926672;
+            w[3] =  0.26926672;
+            w[4] =  0.21908636;
+            w[5] =  0.21908636;
+            w[6] =  0.14945135;
+            w[7] =  0.14945135;
+            w[8] =  0.06667134;
+            w[9]=  0.06667134;
+            break;
+    }
+}
+
 int main() {
     int i, size, t, timesteps;
     float *u;     // the computed result
     float *r;     // the GLL points
     float *w;     // Gaussian integration weights
     
-    int Np  = 2;              // polynomial order of the approximation
+    int Np  = 3;              // polynomial order of the approximation
     int K   = 2*40;           // the mesh size
     float a = 0;              // left boundary
     float b = 2*3.14159;      // right boundary
@@ -113,8 +282,8 @@ int main() {
     float aspeed = 2*3.14159; // the wave speed
 
     float CFL = .75;  // CFL number (duh)
-    float dt = 0.5* (CFL/aspeed * dx); // timestep
-    timesteps = 1000; 
+    float dt = 0.25* (CFL/aspeed * dx); // timestep
+    timesteps = (b - a) /dt; 
 
     size = Np * K;  // size of u
 
@@ -124,7 +293,7 @@ int main() {
 
     int nThreads    = 128;
     int nBlocksMesh = (K + 1) / nThreads + (((K + 1) % nThreads) ? 1 : 0);
-    int nBlocksU    = K / nThreads + ((size % nThreads) ? 1 : 0);
+    int nBlocksU    = K / nThreads + ((K % nThreads) ? 1 : 0);
 
     // Allocate space on the GPU
     initGPU(K, Np);
@@ -134,10 +303,7 @@ int main() {
     cudaThreadSynchronize();
 
     // Copy over r and w
-    r[0] = -1/sqrt(3);
-    r[1] =  1/sqrt(3);
-    w[0] = 1;
-    w[1] = 1;
+    setIntegrationPoints(Np, w, r);
     cudaMemcpy(d_r, r, Np * sizeof(float), cudaMemcpyHostToDevice);
     cudaMemcpy(d_w, w, Np * sizeof(float), cudaMemcpyHostToDevice);
 
@@ -146,7 +312,7 @@ int main() {
     cudaThreadSynchronize();
 
     // Initialize u0
-    initU<<<nBlocksU, nThreads>>>(d_u, d_x, d_w, d_r, K, Np);
+    initU<<<nBlocksU, nThreads>>>(d_u, d_x, d_w, d_r, dx, K, Np);
     cudaThreadSynchronize();
 
     checkCudaError("error after initialization");

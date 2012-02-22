@@ -27,16 +27,6 @@ __device__ float flux(float u) {
     return aspeed*u;
 }
 
-/* initial condition function
- *
- * returns the value of the intial condition at point x
- */
-__device__ float u0(float x) {
-    return -sin(x);
-}
-
-
-
 /* initilialize the mesh nodes
  *
  * ideally, this should be done on the GPU, but meh
@@ -53,14 +43,14 @@ __global__ void initMesh(float *mesh, float *x, float h, float a, int K) {
  *
  * ideally, this should be done on the GPU, but meh
  */
-__global__ void initX(float *mesh, float *x, float *r, float h, int K, int Np) {
+__global__ void initX(float *mesh, float *x, float *r, float dx, int K, int Np) {
     int idx = blockDim.x * blockIdx.x + threadIdx.x;
     int i;
 
     if (idx < K + 1) {
         // mesh[idx] holds the begining point for this element.
         for (i = 0; i < Np; i++) {
-            x[Np*idx + i] = mesh[idx] + (1 + r[i])/2*h;
+            x[Np*idx + i] = mesh[idx] + (1 + r[i])/2*dx;
         }
     }
 }
@@ -110,7 +100,7 @@ __global__ void calcFlux(float *u, float *f, float aspeed, float time, int K, in
     int idx = blockDim.x * blockIdx.x + threadIdx.x;
     int i;
     float ul, ur;
-    float cl[2], cr[2];
+    float cl[NP_MAX], cr[NP_MAX];
 
     if (idx < K+1) {
         // periodic
@@ -157,7 +147,7 @@ __device__ float legendre(float x, int i) {
     switch (i) {
         case 0: return 1;
         case 1: return x;
-        case 2: return (3*powf(x,2) -1) / 2;
+        case 2: return (3.*powf(x,2) -1) / 2;
     }
     return -1;
 }
@@ -170,26 +160,38 @@ __device__ float legendreDeriv(float x, int i) {
     switch (i) {
         case 0: return 0;
         case 1: return 1;
-        case 2: return 3*x;
+        case 2: return 3.*x;
     }
     return -1;
+}
+
+/* initial condition function
+ *
+ * returns the value of the intial condition at point x
+ */
+__device__ float u0(float x) {
+    return sinf(x);
 }
 
 /* calculate the initial data for U
  *
  * needs to interpolate u0 with legendre polynomials to grab the right coefficients.
  */
-__global__ void initU(float *u, float *x, float *w, float *r, int K, int Np) {
+__global__ void initU(float *u, float *x, float *w, float *r, float dx, int K, int Np) {
     int idx = blockDim.x * blockIdx.x + threadIdx.x;
     int i, j;
+    float xi;
 
     if (idx < K) {
         for (i = 0; i < Np; i++) {
             u[Np*idx + i] = 0;
             for (j = 0; j < Np; j++) {
-                u[Np*idx + i] += w[j] * u0(x[Np*idx + j]) * legendre(r[j], i);
+                // The mapping to the integration points for u0
+                xi = x[Np*idx + j] + dx*(r[j] - 1)/2;
+                u[Np*idx + i] += w[j] * u0(xi) * legendre(r[j], i);
             }
-            u[Np*idx +i] *= (2*i + 1)/2;
+            // Leftover from integration
+            u[Np*idx +i] *= dx*(2*i + 1);
         }
     }
 }
@@ -204,7 +206,7 @@ __global__ void initU(float *u, float *x, float *w, float *r, int K, int Np) {
 __global__ void rhs(float *c, float *kstar, float *f, float *w, float *r, float a, float dt, float dx, int K, int Np) {
     int idx = blockDim.x * blockIdx.x + threadIdx.x;
     int i,j, k;
-    float rhs[2], register_c[2];
+    float rhs[NP_MAX], register_c[NP_MAX];
     float lflux, rflux, u;
 
     if (idx < K) {
