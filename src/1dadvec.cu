@@ -16,7 +16,7 @@ void checkCudaError(const char *message)
  *
  * take one time step; calls the kernel functions to compute in parallel.
  */
-void timeIntegrate(float *u, float a, int K, float dt, double t, int Np) {
+void timeIntegrate(float *u, float a, int K, float dt, float dx, double t, int Np) {
     int size = K * Np;
 
     int nThreads = 128;
@@ -30,7 +30,7 @@ void timeIntegrate(float *u, float a, int K, float dt, double t, int Np) {
     calcFlux<<<nBlocksFlux, nThreads>>>(d_u, d_f, a, t, K, Np);
     cudaThreadSynchronize();
     // k1 <- dt*rhs(u)
-    rhs<<<nBlocksRHS, nThreads>>>(d_u, d_k1, d_f, d_Dr, d_rx, a, dt, dx, K, Np);
+    rhs<<<nBlocksRHS, nThreads>>>(d_u, d_k1, d_f, d_w, d_r, a, dt, dx, K, Np);
     cudaThreadSynchronize();
     // k* <- u + k1/2
     rk4_tempstorage<<<nBlocksRK, nThreads>>>(d_u, d_kstar, d_k1, 0.5, dt, Np, K);
@@ -41,7 +41,7 @@ void timeIntegrate(float *u, float a, int K, float dt, double t, int Np) {
     calcFlux<<<nBlocksFlux, nThreads>>>(d_kstar, d_f, a, t, K, Np);
     cudaThreadSynchronize();
     // k2 <- dt*rhs(k*)
-    rhs<<<nBlocksRHS, nThreads>>>(d_kstar, d_k2, d_f, d_Dr, d_rx, a, dt, dx, K, Np);
+    rhs<<<nBlocksRHS, nThreads>>>(d_kstar, d_k2, d_f, d_r, d_x, a, dt, dx, K, Np);
     cudaThreadSynchronize();
     // k* <- u + k2/2
     rk4_tempstorage<<<nBlocksRK, nThreads>>>(d_u, d_kstar, d_k2, 0.5, dt, Np, K);
@@ -52,7 +52,7 @@ void timeIntegrate(float *u, float a, int K, float dt, double t, int Np) {
     calcFlux<<<nBlocksFlux, nThreads>>>(d_kstar, d_f, a, t, K, Np);
     cudaThreadSynchronize();
     // k3 <- dt*rhs(k*)
-    rhs<<<nBlocksRHS, nThreads>>>(d_kstar, d_k3, d_f, d_Dr, d_rx, a, dt, dx, K, Np);
+    rhs<<<nBlocksRHS, nThreads>>>(d_kstar, d_k3, d_f, d_r, d_x, a, dt, dx, K, Np);
     cudaThreadSynchronize();
     // k* <- u + k3
     rk4_tempstorage<<<nBlocksRK, nThreads>>>(d_u, d_kstar, d_k3, 1, dt, Np, K);
@@ -63,12 +63,13 @@ void timeIntegrate(float *u, float a, int K, float dt, double t, int Np) {
     calcFlux<<<nBlocksFlux, nThreads>>>(d_kstar, d_f, a, t, K, Np);
     cudaThreadSynchronize();
     // k4 <- dt*rhs(k*)
-    rhs<<<nBlocksRHS, nThreads>>>(d_kstar, d_k4, d_f, d_Dr, d_rx, a, dt, dx, K, Np);
+    rhs<<<nBlocksRHS, nThreads>>>(d_kstar, d_k4, d_f, d_r, d_x, a, dt, dx, K, Np);
     cudaThreadSynchronize();
 
     checkCudaError("error after rk4");
 
     rk4<<<nBlocksRK, nThreads>>>(d_u, d_k1, d_k2, d_k3, d_k4, Np, K);
+
     cudaMemcpy(u, d_u, size * sizeof(float), cudaMemcpyDeviceToHost);
 }
 
@@ -100,38 +101,36 @@ void initGPU(int K, int Np) {
 
 int main() {
     int i, size, t, timesteps;
-    float *Dr;    // diff matrix
     float *u;     // the computed result
     float *r;     // the GLL points
     float *w;     // Gaussian integration weights
     
     int Np  = 2;              // polynomial order of the approximation
-    int K   = 2*80;           // the mesh size
+    int K   = 2*40;           // the mesh size
     float a = 0;              // left boundary
     float b = 2*3.14159;      // right boundary
-    float h = (b - a) / K;    // size of cell
+    float dx = (b - a) / K;    // size of cell
     float aspeed = 2*3.14159; // the wave speed
 
     float CFL = .75;  // CFL number (duh)
-    float dt = 0.5* (CFL/aspeed * h); // timestep
+    float dt = 0.5* (CFL/aspeed * dx); // timestep
     timesteps = 1000; 
 
     size = Np * K;  // size of u
 
-    Dr    = (float *) malloc(Np * Np * sizeof(float));
-    u     = (float *) malloc(K * Np * sizeof(float));
-    r     = (float *) malloc(Np * sizeof(float));
-    w     = (float *) malloc(Np * sizeof(float));
+    u = (float *) malloc(K * Np * sizeof(float));
+    r = (float *) malloc(Np * sizeof(float));
+    w = (float *) malloc(Np * sizeof(float));
 
     int nThreads    = 128;
     int nBlocksMesh = (K + 1) / nThreads + (((K + 1) % nThreads) ? 1 : 0);
-    int nBlocksU    = size / nThreads + ((size % nThreads) ? 1 : 0);
+    int nBlocksU    = K / nThreads + ((size % nThreads) ? 1 : 0);
 
     // Allocate space on the GPU
     initGPU(K, Np);
 
     // Init the mesh's endpoints
-    initMesh<<<nBlocksMesh, nThreads>>>(d_mesh, d_x, h, a, K);
+    initMesh<<<nBlocksMesh, nThreads>>>(d_mesh, d_x, dx, a, K);
     cudaThreadSynchronize();
 
     // Copy over r and w
@@ -143,11 +142,11 @@ int main() {
     cudaMemcpy(d_w, w, Np * sizeof(float), cudaMemcpyHostToDevice);
 
     // Init the mesh
-    initX<<<nBlocksMesh, nThreads>>>(d_mesh, d_x, d_r, h, K, Np);
+    initX<<<nBlocksMesh, nThreads>>>(d_mesh, d_x, d_r, dx, K, Np);
     cudaThreadSynchronize();
 
     // Initialize u0
-    initU<<<nBlocksU, nThreads>>>(d_u, d_x, K, Np);
+    initU<<<nBlocksU, nThreads>>>(d_u, d_x, d_w, d_r, K, Np);
     cudaThreadSynchronize();
 
     checkCudaError("error after initialization");
@@ -155,13 +154,15 @@ int main() {
     FILE *data;
     data = fopen("data.txt", "w");
 
+    cudaMemcpy(u, d_u, size * sizeof(float), cudaMemcpyDeviceToHost);
+
     // Run the integrator 
     for (t = 0; t < timesteps; t++) {
-        timeIntegrate(u, aspeed, K, dt, dt*t, Np);
         for (i = 0; i < size; i++) {
             fprintf(data," %f ", u[i]);
         }
         fprintf(data, "\n");
+        timeIntegrate(u, aspeed, K, dt, dx, dt*t, Np);
     }
     fclose(data);
 
