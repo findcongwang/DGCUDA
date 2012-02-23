@@ -123,27 +123,27 @@ void setIntegrationPoints(int Np, float *w, float *r) {
             break;
 
         case 4:
-            r[0] = -sqrt((3-2*sqrt(6/5))/7);
-            r[1] =  sqrt((3-2*sqrt(6/5))/7);
-            r[2] = -sqrt((3+2*sqrt(6/5))/7);
-            r[3] =  sqrt((3+2*sqrt(6/5))/7);
-            w[0] =  (18+sqrt(30))/36;
-            w[1] =  (18+sqrt(30))/36;
-            w[2] =  (18-sqrt(30))/36;
-            w[3] =  (18-sqrt(30))/36;
+            r[0] = -sqrt((3.-2.*sqrt(6./5))/7.);
+            r[1] =  sqrt((3.-2.*sqrt(6./5))/7.);
+            r[2] = -sqrt((3.+2.*sqrt(6./5))/7.);
+            r[3] =  sqrt((3.+2.*sqrt(6./5))/7.);
+            w[0] =  (18.+sqrt(30.))/36.;
+            w[1] =  (18.+sqrt(30.))/36.;
+            w[2] =  (18.-sqrt(30.))/36.;
+            w[3] =  (18.-sqrt(30.))/36.;
             break;
 
         case 5:
-            r[0] =  0;
-            r[1] = -sqrt(5-2*sqrt(10/7))/3;
-            r[2] =  sqrt(5-2*sqrt(10/7))/3;
-            r[3] = -sqrt(5+2*sqrt(10/7))/3;
-            r[4] =  sqrt(5+2*sqrt(10/7))/3;
-            w[0] =  128/225;
-            w[1] =  (322+13*sqrt(70))/900;
-            w[2] =  (322+13*sqrt(70))/900;
-            w[3] =  (322-13*sqrt(70))/900;
-            w[4] =  (322-13*sqrt(70))/900;
+            r[0] =  0.;
+            r[1] = -sqrt(5.-2.*sqrt(10./7))/3.;
+            r[2] =  sqrt(5.-2.*sqrt(10./7))/3.;
+            r[3] = -sqrt(5.+2.*sqrt(10./7))/3.;
+            r[4] =  sqrt(5.+2.*sqrt(10./7))/3.;
+            w[0] =  128./225;
+            w[1] =  (322.+13.*sqrt(70.))/900.;
+            w[2] =  (322.+13.*sqrt(70.))/900.;
+            w[3] =  (322.-13.*sqrt(70.))/900.;
+            w[4] =  (322.-13.*sqrt(70.))/900.;
             break;
 
         case 6:
@@ -274,16 +274,17 @@ int main() {
     float *r;     // the GLL points
     float *w;     // Gaussian integration weights
     
-    int Np  = 3;              // polynomial order of the approximation
-    int K   = 2*40;           // the mesh size
-    float a = 0;              // left boundary
-    float b = 2*3.14159;      // right boundary
-    float dx = (b - a) / K;    // size of cell
-    float aspeed = 2*3.14159; // the wave speed
+    int Np  = 2;              // polynomial order of the approximation
+    int K   = 2*20;           // the mesh size
+    float a = -1.;              // left boundary
+    float b = 1.;      // right boundary
+    float dx = (b - a) / (K - 1.);    // size of cell
+    float aspeed = 2.*3.14159; // the wave speed
+    printf("%f\n ", dx);
 
-    float CFL = .75;  // CFL number (duh)
-    float dt = 0.25* (CFL/aspeed * dx); // timestep
-    timesteps = (b - a) /dt; 
+    float CFL = 1. / (2.*float(Np) + 1.);
+    float dt  = 0.5* CFL/aspeed * dx; // timestep
+    timesteps = 100;
 
     size = Np * K;  // size of u
 

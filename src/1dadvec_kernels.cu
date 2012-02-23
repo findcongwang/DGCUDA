@@ -50,7 +50,7 @@ __global__ void initX(float *mesh, float *x, float *r, float dx, int K, int Np) 
     if (idx < K + 1) {
         // mesh[idx] holds the begining point for this element.
         for (i = 0; i < Np; i++) {
-            x[Np*idx + i] = mesh[idx] + (1 + r[i])/2*dx;
+            x[Np*idx + i] = mesh[idx] + (1. + r[i])/2.*dx;
         }
     }
 }
@@ -104,8 +104,9 @@ __global__ void calcFlux(float *u, float *f, float aspeed, float time, int K, in
 
     if (idx < K+1) {
         // periodic
+        // inflow
         if (idx == 0) {
-            f[idx] = f[Np*(K + 1) - 1];//sinf(time);
+            f[idx] = 0;//-sinf(aspeed*time);
         }
         if (idx > 0) {
             for (i = 0; i < Np; i++) {
@@ -145,9 +146,10 @@ __global__ void calcFlux(float *u, float *f, float aspeed, float time, int K, in
  */
 __device__ float legendre(float x, int i) {
     switch (i) {
-        case 0: return 1;
+        case 0: return 1.;
         case 1: return x;
-        case 2: return (3.*powf(x,2) -1) / 2;
+        case 2: return (3.*powf(x,2) -1.) / 2.;
+        case 3: return (5.*powf(x,3) - 3.*x) / 2.;
     }
     return -1;
 }
@@ -158,9 +160,11 @@ __device__ float legendre(float x, int i) {
  */
 __device__ float legendreDeriv(float x, int i) {
     switch (i) {
-        case 0: return 0;
-        case 1: return 1;
+        case 0: return 0.;
+        case 1: return 1.;
         case 2: return 3.*x;
+        case 3: return (15.*powf(x,2) - 3.) / 2.;
+        
     }
     return -1;
 }
@@ -170,7 +174,8 @@ __device__ float legendreDeriv(float x, int i) {
  * returns the value of the intial condition at point x
  */
 __device__ float u0(float x) {
-    return sinf(x);
+    //return sinf(2*3.14159*x);
+    return x;
 }
 
 /* calculate the initial data for U
@@ -184,14 +189,14 @@ __global__ void initU(float *u, float *x, float *w, float *r, float dx, int K, i
 
     if (idx < K) {
         for (i = 0; i < Np; i++) {
-            u[Np*idx + i] = 0;
+            u[Np*idx + i] = 0.;
             for (j = 0; j < Np; j++) {
                 // The mapping to the integration points for u0
-                xi = x[Np*idx + j] + dx*(r[j] - 1)/2;
+                xi = x[Np*idx + j] + dx*(r[j] - 1.)/2.;
                 u[Np*idx + i] += w[j] * u0(xi) * legendre(r[j], i);
             }
             // Leftover from integration
-            u[Np*idx +i] *= dx*(2*i + 1);
+            u[Np*idx +i] *= (2.*float(i) + 1.);
         }
     }
 }
@@ -213,14 +218,14 @@ __global__ void rhs(float *c, float *kstar, float *f, float *w, float *r, float 
         // Read the global u into a register variable and set rhs = 0.
         for (i = 0; i < Np; i++) {
             register_c[i] = c[Np*idx + i];
-            rhs[i] = 0;
+            rhs[i] = 0.;
         }
 
         // Perform quadrature W*P'*f(U) at integration points
         for (i = 0; i < Np; i++) {
             for (j = 0; j < Np; j++) {
                 // Evaluate f(u) at integration points x_i and P_j'(x_i)
-                u = 0;
+                u = 0.;
                 for (k = 0; k < Np; k++) {
                     u += legendre(r[j], k) * register_c[k];
                 }
@@ -234,7 +239,7 @@ __global__ void rhs(float *c, float *kstar, float *f, float *w, float *r, float 
 
         // Store result
         for (i = 0; i < Np; i++) {
-            kstar[Np*idx + i] = ((2*i + 1) / dx) * dt * (-rflux + powf(-1, i) * lflux + rhs[i]);
+            kstar[Np*idx + i] = ((2.*i + 1.) / dx) * dt * (-rflux + powf(-1., i) * lflux + rhs[i]);
         }
     }
 }
@@ -260,6 +265,6 @@ __global__ void rk4(float *u, float *k1, float *k2, float *k3, float *k4, int Np
     int idx = blockDim.x * blockIdx.x + threadIdx.x;
 
     if (idx < Np * K) {
-        u[idx] += k1[idx]/6 + k2[idx]/3 + k3[idx]/3 + k4[idx]/6;
+        u[idx] += k1[idx]/6. + k2[idx]/3. + k3[idx]/3. + k4[idx]/6.;
     }
 }
