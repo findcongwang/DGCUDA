@@ -17,13 +17,13 @@ void checkCudaError(const char *message)
  * take one time step; calls the kernel functions to compute in parallel.
  */
 void timeIntegrate(float *u, float a, int K, float dt, float dx, double t, int Np) {
-    int size = K * Np;
+    int size = K * (Np + 1);
 
     int nThreads = 128;
 
     int nBlocksRHS   = K / nThreads + ((K % nThreads) ? 1 : 0);
     int nBlocksFlux  = (K + 1) / nThreads + (((K + 1) % nThreads) ? 1 : 0);
-    int nBlocksRK    = (Np*K) / nThreads + (((Np* K) % nThreads) ? 1 : 0);
+    int nBlocksRK    = ((Np + 1)*K) / nThreads + ((((Np + 1)* K) % nThreads) ? 1 : 0);
 
     // Stage 1
     // f <- flux(u)
@@ -41,7 +41,7 @@ void timeIntegrate(float *u, float a, int K, float dt, float dx, double t, int N
     calcFlux<<<nBlocksFlux, nThreads>>>(d_kstar, d_f, a, t, K, Np);
     cudaThreadSynchronize();
     // k2 <- dt*rhs(k*)
-    rhs<<<nBlocksRHS, nThreads>>>(d_kstar, d_k2, d_f, d_r, d_x, a, dt, dx, K, Np);
+    rhs<<<nBlocksRHS, nThreads>>>(d_kstar, d_k2, d_f, d_w, d_r, a, dt, dx, K, Np);
     cudaThreadSynchronize();
     // k* <- u + k2/2
     rk4_tempstorage<<<nBlocksRK, nThreads>>>(d_u, d_kstar, d_k2, 0.5, dt, Np, K);
@@ -52,10 +52,10 @@ void timeIntegrate(float *u, float a, int K, float dt, float dx, double t, int N
     calcFlux<<<nBlocksFlux, nThreads>>>(d_kstar, d_f, a, t, K, Np);
     cudaThreadSynchronize();
     // k3 <- dt*rhs(k*)
-    rhs<<<nBlocksRHS, nThreads>>>(d_kstar, d_k3, d_f, d_r, d_x, a, dt, dx, K, Np);
+    rhs<<<nBlocksRHS, nThreads>>>(d_kstar, d_k3, d_f, d_w, d_r, a, dt, dx, K, Np);
     cudaThreadSynchronize();
     // k* <- u + k3
-    rk4_tempstorage<<<nBlocksRK, nThreads>>>(d_u, d_kstar, d_k3, 1, dt, Np, K);
+    rk4_tempstorage<<<nBlocksRK, nThreads>>>(d_u, d_kstar, d_k3, 1.0, dt, Np, K);
     cudaThreadSynchronize();
 
     // Stage 4
@@ -63,7 +63,7 @@ void timeIntegrate(float *u, float a, int K, float dt, float dx, double t, int N
     calcFlux<<<nBlocksFlux, nThreads>>>(d_kstar, d_f, a, t, K, Np);
     cudaThreadSynchronize();
     // k4 <- dt*rhs(k*)
-    rhs<<<nBlocksRHS, nThreads>>>(d_kstar, d_k4, d_f, d_r, d_x, a, dt, dx, K, Np);
+    rhs<<<nBlocksRHS, nThreads>>>(d_kstar, d_k4, d_f, d_w, d_r, a, dt, dx, K, Np);
     cudaThreadSynchronize();
 
     checkCudaError("error after rk4");
@@ -76,7 +76,7 @@ void timeIntegrate(float *u, float a, int K, float dt, float dx, double t, int N
 /* allocate memory on the GPU
  */
 void initGPU(int K, int Np) {
-    int size = K * Np;
+    int size = K * (Np + 1);
     cudaDeviceReset();
     checkCudaError("error after reset?");
 
@@ -86,8 +86,8 @@ void initGPU(int K, int Np) {
     cudaMalloc((void **) &d_rx, size * sizeof(float));
     cudaMalloc((void **) &d_mesh, K * sizeof(float));
     cudaMalloc((void **) &d_x, size * sizeof(float));
-    cudaMalloc((void **) &d_r, Np * sizeof(float));
-    cudaMalloc((void **) &d_w, Np * sizeof(float));
+    cudaMalloc((void **) &d_r, (Np + 1) * sizeof(float));
+    cudaMalloc((void **) &d_w, (Np + 1) * sizeof(float));
 
     // Runge-Kutta storage
     cudaMalloc((void **) &d_kstar , size * sizeof(float));
@@ -101,20 +101,20 @@ void initGPU(int K, int Np) {
 
 void setIntegrationPoints(int Np, float *w, float *r) {
     switch (Np) {
-        case 1:
-            r[0] = 0;
+        case 0:
+            r[0] = 0.;
             w[0] = 2.;
             break;
 
-        case 2:
+        case 1:
             r[0] = -1./sqrt(3);
             r[1] =  1./sqrt(3);
             w[0] =  1.;
             w[1] =  1.;
             break;
 
-        case 3:
-            r[0] =  0;
+        case 2:
+            r[0] =  0.;
             r[1] = -sqrt(3./5);
             r[2] =  sqrt(3./5);
             w[0] =  8./9;
@@ -122,7 +122,7 @@ void setIntegrationPoints(int Np, float *w, float *r) {
             w[2] =  5./9;
             break;
 
-        case 4:
+        case 3:
             r[0] = -sqrt((3.-2.*sqrt(6./5))/7.);
             r[1] =  sqrt((3.-2.*sqrt(6./5))/7.);
             r[2] = -sqrt((3.+2.*sqrt(6./5))/7.);
@@ -133,7 +133,7 @@ void setIntegrationPoints(int Np, float *w, float *r) {
             w[3] =  (18.-sqrt(30.))/36.;
             break;
 
-        case 5:
+        case 4:
             r[0] =  0.;
             r[1] = -sqrt(5.-2.*sqrt(10./7))/3.;
             r[2] =  sqrt(5.-2.*sqrt(10./7))/3.;
@@ -146,7 +146,7 @@ void setIntegrationPoints(int Np, float *w, float *r) {
             w[4] =  (322.-13.*sqrt(70.))/900.;
             break;
 
-        case 6:
+        case 5:
             r[0] = -0.23861918;
             r[1] =  0.23861918;
             r[2] = -0.66120939;
@@ -161,7 +161,7 @@ void setIntegrationPoints(int Np, float *w, float *r) {
             w[5] =  0.17132449;
             break;
 
-        case 7:
+        case 6:
             r[0] =  0;
             r[1] = -0.40584515;
             r[2] =  0.40584515;
@@ -178,7 +178,7 @@ void setIntegrationPoints(int Np, float *w, float *r) {
             w[6] =  0.12948497;
             break;
 
-        case 8:
+        case 7:
             r[0] = -0.18343464;
             r[1] =  0.18343464;
             r[2] = -0.52553241;
@@ -197,6 +197,31 @@ void setIntegrationPoints(int Np, float *w, float *r) {
             w[7] =  0.10122854;
             break;
 
+        // This is WRONG
+        case 8:
+            r[0] = -0.14887434;
+            r[1] =  0.14887434;
+            r[2] = -0.43339539;
+            r[3] =  0.43339539;
+            r[4] = -0.67940957;
+            r[5] =  0.67940957;
+            r[6] = -0.86506337;
+            r[7] =  0.86506337;
+            r[8] = -0.97390653;
+            r[9]=  0.97390653;
+            w[0] =  0.29552422;
+            w[1] =  0.29552422;
+            w[2] =  0.26926672;
+            w[3] =  0.26926672;
+            w[4] =  0.21908636;
+            w[5] =  0.21908636;
+            w[6] =  0.14945135;
+            w[7] =  0.14945135;
+            w[8] =  0.06667134;
+            w[9]=  0.06667134;
+            break;
+
+        // This might be ok.
         case 9:
             r[0] = -0.14887434;
             r[1] =  0.14887434;
@@ -220,30 +245,8 @@ void setIntegrationPoints(int Np, float *w, float *r) {
             w[9]=  0.06667134;
             break;
 
+        // This is also WRONG
         case 10:
-            r[0] = -0.14887434;
-            r[1] =  0.14887434;
-            r[2] = -0.43339539;
-            r[3] =  0.43339539;
-            r[4] = -0.67940957;
-            r[5] =  0.67940957;
-            r[6] = -0.86506337;
-            r[7] =  0.86506337;
-            r[8] = -0.97390653;
-            r[9]=  0.97390653;
-            w[0] =  0.29552422;
-            w[1] =  0.29552422;
-            w[2] =  0.26926672;
-            w[3] =  0.26926672;
-            w[4] =  0.21908636;
-            w[5] =  0.21908636;
-            w[6] =  0.14945135;
-            w[7] =  0.14945135;
-            w[8] =  0.06667134;
-            w[9]=  0.06667134;
-            break;
-
-        case 11:
             r[0] = -0.14887434;
             r[1] =  0.14887434;
             r[2] = -0.43339539;
@@ -270,27 +273,28 @@ void setIntegrationPoints(int Np, float *w, float *r) {
 
 int main() {
     int i, size, t, timesteps;
+    float *x;
     float *u;     // the computed result
     float *r;     // the GLL points
     float *w;     // Gaussian integration weights
     
-    int Np  = 2;              // polynomial order of the approximation
-    int K   = 2*20;           // the mesh size
+    int Np  = 7;              // polynomial order of the approximation
+    int K   = 2*40;           // the mesh size
     float a = -1.;              // left boundary
     float b = 1.;      // right boundary
     float dx = (b - a) / (K - 1.);    // size of cell
     float aspeed = 2.*3.14159; // the wave speed
-    printf("%f\n ", dx);
 
-    float CFL = 1. / (2.*float(Np) + 1.);
+    float CFL = 1. / (2.*Np + 1.);
     float dt  = 0.5* CFL/aspeed * dx; // timestep
-    timesteps = 100;
+    timesteps = 1000;
 
-    size = Np * K;  // size of u
+    size = (Np + 1) * K;  // size of u
 
-    u = (float *) malloc(K * Np * sizeof(float));
-    r = (float *) malloc(Np * sizeof(float));
-    w = (float *) malloc(Np * sizeof(float));
+    x = (float *) malloc(K * (Np + 1) * sizeof(float));
+    u = (float *) malloc(K * (Np + 1) * sizeof(float));
+    r = (float *) malloc((Np + 1) * sizeof(float));
+    w = (float *) malloc((Np + 1) * sizeof(float));
 
     int nThreads    = 128;
     int nBlocksMesh = (K + 1) / nThreads + (((K + 1) % nThreads) ? 1 : 0);
@@ -305,8 +309,8 @@ int main() {
 
     // Copy over r and w
     setIntegrationPoints(Np, w, r);
-    cudaMemcpy(d_r, r, Np * sizeof(float), cudaMemcpyHostToDevice);
-    cudaMemcpy(d_w, w, Np * sizeof(float), cudaMemcpyHostToDevice);
+    cudaMemcpy(d_r, r, (Np + 1) * sizeof(float), cudaMemcpyHostToDevice);
+    cudaMemcpy(d_w, w, (Np + 1) * sizeof(float), cudaMemcpyHostToDevice);
 
     // Init the mesh
     initX<<<nBlocksMesh, nThreads>>>(d_mesh, d_x, d_r, dx, K, Np);
@@ -321,7 +325,14 @@ int main() {
     FILE *data;
     data = fopen("data.txt", "w");
 
+    cudaMemcpy(x, d_x, size * sizeof(float), cudaMemcpyDeviceToHost);
     cudaMemcpy(u, d_u, size * sizeof(float), cudaMemcpyDeviceToHost);
+
+    fprintf(data, "%i\n", Np);
+    for (i = 0; i < size; i++) {
+        fprintf(data, "%f ", x[i]);
+    }
+    fprintf(data, "\n");
 
     // Run the integrator 
     for (t = 0; t < timesteps; t++) {
@@ -334,8 +345,10 @@ int main() {
     fclose(data);
 
     // Free host data
+    free(x);
     free(u);
     free(r);
+    free(w);
 
     // Free GPU data
     cudaFree(d_u);
