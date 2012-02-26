@@ -1,6 +1,9 @@
 from time import sleep
 import matplotlib.pylab as p
+from pylab import rcParams
 import numpy as np
+
+rcParams['figure.figsize'] = 20,10
 
 f = open("data.txt", "rb")
 
@@ -55,6 +58,7 @@ for i in xrange(0, len(data), Np+1):
     p.xlim((-1,1))
     p.ylim((-1,1))
     lines.append(l)
+    p.draw()
 
 for i,line in enumerate(f):
     data = [float(i) for i in line.split()]

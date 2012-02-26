@@ -34,7 +34,7 @@ __device__ float flux(float u) {
 __global__ void initMesh(float *mesh, float *x, float h, float a, int K) {
     int idx = blockDim.x * blockIdx.x + threadIdx.x;
 
-    if (idx < K + 1) {
+    if (idx < K) {
         mesh[idx] = a + h * idx;
     }
 }
@@ -47,10 +47,10 @@ __global__ void initX(float *mesh, float *x, float *r, float dx, int K, int Np) 
     int idx = blockDim.x * blockIdx.x + threadIdx.x;
     int i;
 
-    if (idx < K + 1) {
+    if (idx < K) {
         // mesh[idx] holds the begining point for this element.
         for (i = 0; i < Np+1; i++) {
-            x[(Np + 1)*idx + i] = mesh[idx] + (1. + r[i])/2.*dx;
+            x[K*i + idx] = mesh[idx] + (1. + r[i])/2.*dx;
         }
     }
 }
@@ -76,8 +76,10 @@ __global__ void calcFlux(float *u, float *f, float aspeed, float time, int K, in
         }
         if (idx > 0) {
             for (i = 0; i < Np+1; i++) {
-                cl[i] = u[(Np + 1)*(idx - 1) + i];
-                cr[i] = u[(Np + 1)*idx + i];
+                cl[i] = u[K*i + idx - 1];
+                cr[i] = u[K*i + idx];
+                //cl[i] = u[(Np + 1)*(idx - 1) + i];
+                //cr[i] = u[(Np + 1)*idx + i];
             }
 
             // Left value
@@ -170,11 +172,11 @@ __global__ void initU(float *u, float *x, float *w, float *r, float dx, int K, i
             uval = 0.;
             for (j = 0; j < Np+1; j++) {
                 // The mapping to the integration points for u0
-                xi = x[(Np+1)*idx + j] + dx*(r[j] - 1.)/2.;
+                xi = x[j*K + idx] + dx*(r[j] - 1.)/2.;
                 uval += w[j] * u0(xi) * legendre(r[j], i);
             }
             // Leftover from integration
-            u[(Np+1)*idx + i] = (2.*i + 1.)/2. * uval;
+            u[i*K + idx] = (2.*i + 1.)/2. * uval;
         }
     }
 }
@@ -195,7 +197,7 @@ __global__ void rhs(float *c, float *kstar, float *f, float *w, float *r, float 
     if (idx < K) {
         // Read the global u into a register variable and set rhs = 0.
         for (i = 0; i < Np+1; i++) {
-            register_c[i] = c[(Np+1)*idx + i];
+            register_c[i] = c[i*K + idx];
         }
 
         // Perform quadrature W*P'*f(U) at integration points
@@ -218,7 +220,7 @@ __global__ void rhs(float *c, float *kstar, float *f, float *w, float *r, float 
 
         // Store result
         for (i = 0; i < Np+1; i++) {
-            kstar[(Np+1)*idx + i] = dt*(((2.*i+1.) / dx) * (-rflux + powf(-1.,i) * lflux + rhs[i]));
+            kstar[K*i + idx] = dt*(((2.*i+1.) / dx) * (-rflux + powf(-1.,i) * lflux + rhs[i]));
         }
     }
 }

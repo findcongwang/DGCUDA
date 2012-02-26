@@ -272,7 +272,7 @@ void setIntegrationPoints(int Np, float *w, float *r) {
 }
 
 int main() {
-    int i, size, t, timesteps;
+    int i, j, size, t, timesteps;
     float *x;
     float *u;     // the computed result
     float *r;     // the GLL points
@@ -286,7 +286,7 @@ int main() {
     float aspeed = 2.*3.14159; // the wave speed
 
     float CFL = 1. / (2.*Np + 1.);
-    float dt  = 0.5* CFL/aspeed * dx; // timestep
+    float dt  = 0.5 * CFL/aspeed * dx; // timestep
     timesteps = 1000;
 
     size = (Np + 1) * K;  // size of u
@@ -329,15 +329,19 @@ int main() {
     cudaMemcpy(u, d_u, size * sizeof(float), cudaMemcpyDeviceToHost);
 
     fprintf(data, "%i\n", Np);
-    for (i = 0; i < size; i++) {
-        fprintf(data, "%f ", x[i]);
+    for (j = 0; j < K; j++) {
+        for (i = 0; i < Np+1; i++) {
+            fprintf(data, "%f ", x[i*K + j]);
+        }
     }
     fprintf(data, "\n");
 
     // Run the integrator 
     for (t = 0; t < timesteps; t++) {
-        for (i = 0; i < size; i++) {
-            fprintf(data," %f ", u[i]);
+        for (j = 0; j < K; j++) {
+            for (i = 0; i < Np+1; i++) {
+                fprintf(data," %f ", u[i*K + j]);
+            }
         }
         fprintf(data, "\n");
         timeIntegrate(u, aspeed, K, dt, dx, dt*t, Np);
