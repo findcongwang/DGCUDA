@@ -9,7 +9,7 @@ f = open("data.txt", "rb")
 
 Np = int(f.readline())
 x  = [float(i) for i in f.readline().split()]
-dx = x[Np+1] - x[0]
+dx = x[1] - x[0]
 
 def lagrange(x, i):
     if i == 0: 
@@ -52,13 +52,12 @@ p.ion()
 lines = []
 xstart = x[0]
 for i in xrange(0, len(data), Np+1):
-    xscaled = np.arange(xstart, xstart+dx, dx/5)[:5]
+    xscaled = np.arange(xstart, xstart+5./4*dx, dx/4.)[:5]
     xstart  = xstart + dx 
     l, = p.plot(xscaled, d1[i/(Np+1)])
-    p.xlim((-1,1))
-    p.ylim((-1,1))
+    p.xlim((-1.1,1.1))
+    p.ylim((-1.1,1.1))
     lines.append(l)
-    p.draw()
 
 for i,line in enumerate(f):
     data = [float(i) for i in line.split()]

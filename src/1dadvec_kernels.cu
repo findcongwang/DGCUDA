@@ -31,27 +31,11 @@ __device__ float flux(float u) {
  *
  * ideally, this should be done on the GPU, but meh
  */
-__global__ void initMesh(float *mesh, float *x, float h, float a, int K) {
+__global__ void initMesh(float *mesh, float dx, float a, int K) {
     int idx = blockDim.x * blockIdx.x + threadIdx.x;
 
     if (idx < K) {
-        mesh[idx] = a + h * idx;
-    }
-}
-
-/* calculate the mesh using GLL points 
- *
- * ideally, this should be done on the GPU, but meh
- */
-__global__ void initX(float *mesh, float *x, float *r, float dx, int K, int Np) {
-    int idx = blockDim.x * blockIdx.x + threadIdx.x;
-    int i;
-
-    if (idx < K) {
-        // mesh[idx] holds the begining point for this element.
-        for (i = 0; i < Np+1; i++) {
-            x[K*i + idx] = mesh[idx] + (1. + r[i])/2.*dx;
-        }
+        mesh[idx] = a + dx * idx;
     }
 }
 
@@ -172,7 +156,7 @@ __global__ void initU(float *u, float *x, float *w, float *r, float dx, int K, i
             uval = 0.;
             for (j = 0; j < Np+1; j++) {
                 // The mapping to the integration points for u0
-                xi = x[j*K + idx] + dx*(r[j] - 1.)/2.;
+                xi = x[idx] + dx*(r[j] + 1.)/2.;
                 uval += w[j] * u0(xi) * legendre(r[j], i);
             }
             // Leftover from integration

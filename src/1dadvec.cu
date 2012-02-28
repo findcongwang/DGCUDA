@@ -25,6 +25,7 @@ void timeIntegrate(float *u, float a, int K, float dt, float dx, double t, int N
     int nBlocksFlux  = (K + 1) / nThreads + (((K + 1) % nThreads) ? 1 : 0);
     int nBlocksRK    = ((Np + 1)*K) / nThreads + ((((Np + 1)* K) % nThreads) ? 1 : 0);
 
+    checkCudaError("error before rk4");
     // Stage 1
     // f <- flux(u)
     calcFlux<<<nBlocksFlux, nThreads>>>(d_u, d_f, a, t, K, Np);
@@ -85,7 +86,6 @@ void initGPU(int K, int Np) {
     cudaMalloc((void **) &d_f,  (K + 1) * sizeof(float));
     cudaMalloc((void **) &d_rx, size * sizeof(float));
     cudaMalloc((void **) &d_mesh, K * sizeof(float));
-    cudaMalloc((void **) &d_x, size * sizeof(float));
     cudaMalloc((void **) &d_r, (Np + 1) * sizeof(float));
     cudaMalloc((void **) &d_w, (Np + 1) * sizeof(float));
 
@@ -208,7 +208,7 @@ void setIntegrationPoints(int Np, float *w, float *r) {
             r[6] = -0.86506337;
             r[7] =  0.86506337;
             r[8] = -0.97390653;
-            r[9]=  0.97390653;
+            r[9] =  0.97390653;
             w[0] =  0.29552422;
             w[1] =  0.29552422;
             w[2] =  0.26926672;
@@ -273,16 +273,16 @@ void setIntegrationPoints(int Np, float *w, float *r) {
 
 int main() {
     int i, j, size, t, timesteps;
-    float *x;
+    float *mesh;
     float *u;     // the computed result
     float *r;     // the GLL points
     float *w;     // Gaussian integration weights
     
     int Np  = 7;              // polynomial order of the approximation
-    int K   = 2*40;           // the mesh size
+    int K   = 2*10;           // the mesh size
     float a = -1.;              // left boundary
     float b = 1.;      // right boundary
-    float dx = (b - a) / (K - 1.);    // size of cell
+    float dx = (b - a) / K;    // size of cell
     float aspeed = 2.*3.14159; // the wave speed
 
     float CFL = 1. / (2.*Np + 1.);
@@ -291,7 +291,7 @@ int main() {
 
     size = (Np + 1) * K;  // size of u
 
-    x = (float *) malloc(K * (Np + 1) * sizeof(float));
+    mesh = (float *) malloc(K * sizeof(float));
     u = (float *) malloc(K * (Np + 1) * sizeof(float));
     r = (float *) malloc((Np + 1) * sizeof(float));
     w = (float *) malloc((Np + 1) * sizeof(float));
@@ -304,7 +304,7 @@ int main() {
     initGPU(K, Np);
 
     // Init the mesh's endpoints
-    initMesh<<<nBlocksMesh, nThreads>>>(d_mesh, d_x, dx, a, K);
+    initMesh<<<nBlocksMesh, nThreads>>>(d_mesh, dx, a, K);
     cudaThreadSynchronize();
 
     // Copy over r and w
@@ -312,12 +312,8 @@ int main() {
     cudaMemcpy(d_r, r, (Np + 1) * sizeof(float), cudaMemcpyHostToDevice);
     cudaMemcpy(d_w, w, (Np + 1) * sizeof(float), cudaMemcpyHostToDevice);
 
-    // Init the mesh
-    initX<<<nBlocksMesh, nThreads>>>(d_mesh, d_x, d_r, dx, K, Np);
-    cudaThreadSynchronize();
-
     // Initialize u0
-    initU<<<nBlocksU, nThreads>>>(d_u, d_x, d_w, d_r, dx, K, Np);
+    initU<<<nBlocksU, nThreads>>>(d_u, d_mesh, d_w, d_r, dx, K, Np);
     cudaThreadSynchronize();
 
     checkCudaError("error after initialization");
@@ -325,31 +321,29 @@ int main() {
     FILE *data;
     data = fopen("data.txt", "w");
 
-    cudaMemcpy(x, d_x, size * sizeof(float), cudaMemcpyDeviceToHost);
+    cudaMemcpy(mesh, d_mesh, K * sizeof(float), cudaMemcpyDeviceToHost);
     cudaMemcpy(u, d_u, size * sizeof(float), cudaMemcpyDeviceToHost);
 
     fprintf(data, "%i\n", Np);
-    for (j = 0; j < K; j++) {
-        for (i = 0; i < Np+1; i++) {
-            fprintf(data, "%f ", x[i*K + j]);
-        }
+    for (i = 0; i < K; i++) {
+        fprintf(data, "%f ", mesh[i]);
     }
     fprintf(data, "\n");
 
     // Run the integrator 
     for (t = 0; t < timesteps; t++) {
-        for (j = 0; j < K; j++) {
-            for (i = 0; i < Np+1; i++) {
-                fprintf(data," %f ", u[i*K + j]);
+        for (i = 0; i < K; i++) {
+            for (j = 0; j < Np+1; j++) {
+                fprintf(data," %f ", u[j*K + i]);
             }
         }
         fprintf(data, "\n");
         timeIntegrate(u, aspeed, K, dt, dx, dt*t, Np);
     }
-    fclose(data);
+    //fclose(data);
 
     // Free host data
-    free(x);
+    free(mesh);
     free(u);
     free(r);
     free(w);
@@ -359,7 +353,6 @@ int main() {
     cudaFree(d_f);
     cudaFree(d_rx);
     cudaFree(d_mesh);
-    cudaFree(d_x);
     cudaFree(d_r);
 
     cudaFree(d_kstar);
