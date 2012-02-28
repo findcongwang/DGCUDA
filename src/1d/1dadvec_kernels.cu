@@ -53,17 +53,14 @@ __global__ void calcFlux(float *u, float *f, float aspeed, float time, int K, in
     float cl[NP_MAX], cr[NP_MAX];
 
     if (idx < K+1) {
-        // periodic
         // inflow
         if (idx == 0) {
-            f[idx] = 0;//-sinf(aspeed*time);
+            f[idx] = -sinf(aspeed*time);
         }
         if (idx > 0) {
             for (i = 0; i < Np+1; i++) {
                 cl[i] = u[K*i + idx - 1];
                 cr[i] = u[K*i + idx];
-                //cl[i] = u[(Np + 1)*(idx - 1) + i];
-                //cr[i] = u[(Np + 1)*idx + i];
             }
 
             // Left value
@@ -139,7 +136,7 @@ __device__ float legendreDeriv(float x, int i) {
  * returns the value of the intial condition at point x
  */
 __device__ float u0(float x) {
-    return sinf(2*3.14159*x);
+    return 0;//1. + sinf(2*3.14159*x);
 }
 
 /* calculate the initial data for U

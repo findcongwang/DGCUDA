@@ -3,102 +3,10 @@
 #include <stdio.h>
 #include "1dadvec_kernels.cu"
 
-void checkCudaError(const char *message)
-{
-    cudaError_t error = cudaGetLastError();
-    if(error!=cudaSuccess) {
-        fprintf(stderr,"ERROR: %s: %s\n", message, cudaGetErrorString(error) );
-        exit(-1);
-    }
-}
-
-/* integrate in time
+/* set integration points
  *
- * take one time step; calls the kernel functions to compute in parallel.
+ * get the gauss lobatta integration points and weights for integration
  */
-void timeIntegrate(float *u, float a, int K, float dt, float dx, double t, int Np) {
-    int size = K * (Np + 1);
-
-    int nThreads = 128;
-
-    int nBlocksRHS   = K / nThreads + ((K % nThreads) ? 1 : 0);
-    int nBlocksFlux  = (K + 1) / nThreads + (((K + 1) % nThreads) ? 1 : 0);
-    int nBlocksRK    = ((Np + 1)*K) / nThreads + ((((Np + 1)* K) % nThreads) ? 1 : 0);
-
-    checkCudaError("error before rk4");
-    // Stage 1
-    // f <- flux(u)
-    calcFlux<<<nBlocksFlux, nThreads>>>(d_u, d_f, a, t, K, Np);
-    cudaThreadSynchronize();
-    // k1 <- dt*rhs(u)
-    rhs<<<nBlocksRHS, nThreads>>>(d_u, d_k1, d_f, d_w, d_r, a, dt, dx, K, Np);
-    cudaThreadSynchronize();
-    // k* <- u + k1/2
-    rk4_tempstorage<<<nBlocksRK, nThreads>>>(d_u, d_kstar, d_k1, 0.5, dt, Np, K);
-    cudaThreadSynchronize();
-
-    // Stage 2
-    // f <- flux(k*)
-    calcFlux<<<nBlocksFlux, nThreads>>>(d_kstar, d_f, a, t, K, Np);
-    cudaThreadSynchronize();
-    // k2 <- dt*rhs(k*)
-    rhs<<<nBlocksRHS, nThreads>>>(d_kstar, d_k2, d_f, d_w, d_r, a, dt, dx, K, Np);
-    cudaThreadSynchronize();
-    // k* <- u + k2/2
-    rk4_tempstorage<<<nBlocksRK, nThreads>>>(d_u, d_kstar, d_k2, 0.5, dt, Np, K);
-    cudaThreadSynchronize();
-
-    // Stage 3
-    // f <- flux(k*)
-    calcFlux<<<nBlocksFlux, nThreads>>>(d_kstar, d_f, a, t, K, Np);
-    cudaThreadSynchronize();
-    // k3 <- dt*rhs(k*)
-    rhs<<<nBlocksRHS, nThreads>>>(d_kstar, d_k3, d_f, d_w, d_r, a, dt, dx, K, Np);
-    cudaThreadSynchronize();
-    // k* <- u + k3
-    rk4_tempstorage<<<nBlocksRK, nThreads>>>(d_u, d_kstar, d_k3, 1.0, dt, Np, K);
-    cudaThreadSynchronize();
-
-    // Stage 4
-    // f <- flux(k*)
-    calcFlux<<<nBlocksFlux, nThreads>>>(d_kstar, d_f, a, t, K, Np);
-    cudaThreadSynchronize();
-    // k4 <- dt*rhs(k*)
-    rhs<<<nBlocksRHS, nThreads>>>(d_kstar, d_k4, d_f, d_w, d_r, a, dt, dx, K, Np);
-    cudaThreadSynchronize();
-
-    checkCudaError("error after rk4");
-
-    rk4<<<nBlocksRK, nThreads>>>(d_u, d_k1, d_k2, d_k3, d_k4, Np, K);
-
-    cudaMemcpy(u, d_u, size * sizeof(float), cudaMemcpyDeviceToHost);
-}
-
-/* allocate memory on the GPU
- */
-void initGPU(int K, int Np) {
-    int size = K * (Np + 1);
-    cudaDeviceReset();
-    checkCudaError("error after reset?");
-
-    // Main variables
-    cudaMalloc((void **) &d_u , size * sizeof(float));
-    cudaMalloc((void **) &d_f,  (K + 1) * sizeof(float));
-    cudaMalloc((void **) &d_rx, size * sizeof(float));
-    cudaMalloc((void **) &d_mesh, K * sizeof(float));
-    cudaMalloc((void **) &d_r, (Np + 1) * sizeof(float));
-    cudaMalloc((void **) &d_w, (Np + 1) * sizeof(float));
-
-    // Runge-Kutta storage
-    cudaMalloc((void **) &d_kstar , size * sizeof(float));
-    cudaMalloc((void **) &d_k1 , size * sizeof(float));
-    cudaMalloc((void **) &d_k2 , size * sizeof(float));
-    cudaMalloc((void **) &d_k3 , size * sizeof(float));
-    cudaMalloc((void **) &d_k4 , size * sizeof(float));
-
-    checkCudaError("error in init");
-}
-
 void setIntegrationPoints(int Np, float *w, float *r) {
     switch (Np) {
         case 0:
@@ -218,7 +126,7 @@ void setIntegrationPoints(int Np, float *w, float *r) {
             w[6] =  0.14945135;
             w[7] =  0.14945135;
             w[8] =  0.06667134;
-            w[9]=  0.06667134;
+            w[9] =  0.06667134;
             break;
 
         // This might be ok.
@@ -242,7 +150,7 @@ void setIntegrationPoints(int Np, float *w, float *r) {
             w[6] =  0.14945135;
             w[7] =  0.14945135;
             w[8] =  0.06667134;
-            w[9]=  0.06667134;
+            w[9] =  0.06667134;
             break;
 
         // This is also WRONG
@@ -256,7 +164,7 @@ void setIntegrationPoints(int Np, float *w, float *r) {
             r[6] = -0.86506337;
             r[7] =  0.86506337;
             r[8] = -0.97390653;
-            r[9]=  0.97390653;
+            r[9] =  0.97390653;
             w[0] =  0.29552422;
             w[1] =  0.29552422;
             w[2] =  0.26926672;
@@ -266,22 +174,120 @@ void setIntegrationPoints(int Np, float *w, float *r) {
             w[6] =  0.14945135;
             w[7] =  0.14945135;
             w[8] =  0.06667134;
-            w[9]=  0.06667134;
+            w[9] =  0.06667134;
             break;
     }
 }
 
+void checkCudaError(const char *message)
+{
+    cudaError_t error = cudaGetLastError();
+    if(error!=cudaSuccess) {
+        fprintf(stderr,"ERROR: %s: %s\n", message, cudaGetErrorString(error) );
+        exit(-1);
+    }
+}
+
+/* integrate in time
+ *
+ * take one time step; calls the kernel functions to compute in parallel.
+ */
+void timeIntegrate(float *u, float a, int K, float dt, float dx, double t, int Np) {
+    int size = K * (Np + 1);
+
+    int nThreads = 128;
+
+    int nBlocksRHS   = K / nThreads + ((K % nThreads) ? 1 : 0);
+    int nBlocksFlux  = (K + 1) / nThreads + (((K + 1) % nThreads) ? 1 : 0);
+    int nBlocksRK    = ((Np + 1)*K) / nThreads + ((((Np + 1)* K) % nThreads) ? 1 : 0);
+
+    checkCudaError("error before rk4");
+    // Stage 1
+    // f <- flux(u)
+    calcFlux<<<nBlocksFlux, nThreads>>>(d_u, d_f, a, t, K, Np);
+    cudaThreadSynchronize();
+    // k1 <- dt*rhs(u)
+    rhs<<<nBlocksRHS, nThreads>>>(d_u, d_k1, d_f, d_w, d_r, a, dt, dx, K, Np);
+    cudaThreadSynchronize();
+    // k* <- u + k1/2
+    rk4_tempstorage<<<nBlocksRK, nThreads>>>(d_u, d_kstar, d_k1, 0.5, dt, Np, K);
+    cudaThreadSynchronize();
+
+    // Stage 2
+    // f <- flux(k*)
+    calcFlux<<<nBlocksFlux, nThreads>>>(d_kstar, d_f, a, t, K, Np);
+    cudaThreadSynchronize();
+    // k2 <- dt*rhs(k*)
+    rhs<<<nBlocksRHS, nThreads>>>(d_kstar, d_k2, d_f, d_w, d_r, a, dt, dx, K, Np);
+    cudaThreadSynchronize();
+    // k* <- u + k2/2
+    rk4_tempstorage<<<nBlocksRK, nThreads>>>(d_u, d_kstar, d_k2, 0.5, dt, Np, K);
+    cudaThreadSynchronize();
+
+    // Stage 3
+    // f <- flux(k*)
+    calcFlux<<<nBlocksFlux, nThreads>>>(d_kstar, d_f, a, t, K, Np);
+    cudaThreadSynchronize();
+    // k3 <- dt*rhs(k*)
+    rhs<<<nBlocksRHS, nThreads>>>(d_kstar, d_k3, d_f, d_w, d_r, a, dt, dx, K, Np);
+    cudaThreadSynchronize();
+    // k* <- u + k3
+    rk4_tempstorage<<<nBlocksRK, nThreads>>>(d_u, d_kstar, d_k3, 1.0, dt, Np, K);
+    cudaThreadSynchronize();
+
+    // Stage 4
+    // f <- flux(k*)
+    calcFlux<<<nBlocksFlux, nThreads>>>(d_kstar, d_f, a, t, K, Np);
+    cudaThreadSynchronize();
+    // k4 <- dt*rhs(k*)
+    rhs<<<nBlocksRHS, nThreads>>>(d_kstar, d_k4, d_f, d_w, d_r, a, dt, dx, K, Np);
+    cudaThreadSynchronize();
+
+    checkCudaError("error after rk4");
+
+    // u <- k1/6 + k2/3 + k3/3 + k4/6
+    rk4<<<nBlocksRK, nThreads>>>(d_u, d_k1, d_k2, d_k3, d_k4, Np, K);
+
+    // copy back the data (this takes a while)
+    cudaMemcpy(u, d_u, size * sizeof(float), cudaMemcpyDeviceToHost);
+}
+
+/* allocate memory on the GPU for the GPU data
+ */
+void initGPU(int K, int Np) {
+    int size = K * (Np + 1);
+    cudaDeviceReset();
+    checkCudaError("error after reset?");
+
+    // Main variables
+    cudaMalloc((void **) &d_u , size * sizeof(float));
+    cudaMalloc((void **) &d_f,  (K + 1) * sizeof(float));
+    cudaMalloc((void **) &d_rx, size * sizeof(float));
+    cudaMalloc((void **) &d_mesh, K * sizeof(float));
+    cudaMalloc((void **) &d_r, (Np + 1) * sizeof(float));
+    cudaMalloc((void **) &d_w, (Np + 1) * sizeof(float));
+
+    // Runge-Kutta storage
+    cudaMalloc((void **) &d_kstar , size * sizeof(float));
+    cudaMalloc((void **) &d_k1 , size * sizeof(float));
+    cudaMalloc((void **) &d_k2 , size * sizeof(float));
+    cudaMalloc((void **) &d_k3 , size * sizeof(float));
+    cudaMalloc((void **) &d_k4 , size * sizeof(float));
+
+    checkCudaError("error in init");
+}
+
 int main() {
     int i, j, size, t, timesteps;
-    float *mesh;
+    float *mesh;  // the grid points
     float *u;     // the computed result
     float *r;     // the GLL points
     float *w;     // Gaussian integration weights
     
-    int Np  = 7;              // polynomial order of the approximation
-    int K   = 2*10;           // the mesh size
-    float a = -1.;              // left boundary
-    float b = 1.;      // right boundary
+    int Np  = 3;               // polynomial order of the approximation
+    int K   = 2*50;            // the mesh size
+    float a = -1.;             // left boundary
+    float b =  1.;             // right boundary
     float dx = (b - a) / K;    // size of cell
     float aspeed = 2.*3.14159; // the wave speed
 
@@ -312,11 +318,11 @@ int main() {
     cudaMemcpy(d_r, r, (Np + 1) * sizeof(float), cudaMemcpyHostToDevice);
     cudaMemcpy(d_w, w, (Np + 1) * sizeof(float), cudaMemcpyHostToDevice);
 
-    // Initialize u0
+    // Initialize u at time t0
     initU<<<nBlocksU, nThreads>>>(d_u, d_mesh, d_w, d_r, dx, K, Np);
     cudaThreadSynchronize();
-
     checkCudaError("error after initialization");
+
     // File for output
     FILE *data;
     data = fopen("data.txt", "w");
@@ -324,6 +330,7 @@ int main() {
     cudaMemcpy(mesh, d_mesh, K * sizeof(float), cudaMemcpyDeviceToHost);
     cudaMemcpy(u, d_u, size * sizeof(float), cudaMemcpyDeviceToHost);
 
+    // Output the mesh into the file
     fprintf(data, "%i\n", Np);
     for (i = 0; i < K; i++) {
         fprintf(data, "%f ", mesh[i]);
@@ -332,6 +339,7 @@ int main() {
 
     // Run the integrator 
     for (t = 0; t < timesteps; t++) {
+        // Output the data into the file (this takes a while)
         for (i = 0; i < K; i++) {
             for (j = 0; j < Np+1; j++) {
                 fprintf(data," %f ", u[j*K + i]);
@@ -340,7 +348,7 @@ int main() {
         fprintf(data, "\n");
         timeIntegrate(u, aspeed, K, dt, dx, dt*t, Np);
     }
-    //fclose(data);
+    fclose(data);
 
     // Free host data
     free(mesh);
