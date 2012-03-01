@@ -5,7 +5,6 @@
 // Important variables for GPU shit
 float *d_u;
 float *d_f;
-float *d_rx;
 float *d_x;
 float *d_mesh;
 float *d_r;
@@ -17,77 +16,6 @@ float *d_k1;
 float *d_k2;
 float *d_k3;
 float *d_k4;
-
-/* flux function f(u)
- *
- * evaluate the flux function f(u)
- */
-__device__ float flux(float u) {
-    float aspeed = 2.*3.14159; // the wave speed
-    return aspeed*u;
-}
-
-/* initilialize the mesh nodes
- *
- * ideally, this should be done on the GPU, but meh
- */
-__global__ void initMesh(float *mesh, float dx, float a, int K) {
-    int idx = blockDim.x * blockIdx.x + threadIdx.x;
-
-    if (idx < K) {
-        mesh[idx] = a + dx * idx;
-    }
-}
-
-/* flux calculations for each node 
- *
- *  | endpoint - f0 - f1 -  ... - fm-1 - endpoint |
- *
- * That is, fi is the flux between nodes i and i+1, making f a m+1 length vector.
- * Store results into f
- */
-__global__ void calcFlux(float *u, float *f, float aspeed, float time, int K, int Np) {
-    int idx = blockDim.x * blockIdx.x + threadIdx.x;
-    int i;
-    float ul, ur;
-    float cl[NP_MAX], cr[NP_MAX];
-
-    if (idx < K+1) {
-        // inflow
-        if (idx == 0) {
-            f[idx] = -sinf(aspeed*time);
-        }
-        if (idx > 0) {
-            for (i = 0; i < Np+1; i++) {
-                cl[i] = u[K*i + idx - 1];
-                cr[i] = u[K*i + idx];
-            }
-
-            // Left value
-            ul = 0;
-            for (i = 0; i < Np+1; i++) {
-                ul += cl[i];
-            }
-            // Evaluate flux 
-            ul = flux(ul);
-
-            // Right value
-            ur = 0;
-            for (i = 0; i < Np+1; i++) {
-                ur += powf(-1, i) * cr[i];
-            }
-            // Evaluate flux 
-            ur = flux(ur);
-
-            // Upwind flux
-            f[idx] = ul;
-        }
-        // Outflow conditions
-        //if (idx == K) {
-            //f[idx] = 0;
-        //}
-    }
-}
 
 /* legendre polynomials
  *
@@ -131,12 +59,118 @@ __device__ float legendreDeriv(float x, int i) {
     return -1;
 }
 
+/* flux function f(u)
+ *
+ * evaluate the flux function f(u)
+ */
+__device__ float flux(float u) {
+    float aspeed = 2.*3.14159; // the wave speed
+    return aspeed*u;
+}
+
+/* initilialize the mesh nodes
+ *
+ * ideally, this should be done on the GPU, but meh
+ */
+__global__ void initMesh(float *mesh, float dx, float a, int K) {
+    int idx = blockDim.x * blockIdx.x + threadIdx.x;
+
+    if (idx < K) {
+        mesh[idx] = a + dx * idx;
+    }
+}
+
+/* periodic boundary conditions
+ *
+ * copy cell K's data into cell 0.
+ */
+__global__ void periodicBoundary(float *u, float *f, int K, int Np) {
+    int i;
+    for (i = 0; i < Np+1; i++) {
+        u[i*(K + 1)] = u[i*(K + 1) + K];
+    }
+    f[0] = f[K+1];
+}
+
+__global__ void initFlux(float *u, float *f, int K, int Np) {
+    float cl[NP_MAX];
+    float ul;
+    int i;
+
+    for (i = 0; i < Np+1; i++) {
+        cl[i] = u[(K + 1)*i + K];
+    }
+
+    ul = 0;
+    for (i = 0; i < Np+1; i++) {
+        ul += cl[i];
+    }
+
+    f[K+1] = flux(ul);
+    f[0]   = f[K+1];
+}
+
+/* flux calculations for each node 
+ *
+ *  | endpoint - f0 - f1 -  ... - fm-1 - endpoint |
+ *
+ * That is, fi is the flux between nodes i and i+1, making f a m+1 length vector.
+ * Store results into f
+ */
+__global__ void calcFlux(float *u, float *f, float aspeed, float time, int K, int Np) {
+    int idx = blockDim.x * blockIdx.x + threadIdx.x;
+    int i;
+    float ul, ur;
+    float cl[NP_MAX], cr[NP_MAX];
+
+    if (idx < K+2) {
+        // periodic
+        //if (idx == 0) {
+            //f[idx] = 0;//f[K+1];//-sinf(aspeed*time);
+        //}
+        if (idx > 0) {
+            for (i = 0; i < Np+1; i++) {
+                cl[i] = u[(K + 1)*i + idx - 1];
+                cr[i] = u[(K + 1)*i + idx];
+            }
+
+            // Left value
+            ul = 0;
+            for (i = 0; i < Np+1; i++) {
+                ul += cl[i];
+            }
+            // Evaluate flux 
+            ul = flux(ul);
+
+            // Right value
+            ur = 0;
+            for (i = 0; i < Np+1; i++) {
+                ur += powf(-1, i) * cr[i];
+            }
+            // Evaluate flux 
+            ur = flux(ur);
+
+            // Upwind flux
+            f[idx] = ul;
+        }
+        // Outflow conditions
+        //if (idx == K) {
+            //f[idx] = 0;
+        //}
+    }
+}
+
 /* initial condition function
  *
  * returns the value of the intial condition at point x
  */
 __device__ float u0(float x) {
-    return 0;//1. + sinf(2*3.14159*x);
+    if (x > -0.25 && x < 0.25) {
+        return 1;
+    } else {
+        return 0;
+    }
+    //return sinf(2*3.14159*x);
 }
 
 /* calculate the initial data for U
@@ -148,7 +182,7 @@ __global__ void initU(float *u, float *x, float *w, float *r, float dx, int K, i
     int i, j;
     float xi, uval;
 
-    if (idx < K) {
+    if (idx < (K + 1)) {
         for (i = 0; i < Np+1; i++) {
             uval = 0.;
             for (j = 0; j < Np+1; j++) {
@@ -157,7 +191,7 @@ __global__ void initU(float *u, float *x, float *w, float *r, float dx, int K, i
                 uval += w[j] * u0(xi) * legendre(r[j], i);
             }
             // Leftover from integration
-            u[i*K + idx] = (2.*i + 1.)/2. * uval;
+            u[i*(K + 1) + idx] = i*(K + 1) + idx;//(2.*i + 1.)/2. * uval;
         }
     }
 }
@@ -175,11 +209,15 @@ __global__ void rhs(float *c, float *kstar, float *f, float *w, float *r, float 
     float rhs[NP_MAX], register_c[NP_MAX];
     float lflux, rflux, u;
 
-    if (idx < K) {
+    if (idx < (K + 1)) {
         // Read the global u into a register variable and set rhs = 0.
         for (i = 0; i < Np+1; i++) {
-            register_c[i] = c[i*K + idx];
+            register_c[i] = c[i*(K + 1) + idx];
         }
+
+        // Read the flux contributions.
+        lflux  = f[idx];
+        rflux  = f[idx+1];
 
         // Perform quadrature W*P'*f(U) at integration points
         for (i = 0; i < Np+1; i++) {
@@ -195,13 +233,9 @@ __global__ void rhs(float *c, float *kstar, float *f, float *w, float *r, float 
             }
         }
 
-        // Read the flux contributions.
-        lflux  = f[idx];
-        rflux  = f[idx+1];
-
         // Store result
         for (i = 0; i < Np+1; i++) {
-            kstar[K*i + idx] = dt*(((2.*i+1.) / dx) * (-rflux + powf(-1.,i) * lflux + rhs[i]));
+            kstar[(K + 1)*i + idx] = dt*(((2.*i+1.) / dx) * (-rflux + powf(-1.,i) * lflux + rhs[i]));
         }
     }
 }

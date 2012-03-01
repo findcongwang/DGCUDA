@@ -52,7 +52,7 @@ lines = []
 xstart = x[0]
 
 # make each x-range and store the plot in lines
-for i in xrange(0, len(data), Np+1):
+for i in xrange(0, len(data) - Np - 1, Np+1):
     xscaled = np.arange(xstart, xstart+5./4*dx, dx/4.)[:5]
     xstart  = xstart + dx 
     l, = p.plot(xscaled, d1[i/(Np+1)])
@@ -60,12 +60,14 @@ for i in xrange(0, len(data), Np+1):
     p.ylim((-1.1,2.1))
     lines.append(l)
 
+p.draw()
+
 # loop through the rest of the data in the file
 for i,line in enumerate(f):
     data = [float(i) for i in line.split()]
     d1 = graph([data[i] for i in xrange(0,len(data))])
 
     # set each of the graphs with the new data
-    for i in xrange(0, len(data)/(Np+1)):
+    for i in xrange(0, len(data)/(Np+1) - 1):
         lines[i].set_ydata(d1[i])
     p.draw()
