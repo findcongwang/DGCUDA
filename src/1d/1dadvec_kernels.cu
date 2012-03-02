@@ -80,18 +80,11 @@ __global__ void initMesh(float *mesh, float dx, float a, int K) {
     }
 }
 
-/* periodic boundary conditions
- *
- * copy cell K's data into cell 0.
+/* initialize flux
+ * 
+ * for these periodic boundary conditions, you need to set the flux
+ * on the ghost state to be something.
  */
-__global__ void periodicBoundary(float *u, float *f, int K, int Np) {
-    int i;
-    for (i = 0; i < Np+1; i++) {
-        u[i*(K + 1)] = u[i*(K + 1) + K];
-    }
-    f[0] = f[K+1];
-}
-
 __global__ void initFlux(float *u, float *f, int K, int Np) {
     float cl[NP_MAX];
     float ul;
@@ -125,9 +118,9 @@ __global__ void calcFlux(float *u, float *f, float aspeed, float time, int K, in
 
     if (idx < K+2) {
         // periodic
-        //if (idx == 0) {
-            //f[idx] = 0;//f[K+1];//-sinf(aspeed*time);
-        //}
+        if (idx == 0) {
+            f[idx] = f[K+1];
+        }
         if (idx > 0) {
             for (i = 0; i < Np+1; i++) {
                 cl[i] = u[(K + 1)*i + idx - 1];
@@ -153,10 +146,6 @@ __global__ void calcFlux(float *u, float *f, float aspeed, float time, int K, in
             // Upwind flux
             f[idx] = ul;
         }
-        // Outflow conditions
-        //if (idx == K) {
-            //f[idx] = 0;
-        //}
     }
 }
 
@@ -173,6 +162,18 @@ __device__ float u0(float x) {
     //return sinf(2*3.14159*x);
 }
 
+/* intialize the ghost state
+ * 
+ * since we have periodic boundary conditions, make the ghost state
+ * think that it's just the first element.
+ */
+__global__ void initUPeriodic(float *u, int K, int Np) {
+    int i;
+    for (i = 0; i < Np+1; i++) {
+        u[i*(K + 1) + K] = 0;//u[i*(K + 1)];
+    }
+}
+
 /* calculate the initial data for U
  *
  * needs to interpolate u0 with legendre polynomials to grab the right coefficients.
@@ -182,7 +183,7 @@ __global__ void initU(float *u, float *x, float *w, float *r, float dx, int K, i
     int i, j;
     float xi, uval;
 
-    if (idx < (K + 1)) {
+    if (idx < K) {
         for (i = 0; i < Np+1; i++) {
             uval = 0.;
             for (j = 0; j < Np+1; j++) {
@@ -191,7 +192,7 @@ __global__ void initU(float *u, float *x, float *w, float *r, float dx, int K, i
                 uval += w[j] * u0(xi) * legendre(r[j], i);
             }
             // Leftover from integration
-            u[i*(K + 1) + idx] = i*(K + 1) + idx;//(2.*i + 1.)/2. * uval;
+            u[i*(K + 1) + idx] = (2.*i + 1.)/2. * uval;
         }
     }
 }

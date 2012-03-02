@@ -197,7 +197,7 @@ void timeIntegrate(float *u, float a, int K, float dt, float dx, double t, int N
 
     int nBlocksRHS   = (K + 1) / nThreads + (((K + 1) % nThreads) ? 1 : 0);
     int nBlocksFlux  = (K + 2) / nThreads + (((K + 2) % nThreads) ? 1 : 0);
-    int nBlocksRK    = ((Np + 1)*K) / nThreads + ((((Np + 1)* K) % nThreads) ? 1 : 0);
+    int nBlocksRK    = ((Np + 1)*K) / nThreads + ((((Np + 1)*K) % nThreads) ? 1 : 0);
 
     checkCudaError("error before rk4");
     // Stage 1
@@ -206,8 +206,6 @@ void timeIntegrate(float *u, float a, int K, float dt, float dx, double t, int N
     cudaThreadSynchronize();
     // k1 <- dt*rhs(u)
     rhs<<<nBlocksRHS, nThreads>>>(d_u, d_k1, d_f, d_w, d_r, a, dt, dx, K, Np);
-    cudaThreadSynchronize();
-    periodicBoundary<<<1,1>>>(d_u, d_f, K, Np);
     cudaThreadSynchronize();
     // k* <- u + k1/2
     rk4_tempstorage<<<nBlocksRK, nThreads>>>(d_u, d_kstar, d_k1, 0.5, dt, Np, K);
@@ -220,8 +218,6 @@ void timeIntegrate(float *u, float a, int K, float dt, float dx, double t, int N
     // k2 <- dt*rhs(k*)
     rhs<<<nBlocksRHS, nThreads>>>(d_kstar, d_k2, d_f, d_w, d_r, a, dt, dx, K, Np);
     cudaThreadSynchronize();
-    periodicBoundary<<<1,1>>>(d_u, d_f, K, Np);
-    cudaThreadSynchronize();
     // k* <- u + k2/2
     rk4_tempstorage<<<nBlocksRK, nThreads>>>(d_u, d_kstar, d_k2, 0.5, dt, Np, K);
     cudaThreadSynchronize();
@@ -232,8 +228,6 @@ void timeIntegrate(float *u, float a, int K, float dt, float dx, double t, int N
     cudaThreadSynchronize();
     // k3 <- dt*rhs(k*)
     rhs<<<nBlocksRHS, nThreads>>>(d_kstar, d_k3, d_f, d_w, d_r, a, dt, dx, K, Np);
-    cudaThreadSynchronize();
-    periodicBoundary<<<1,1>>>(d_u, d_f, K, Np);
     cudaThreadSynchronize();
     // k* <- u + k3
     rk4_tempstorage<<<nBlocksRK, nThreads>>>(d_u, d_kstar, d_k3, 1.0, dt, Np, K);
@@ -246,8 +240,6 @@ void timeIntegrate(float *u, float a, int K, float dt, float dx, double t, int N
     // k4 <- dt*rhs(k*)
     rhs<<<nBlocksRHS, nThreads>>>(d_kstar, d_k4, d_f, d_w, d_r, a, dt, dx, K, Np);
     cudaThreadSynchronize();
-    periodicBoundary<<<1,1>>>(d_u, d_f, K, Np);
-    cudaThreadSynchronize();
 
     checkCudaError("error after rk4");
 
@@ -255,7 +247,7 @@ void timeIntegrate(float *u, float a, int K, float dt, float dx, double t, int N
     rk4<<<nBlocksRK, nThreads>>>(d_u, d_k1, d_k2, d_k3, d_k4, Np, K);
 
     // copy back the data (this takes a while)
-    cudaMemcpy(u, d_u, (K + 1) * (Np + 1) * sizeof(float), cudaMemcpyDeviceToHost);
+    cudaMemcpy(u, d_u, K * (Np + 1) * sizeof(float), cudaMemcpyDeviceToHost);
 }
 
 /* allocate memory on the GPU for the GPU data
@@ -268,7 +260,7 @@ void initGPU(int K, int Np) {
     // Main variables
     cudaMalloc((void **) &d_u , (K + 1) * (Np + 1) * sizeof(float));
     cudaMalloc((void **) &d_f,  (K + 2) * sizeof(float));
-    cudaMalloc((void **) &d_mesh, (K + 1) * sizeof(float));
+    cudaMalloc((void **) &d_mesh, K * sizeof(float));
     cudaMalloc((void **) &d_r, (Np + 1) * sizeof(float));
     cudaMalloc((void **) &d_w, (Np + 1) * sizeof(float));
 
@@ -289,8 +281,8 @@ int main() {
     float *r;     // the GLL points
     float *w;     // Gaussian integration weights
     
-    int Np  = 1;               // polynomial order of the approximation
-    int K   = 20;            // the mesh size
+    int Np  = 6;               // polynomial order of the approximation
+    int K   = 200;            // the mesh size
     float a = -1.;             // left boundary
     float b =  1.;             // right boundary
     float dx = (b - a) / K;    // size of cell
@@ -298,7 +290,7 @@ int main() {
 
     float CFL = 0.5 * (1. / (2.*Np + 1.));
     float dt  = CFL/aspeed * dx; // timestep
-    timesteps = (b - a) / dt;
+    timesteps = 1000;
 
     size = (Np + 1) * K;  // size of u
 
@@ -308,8 +300,8 @@ int main() {
     w = (float *) malloc((Np + 1) * sizeof(float));
 
     int nThreads    = 128;
-    int nBlocksMesh = (K + 1) / nThreads + (((K + 1) % nThreads) ? 1 : 0);
-    int nBlocksU    = (K + 1)/ nThreads + (((K + 1)  % nThreads) ? 1 : 0);
+    int nBlocksMesh = K / nThreads + ((K % nThreads) ? 1 : 0);
+    int nBlocksU    = K / nThreads + ((K % nThreads) ? 1 : 0);
 
     // Allocate space on the GPU
     initGPU(K, Np);
@@ -326,36 +318,35 @@ int main() {
     // Initialize u at time t0
     initU<<<nBlocksU, nThreads>>>(d_u, d_mesh, d_w, d_r, dx, K, Np);
     cudaThreadSynchronize();
+    initUPeriodic<<<1, 1>>>(d_u, K, Np);
+    cudaThreadSynchronize();
     checkCudaError("error after initialization");
 
     // File for output
     FILE *data;
     data = fopen("data.txt", "w");
 
-    cudaMemcpy(mesh, d_mesh, (K + 1) * sizeof(float), cudaMemcpyDeviceToHost);
-    cudaMemcpy(u, d_u, size * sizeof(float), cudaMemcpyDeviceToHost);
+    cudaMemcpy(mesh, d_mesh, K * sizeof(float), cudaMemcpyDeviceToHost);
+    cudaMemcpy(u, d_u, K * (Np + 1) * sizeof(float), cudaMemcpyDeviceToHost);
 
     // Output the mesh into the file
     fprintf(data, "%i\n", Np);
-    for (i = 0; i < K+1; i++) {
+    for (i = 0; i < K; i++) {
         fprintf(data, "%f ", mesh[i]);
     }
     fprintf(data, "\n");
 
+    // Make sure the ghost state's flux isn't filled with garbage
     initFlux<<<1,1>>>(d_u, d_f, K, Np);
 
     // Run the integrator 
-    for (i = 0; i < (K + 1) * (Np + 1); i++) {
-        fprintf(data, "%f ", u[i]);
-    }
-    fprintf(data, "\n");
     for (t = 0; t < timesteps; t++) {
         // Output the data into the file (this takes a while)
-        //for (i = 0; i < K+1; i++) {
-            //for (j = 0; j < Np+1; j++) {
-                //fprintf(data," %f ", u[j*(K + 1) + i]);
-            //}
-        //}
+        for (i = 0; i < K; i++) {
+            for (j = 0; j < Np+1; j++) {
+                fprintf(data," %f ", u[j*(K + 1) + i]);
+            }
+        }
         fprintf(data, "\n");
         timeIntegrate(u, aspeed, K, dt, dx, dt*t, Np);
     }
