@@ -7,6 +7,11 @@ and translating them into something usable for CUDA.
 
 from sys import argv
 
+def genmesh(inFilename, outFilename):
+    inFile  = open(inFilename, "rb")
+    outFile = open(inFilename, "wb")
+    
+
 if __name__ == "__main__":
     try:
         inFilename  = argv[1] 
