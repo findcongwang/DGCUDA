@@ -11,14 +11,20 @@
  *
  ***********************/
 /* These are always prefixed with d_ for "device" */
-float *d_c;     // holds coefficients for each element
-float *d_r1;    // integration points (x)
-float *d_r2;    // integration points (y)
-float *d_w;     // gaussian integration weights
+float *d_c;      // holds coefficients for each element
+
+float *d_r1;     // integration points (x) for 2d integration
+float *d_r2;     // integration points (y) for 2d integration
+float *d_w;      // weights for 2d integration
+float *d_oned_r; // integration points (x) for 1d integration
+float *d_oned_w; // weights for 2d integration
+
 float *d_J;     // jacobian determinant 
 float *d_s_len; // length of sides
 
 // the H values of the x and y coordinates for the two vertices defining a side
+// TODO: can i delete these after the lengths are precomputed?
+//       maybe these should be in texture memory?
 float *d_s_V1x;
 float *d_s_V1y;
 float *d_s_V2x;
@@ -29,7 +35,9 @@ int *d_elem_s1;
 int *d_elem_s2;
 int *d_elem_s3;
 
-// vertex x and y coordinates on the mesh
+// vertex x and y coordinates on the mesh which define an element
+// TODO: can i delete these after the jacobians are precomputed?
+//       maybe these should be in texture memory?
 float *d_V1x;
 float *d_V1y;
 float *d_V2x;
@@ -37,13 +45,13 @@ float *d_V2y;
 float *d_V3x;
 float *d_V3y;
 
-// normal vectors
+// normal vectors for the sides
 float *d_Nx;
 float *d_Ny;
 
 // index lists for sides
 int *d_right_idx_list; // index of right element for side idx
-int *d_left_idx_list;  // index of left element for side idx
+int *d_left_idx_list;  // index of left  element for side idx
 
 
 /***********************
@@ -69,16 +77,22 @@ __device__ float flux(float u) {
 __device__ float quad(float *c, float *r1, float *r2, float *w, float J, int k, int N) {
     int i, j;
     float sum, u;
-    
+    register float register_c[10];
+
+    for (i = 0; i < N; i++) {
+        register_c[i] = c[i*N + idx];
+    }
+
     sum = 0;
     for (i = 0; i < N; i++) {
         // Evaluate u at the integration point.
         u = 0;
         for (j = 0; j < N; j++) {
-            u += basis(r1[i], r2[i], j);
+            u += register_c[j] * basis(r1[i], r2[i], j);
         }
         // Add to the sum
-        sum += flux(u) * d_basis(r1[i], r2[i], k) * w[i];
+        sum += w[i] * (  flux_x(u) * grad_basis_x(r1[i], r2[i], k) 
+                       + flux_y(u) * grad_basis_y(r1[i], r2[i], k));
     }
 
     // Multiply in the Jacobian
@@ -98,9 +112,8 @@ __device__ boundary(float *c, int k, int N) {
  * evaluates the riemann problem over the boundary using Gaussian quadrature
  * with Legendre polynomials as basis functions.
  */
-__device__ riemann(float *eval_left, float *eval_right, // the left and right evaluations at the integration points
-                   float *n, float *r1, float *r2, float *w, int k, int N) {
-        
+__device__ riemann(float u_left, float u_right) {
+
 }
 
 /***********************
@@ -108,12 +121,14 @@ __device__ riemann(float *eval_left, float *eval_right, // the left and right ev
  * PRECOMPUTING
  *
  ***********************/
-/* side lenght computer
+/* side length computer
  *
  * precomputes the length of each side.
  * THREADS: K
  */ 
-__global__ preval_side_length(float *s_length, float *s_V1x, float *s_V1y, float *s_V2x, float *s_V2y) {
+__global__ preval_side_length(float *s_length, 
+                              float *s_V1x, float *s_V1y, 
+                              float *s_V2x, float *s_V2y) {
     int idx = blockDim.x * blockIdx.x + threadIdx.x;
 
     // compute and store the length of the side
@@ -125,7 +140,10 @@ __global__ preval_side_length(float *s_length, float *s_V1x, float *s_V1y, float
  * precomputes the jacobian determinant for each element.
  * THREADS: K
  */
-__global__ preval_jacobian(float *J, float *V1x, float *V1y, float *V2x, float *V2y, float *V3x, float *V3y) {
+__global__ preval_jacobian(float *J, 
+                           float *V1x, float *V1y, 
+                           float *V2x, float *V2y, 
+                           float *V3x, float *V3y) {
     int idx = blockDim.x * blockIdx.x + threadIdx.x;
     float xr, xs, yr, ys;
     float x1, y1, x2, y2, x3, y3;
@@ -154,11 +172,23 @@ __global__ preval_jacobian(float *J, float *V1x, float *V1y, float *V2x, float *
  *
  * computes the normal vectors for each element along each side.
  * THREADS: H
+ * TODO: what the hell direction does this point? somehow i need to always
+ *       make them point out of the cell, so... remember somehow?
  */
-__global__ preval_normals(float *Nx, float *Ny, float *s_V1x, float *s_V1y, float *s_V2x, float *s_V2y) {
+__global__ preval_normals(float *Nx, float *Ny, 
+                          float *s_V1x, float *s_V1y, 
+                          float *s_V2x, float *s_V2y) {
    int idx = blockDim.x * blockIdx.x + threadIdx.x;
+   float x, y, length;
 
-   Nx[idx] = 
+   // lengths of the vector components
+   x = s_V1x[idx] - s_V2x[idx];
+   y = s_V1y[idx] - s_V2y[idx];
+
+   // normalize and store
+   length = sqrtf(powf(x, 2) + powf(y, 2));
+   Nx[idx] = x / length;
+   Ny[idx] = y / length;
 }
 
 /***********************
@@ -167,27 +197,27 @@ __global__ preval_normals(float *Nx, float *Ny, float *s_V1x, float *s_V1y, floa
  *
  ***********************/
 
+
 /* flux evaluation
  *
  * evaluate all the riemann problems for each element.
  * THREADS: H
  */
-__global__ eval_riemann(float *c, int *left_idx_list, int *right_idx_list,
-                                  int *side_idx_1, int *side_idx_2, 
-                                  float *Nx, float *Ny, 
-                                  float *f, int N) {
+__global__ eval_riemann(float *c, 
+                        float *s1_r1, float *s1_r2,
+                        float *s2_r1, float *s2_r2,
+                        float *s3_r1, float *s3_r2,
+                        float *w, float *oned_r, float *oned_w,
+                        int *left_idx_list, int *right_idx_list,
+                        int *side_number float *Nx, float *Ny, float *f, int N) {
     int idx = blockDim.x * blockIdx.x + threadIdx.x;
-    int left_idx, right_idx, side;
-    float c_left[10], c_right[10];
+    int left_idx, right_idx, side, i, j;
+    float c_left[10], c_right[10], u[10];
     float nx, ny, s;
 
     // Find the left and right elements
     left_idx  = left_idx_list[idx];
-    right_idx = left_idx_list[idx];
-
-    // Find where to store the side in the f list
-    idx1 = side_idx_1[idx];
-    idx2 = side_idx_2[idx];
+    right_idx = right_idx_list[idx];
 
     // Get the normal vector for this side
     nx = Nx[idx];
@@ -195,37 +225,63 @@ __global__ eval_riemann(float *c, int *left_idx_list, int *right_idx_list,
 
     // Grab the coefficients for the left & right elements
     for (i = 0; i < N; i++) {
-        c_left[i]  = u[i*left_idx  + idx];
-        c_right[i] = u[i*right_idx + idx];
+        c_left[i]  = u[i*N + left_idx];
+        c_right[i] = u[i*N + right_idx];
     }
-    
-    // Need to find out what side we've got
+     
+    // Need to find out what side we've got for evaluation (right, left, bottom)
     side = side_number[idx];
-    
+     
     // Evaluate the polynomial over that side for both elements
     // TODO: Order the basis function evaluations (and coefficients) 
     //       so that we can grab their values along the edges using some scheme
     switch (side) {
         case 1:
-            eval_left  = c_left[0]  * eval_basis[0]; // + ...           
-            eval_right = c_right[0] * eval_basis[0]; // + ...           
+            for (i = 0; i < N; i++) {
+                // evaluate u at the integration points
+                u_left[i]  = 0;
+                u_right[i] = 0;
+                for (j = 0; j < N; j++) {
+                    u_left[i]  += c_left[i]  * basis(s1_r1[i], s1_r2[i], j) * w[i];
+                    u_right[i] += c_right[i] * basis(s1_r1[i], s1_r2[i], j) * w[i];
+                }
+            }
             break;
         case 2:
-            eval_left  = c_left[1]  * eval_basis[1]; // + ...           
-            eval_right = c_right[1] * eval_basis[1]; // + ...           
+             for (i = 0; i < N; i++) {
+                // evaluate u at the integration points
+                u_left[i]  = 0;
+                u_right[i] = 0;
+                for (j = 0; j < N; j++) {
+                    u_left[i]  += c_left[i]  * basis(s2_r1[i], s2_r2[i], j);
+                    u_right[i] += c_right[i] * basis(s2_r1[i], s2_r2[i], j);
+                }
+            }
             break;
         case 3:
-            eval_left  = c_left[2]  * eval_basis[2]; // + ...           
-            eval_right = c_right[2] * eval_basis[2]; // + ...           
+            for (i = 0; i < N; i++) {
+                // evaluate u at the integration points
+                u_left[i]  = 0;
+                u_right[i] = 0;
+                for (j = 0; j < N; j++) {
+                    u_left[i]  += c_left[i]  * basis(s3_r1[i], s3_r2[i], j);
+                    u_right[i] += c_right[i] * basis(s3_r1[i], s3_r2[i], j);
+                }
+            }
             break;
+     }
+
+    sum = 0;
+    // evaluate for each coefficient
+    for (i = 0; i < N; i++) {
+        for (j = 0; j < N; j++) {
+            // solve the Riemann problem at this integration point
+            s = riemann(u_left[j], u_right[j]);
+            sum += (nx * flux_x(s) + ny * flux_y(s) * oned_w[j]) * (oned_basis(oned_r[j], i));
+        }
+        // write solution into the flux vector
+        f[N*i + idx + i] = sum;
     }
-
-    // Solve the Riemann problem
-
-    // Write solution into sides
-    f[side_idx_1] = s;
-    f[side_idx_2] = s;
-
 }
 
 /* right hand side
@@ -234,7 +290,9 @@ __global__ eval_riemann(float *c, int *left_idx_list, int *right_idx_list,
  * hand side of the RK problem.
  * THREADS: K
  */
- __global__ eval_rhs(float *c, float *f, float *r1, float *r2, float *w, float *J, int N) {
+ __global__ eval_rhs(float *c, float *f, 
+                     int *elem_s1, int *elem_s2, int *elem_s3, 
+                     float *r1, float *r2, float *w, float *J, int N) {
     int idx = blockDim.x * blockIdx.x + threadIdx.x;
     float quad_u, f1, f2, f3, register_J;
     float register_c[10];
@@ -247,18 +305,16 @@ __global__ eval_riemann(float *c, int *left_idx_list, int *right_idx_list,
     // Grab the Jacobian
     register_J = J[idx];
 
-    // Read in the boundary integrals
-    f1 = f[0 * n_sides + idx];
-    f2 = f[1 * n_sides + idx];
-    f3 = f[2 * n_sides + idx];
-
     for (i = 0; i < N; i++) {
+        // Read in the boundary integrals for this coefficient
+        f1 = f[elem_s1[idx] + i];
+        f2 = f[elem_s2[idx] + i];
+        f3 = f[elem_s3[idx] + i];
+
         // Evaluate the volume integral
         quad_u = quad(register_c, r1, r2, w, register_J, i, N);
 
         // Write the result into the coefficient
-        c[N*idx + i] = 1./register_J*(-quad_u + f1 + f2 + f3);
-     }
- }
-
-
+        c[i*N + idx] = 1./register_J*(-quad_u + f1 + f2 + f3);
+    }
+}
