@@ -12,6 +12,9 @@
  ***********************/
 /* These are always prefixed with d_ for "device" */
 float *d_c;      // holds coefficients for each element
+float *d_rhs;    // the right hand side: 
+                 //     we reset to 0 between each and add to this to build d_c
+                 //     coefficients for each time step.
 
 float *d_r1;     // integration points (x) for 2d integration
 float *d_r2;     // integration points (y) for 2d integration
@@ -64,8 +67,48 @@ int *d_left_idx_list;  // index of left  element for side idx
  *
  * evaluates the flux f(u) at the point u.
  */
-__device__ float flux(float u) {
-    return u
+__device__ float flux_x(float u) {
+    return u;
+}
+__device__ float flux_y(float u) {
+    return u;
+}
+
+/* 2-d basis functions
+ *
+ */
+__device__ float basis(float x, float y, int i) {
+    return x+y;
+}
+
+/* 1-d basis functions
+ *
+ */
+__device__ float oned_basis(float x, int i) {
+    switch (i) {
+        case 0: return  1.;
+        case 1: return  x;
+        case 2: return  (3.*powf(x,2) -1.) / 2.;
+        case 3: return  (5.*powf(x,3) - 3.*x) / 2.;
+        case 4: return  (35.*powf(x,4) - 30.*powf(x,2) + 3.)/8.;
+        case 5: return  (63.*powf(x,5) - 70.*powf(x,3) + 15.*x)/8.;
+        case 6: return  (231.*powf(x,6) - 315.*powf(x,4) + 105.*powf(x,2) -5.)/16.;
+        case 7: return  (429.*powf(x,7) - 693.*powf(x,5) + 315.*powf(x,3) - 35.*x)/16.;
+        case 8: return  (6435.*powf(x,8) - 12012.*powf(x,6) + 6930.*powf(x,4) - 1260.*powf(x,2) + 35.)/128.;
+        case 9: return  (12155.*powf(x,9) - 25740.*powf(x,7) + 18018*powf(x,5) - 4620.*powf(x,3) + 315.*x)/128.;
+        case 10: return (46189.*powf(x,10) - 109395.*powf(x,8) + 90090.*powf(x,6) - 30030.*powf(x,4) + 3465.*powf(x,2) - 63.)/256.;
+    }
+    return -1.;
+}
+
+/* basis function gradients
+ *
+ */
+__device__ float grad_basis_x(float x, float y, int i) {
+    return x;
+}
+__device__ float grad_basis_y(float x, float y, int i) {
+    return y;
 }
 
 /* quadrature 
@@ -74,7 +117,7 @@ __device__ float flux(float u) {
  * element k. takes the coefficients for u_k in c, the integration 
  * points and weights r1, r2 and w, and the jacobian J.
  */
-__device__ float quad(float *c, float *r1, float *r2, float *w, float J, int k, int N) {
+__device__ float quad(float *c, float *r1, float *r2, float *w, float J, int idx, int k, int N) {
     int i, j;
     float sum, u;
     register float register_c[10];
@@ -83,7 +126,7 @@ __device__ float quad(float *c, float *r1, float *r2, float *w, float J, int k, 
         register_c[i] = c[i*N + idx];
     }
 
-    sum = 0;
+    sum = 0.0;
     for (i = 0; i < N; i++) {
         // Evaluate u at the integration point.
         u = 0;
@@ -103,8 +146,8 @@ __device__ float quad(float *c, float *r1, float *r2, float *w, float J, int k, 
  *
  * does something to handle the boundary elements.
  */
-__device__ boundary(float *c, int k, int N) {
-
+__device__ float boundary(float *c, int k, int N) {
+    return 0;
 }
 
 /* riemann solver
@@ -112,8 +155,8 @@ __device__ boundary(float *c, int k, int N) {
  * evaluates the riemann problem over the boundary using Gaussian quadrature
  * with Legendre polynomials as basis functions.
  */
-__device__ riemann(float u_left, float u_right) {
-
+__device__ float riemann(float u_left, float u_right) {
+    return 0.5 * (u_left + u_right);
 }
 
 /***********************
@@ -126,13 +169,13 @@ __device__ riemann(float u_left, float u_right) {
  * precomputes the length of each side.
  * THREADS: K
  */ 
-__global__ preval_side_length(float *s_length, 
+__global__ void preval_side_length(float *s_length, 
                               float *s_V1x, float *s_V1y, 
                               float *s_V2x, float *s_V2y) {
     int idx = blockDim.x * blockIdx.x + threadIdx.x;
 
     // compute and store the length of the side
-    s_length[idx] = sqrtf(powf(s_V1x[idx] - s_V2x[idx],2) + powf(s_V1y[idx] - sV2y[idx],2));
+    s_length[idx] = sqrtf(powf(s_V1x[idx] - s_V2x[idx],2) + powf(s_V1y[idx] - s_V2y[idx],2));
 }
 
 /* jacobian computing
@@ -140,7 +183,7 @@ __global__ preval_side_length(float *s_length,
  * precomputes the jacobian determinant for each element.
  * THREADS: K
  */
-__global__ preval_jacobian(float *J, 
+__global__ void preval_jacobian(float *J, 
                            float *V1x, float *V1y, 
                            float *V2x, float *V2y, 
                            float *V3x, float *V3y) {
@@ -175,7 +218,7 @@ __global__ preval_jacobian(float *J,
  * TODO: what the hell direction does this point? somehow i need to always
  *       make them point out of the cell, so... remember somehow?
  */
-__global__ preval_normals(float *Nx, float *Ny, 
+__global__ void preval_normals(float *Nx, float *Ny, 
                           float *s_V1x, float *s_V1y, 
                           float *s_V2x, float *s_V2y) {
    int idx = blockDim.x * blockIdx.x + threadIdx.x;
@@ -203,17 +246,20 @@ __global__ preval_normals(float *Nx, float *Ny,
  * evaluate all the riemann problems for each element.
  * THREADS: H
  */
-__global__ eval_riemann(float *c, 
+__global__ void eval_riemann(float *c, float *rhs,
                         float *s1_r1, float *s1_r2,
                         float *s2_r1, float *s2_r2,
                         float *s3_r1, float *s3_r2,
                         float *w, float *oned_r, float *oned_w,
                         int *left_idx_list, int *right_idx_list,
-                        int *side_number float *Nx, float *Ny, float *f, int N) {
+                        int *side_number, 
+                        float *Nx, float *Ny, float *f, int N) {
     int idx = blockDim.x * blockIdx.x + threadIdx.x;
     int left_idx, right_idx, side, i, j;
     float c_left[10], c_right[10], u[10];
     float nx, ny, s;
+    float u_left, u_right;
+    float sum;
 
     // Find the left and right elements
     left_idx  = left_idx_list[idx];
@@ -239,34 +285,61 @@ __global__ eval_riemann(float *c,
         case 1:
             for (i = 0; i < N; i++) {
                 // evaluate u at the integration points
-                u_left[i]  = 0;
-                u_right[i] = 0;
+                u_left  = 0;
+                u_right = 0;
                 for (j = 0; j < N; j++) {
-                    u_left[i]  += c_left[i]  * basis(s1_r1[i], s1_r2[i], j) * w[i];
-                    u_right[i] += c_right[i] * basis(s1_r1[i], s1_r2[i], j) * w[i];
+                    u_left  += c_left[i]  * basis(s1_r1[i], s1_r2[i], j) * w[i];
+                    u_right += c_right[i] * basis(s1_r1[i], s1_r2[i], j) * w[i];
                 }
+                sum = 0;
+                for (j = 0; j < N; j++) {
+                    // solve the Riemann problem at this integration point
+                    s = riemann(u_left, u_right);
+                sum += (nx * flux_x(s) + ny * flux_y(s) * oned_w[j]) * (oned_basis(oned_r[j], i));
+            }
+                // add each side's contribution to the rhs vector
+                rhs[i*N + left_idx]  += sum;
+                rhs[i*N + right_idx] += sum;
             }
             break;
         case 2:
              for (i = 0; i < N; i++) {
                 // evaluate u at the integration points
-                u_left[i]  = 0;
-                u_right[i] = 0;
+                u_left  = 0;
+                u_right = 0;
                 for (j = 0; j < N; j++) {
-                    u_left[i]  += c_left[i]  * basis(s2_r1[i], s2_r2[i], j);
-                    u_right[i] += c_right[i] * basis(s2_r1[i], s2_r2[i], j);
+                    u_left  += c_left[i]  * basis(s2_r1[i], s2_r2[i], j);
+                    u_right += c_right[i] * basis(s2_r1[i], s2_r2[i], j);
                 }
+                sum = 0;
+                for (j = 0; j < N; j++) {
+                    // solve the Riemann problem at this integration point
+                    s = riemann(u_left, u_right);
+                    sum += (nx * flux_x(s) + ny * flux_y(s) * oned_w[j]) * (oned_basis(oned_r[j], i));
+                }
+                // add each side's contribution to the rhs vector
+                rhs[i*N + left_idx]  += sum;
+                rhs[i*N + right_idx] += sum;
             }
             break;
         case 3:
             for (i = 0; i < N; i++) {
                 // evaluate u at the integration points
-                u_left[i]  = 0;
-                u_right[i] = 0;
+                u_left  = 0;
+                u_right = 0;
                 for (j = 0; j < N; j++) {
-                    u_left[i]  += c_left[i]  * basis(s3_r1[i], s3_r2[i], j);
-                    u_right[i] += c_right[i] * basis(s3_r1[i], s3_r2[i], j);
+                    u_left  += c_left[i]  * basis(s3_r1[i], s3_r2[i], j);
+                    u_right += c_right[i] * basis(s3_r1[i], s3_r2[i], j);
                 }
+                sum = 0;
+                for (j = 0; j < N; j++) {
+                    // solve the Riemann problem at this integration point
+                    s = riemann(u_left, u_right);
+                    sum += (nx * flux_x(s) + ny * flux_y(s) * oned_w[j]) * (oned_basis(oned_r[j], i));
+                }
+                // add each side's contribution to the rhs vector
+                rhs[i*N + left_idx]  += sum;
+                rhs[i*N + right_idx] += sum;
             }
             break;
      }
@@ -274,27 +347,20 @@ __global__ eval_riemann(float *c,
     sum = 0;
     // evaluate for each coefficient
     for (i = 0; i < N; i++) {
-        for (j = 0; j < N; j++) {
-            // solve the Riemann problem at this integration point
-            s = riemann(u_left[j], u_right[j]);
-            sum += (nx * flux_x(s) + ny * flux_y(s) * oned_w[j]) * (oned_basis(oned_r[j], i));
-        }
-        // write solution into the flux vector
-        f[N*i + idx + i] = sum;
     }
 }
 
-/* right hand side
+/* volume integrals
  *
- * combines the riemann solution & the volume integral to form the right
- * hand side of the RK problem.
+ * evaluates and adds the volume integral to the rhs vector
  * THREADS: K
  */
- __global__ eval_rhs(float *c, float *f, 
+ __global__ void eval_quad(float *c, float *rhs, 
                      int *elem_s1, int *elem_s2, int *elem_s3, 
                      float *r1, float *r2, float *w, float *J, int N) {
     int idx = blockDim.x * blockIdx.x + threadIdx.x;
-    float quad_u, f1, f2, f3, register_J;
+    int i;
+    float quad_u, register_J;
     float register_c[10];
 
     // Get the coefficients for this element
@@ -306,15 +372,21 @@ __global__ eval_riemann(float *c,
     register_J = J[idx];
 
     for (i = 0; i < N; i++) {
-        // Read in the boundary integrals for this coefficient
-        f1 = f[elem_s1[idx] + i];
-        f2 = f[elem_s2[idx] + i];
-        f3 = f[elem_s3[idx] + i];
-
         // Evaluate the volume integral
-        quad_u = quad(register_c, r1, r2, w, register_J, i, N);
+        quad_u = quad(register_c, r1, r2, w, register_J, idx, i, N);
 
-        // Write the result into the coefficient
-        c[i*N + idx] = 1./register_J*(-quad_u + f1 + f2 + f3);
+        // add the volume contribution result to the rhs
+        rhs[i*N + idx] += 1./register_J*(-quad_u);
     }
 }
+
+/* right hand side
+ *
+ */
+__global__ void eval_rhs(float *c, float *rhs) {
+    int idx = blockDim.x * blockIdx.x + threadIdx.x;
+
+    c[idx]   = rhs[idx];
+    rhs[idx] = 0;
+}
+
