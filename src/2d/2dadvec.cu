@@ -165,24 +165,21 @@ void checkCudaError(const char *message)
 }
 
 void read_mesh(FILE *mesh_file, 
-              int   *num_elem  , int *num_sides,
+              int *num_sides,
               float *V1x, float *V1y,
               float *V2x, float *V2y,
               float *V3x, float *V3y,
               float *sides_x1, float *sides_y1,
               float *sides_x2, float *sides_y2,
-              float *sides_x3, float *sides_y3,
               float *elem_s1,  float *elem_s2, float *elem_s3,
               float *left_elem, float *right_elem) {
-    printf("inside function.\n");
-    int i, j, s1, s2, s3, numsides, n_elem;
 
+    int i, j, s1, s2, s3, numsides;
     char line[100];
     i = 0;
     numsides = 0;
-    while(fgets(line, 100, mesh_file) != NULL) {
+    while(fgets(line, sizeof(line), mesh_file) != NULL) {
         // these three vertices define the element
-        printf("i = %i \n", i);
         sscanf(line, "%f %f %f %f %f %f", &V1x[i], &V1y[i], &V2x[i], &V2y[i], &V3x[i], &V3y[i]);
 
         // determine whether we should add these three sides or not
@@ -193,14 +190,12 @@ void read_mesh(FILE *mesh_file,
         // scan through the existing sides to see if we already added it
         // TODO: yeah, there's a better way to do this.
         for (j = 0; j < numsides; j++) {
-            //printf("checking bool...\n");
             if ((sides_x1[j] == V1x[i] && sides_y1[j] == V1y[i]
              && sides_x2[j] == V2x[i] && sides_y2[j] == V2y[i]) 
             || (sides_x2[j] == V1x[i] && sides_y2[j] == V1y[i]
              && sides_x1[j] == V2x[i] && sides_y1[j] == V2y[i])) {
                 s1 = 0;
                 // link this element to that side
-                //printf("linking to side\n");
                 elem_s1[i] = numsides;
                 // and that side to this element either by left or right sided
                 // if there's no left element, make this the left element otherwise, 
@@ -213,7 +208,6 @@ void read_mesh(FILE *mesh_file,
                     left_elem[numsides] = i; // something like this
                 }
             }
-            //printf("checking bool...\n");
             if ((sides_x1[j] == V2x[i] && sides_y1[j] == V2y[i]
              && sides_x2[j] == V3x[i] && sides_y2[j] == V3y[i]) 
             || (sides_x2[j] == V2x[i] && sides_y2[j] == V2y[i]
@@ -222,7 +216,6 @@ void read_mesh(FILE *mesh_file,
                 // link this element to that side
                 elem_s2[i] = numsides;
             }
-            //printf("checking bool...\n");
             if ((sides_x1[j] == V2x[i] && sides_y1[j] == V2y[i]
              && sides_x2[j] == V3x[i] && sides_y2[j] == V3y[i]) 
             || (sides_x2[j] == V2x[i] && sides_y2[j] == V2y[i]
@@ -232,16 +225,13 @@ void read_mesh(FILE *mesh_file,
                 elem_s3[i] = numsides;
             }
         }
-        //printf("now check s1.\n");
         // if we haven't added the side already, add it
         if (s1) {
-            //printf("linking sides\n");
             sides_x1[numsides] = V1x[i];
             sides_y1[numsides] = V1y[i];
             sides_x2[numsides] = V2x[i];
             sides_y2[numsides] = V2y[i];
             
-            //printf("linking elem_s1\n");
             // link the added side to this element
             elem_s1[i] = numsides;
 
@@ -253,7 +243,6 @@ void read_mesh(FILE *mesh_file,
             }
             numsides++;
         }
-        //printf("now check s2.\n");
         if (s2) {
             sides_x1[numsides] = V2x[i];
             sides_y1[numsides] = V2y[i];
@@ -271,7 +260,6 @@ void read_mesh(FILE *mesh_file,
             }
             numsides++;
         }
-        //printf("now check s3.\n");
         if (s3) {
             sides_x1[numsides] = V3x[i];
             sides_y1[numsides] = V3y[i];
@@ -293,37 +281,90 @@ void read_mesh(FILE *mesh_file,
     }
 
     *num_sides = numsides;
-    *num_elem  = n_elem;
 }
 
-void init_gpu(int num_elem, int num_sides, int n_p) {
+void init_gpu(int num_elem, int num_sides, int n_p,
+              float *V1x, float *V1y, 
+              float *V2x, float *V2y, 
+              float *V3x, float *V3y, 
+              float *sides_x1, float *sides_y1,
+              float *sides_x2, float *sides_y2,
+              float *elem_s1, float *elem_s2, float *elem_s3,
+              float *left_elem, float *right_elem) {
     checkCudaError("error before init.");
-    //cudaDeviceReset();
-    //cudaMalloc((void **) &d_something, n * sizeof(float));
-    printf("%i\n", num_elem * (n_p + 1));
+    cudaDeviceReset();
 
-    //cudaMalloc((void **) &d_c, 100 * sizeof(float));
+    // allocate allllllllllll the memory.
+    // TODO: this takes a really really long time.
+    cudaMalloc((void **) &d_c  , num_elem * (n_p + 1) * sizeof(float));
+    cudaMalloc((void **) &d_rhs, num_elem * (n_p + 1) * sizeof(float));
+
+    cudaMalloc((void **) &d_J, num_elem * sizeof(float));
+    cudaMalloc((void **) &d_s_len, num_sides * sizeof(float));
+
+    cudaMalloc((void **) &d_s_V1x, num_sides * sizeof(float));
+    cudaMalloc((void **) &d_s_V2x, num_sides * sizeof(float));
+    cudaMalloc((void **) &d_s_V1y, num_sides * sizeof(float));
+    cudaMalloc((void **) &d_s_V2y, num_sides * sizeof(float));
+
+    cudaMalloc((void **) &d_elem_s1, num_elem * sizeof(float));
+    cudaMalloc((void **) &d_elem_s2, num_elem * sizeof(float));
+    cudaMalloc((void **) &d_elem_s3, num_elem * sizeof(float));
+
+    cudaMalloc((void **) &d_V1x, num_elem * sizeof(float));
+    cudaMalloc((void **) &d_V1y, num_elem * sizeof(float));
+    cudaMalloc((void **) &d_V2x, num_elem * sizeof(float));
+    cudaMalloc((void **) &d_V2y, num_elem * sizeof(float));
+    cudaMalloc((void **) &d_V3x, num_elem * sizeof(float));
+    cudaMalloc((void **) &d_V3y, num_elem * sizeof(float));
+
+    cudaMalloc((void **) &d_Nx, num_sides * sizeof(float));
+    cudaMalloc((void **) &d_Ny, num_sides * sizeof(float));
+
+    cudaMalloc((void **) &d_right_idx_list, num_sides * sizeof(float));
+    cudaMalloc((void **) &d_left_idx_list , num_sides * sizeof(float));
+
+    // copy over data
+    cudaMemcpy(d_s_V1x, sides_x1, num_sides * sizeof(float), cudaMemcpyHostToDevice);
+    cudaMemcpy(d_s_V1y, sides_y1, num_sides * sizeof(float), cudaMemcpyHostToDevice);
+    cudaMemcpy(d_s_V2x, sides_x2, num_sides * sizeof(float), cudaMemcpyHostToDevice);
+    cudaMemcpy(d_s_V2y, sides_y2, num_sides * sizeof(float), cudaMemcpyHostToDevice);
+
+    cudaMemcpy(d_elem_s1, elem_s1, num_elem * sizeof(float), cudaMemcpyHostToDevice);
+    cudaMemcpy(d_elem_s2, elem_s2, num_elem * sizeof(float), cudaMemcpyHostToDevice);
+    cudaMemcpy(d_elem_s3, elem_s3, num_elem * sizeof(float), cudaMemcpyHostToDevice);
+
+    cudaMemcpy(d_V1x, V1x, num_elem * sizeof(float), cudaMemcpyHostToDevice);
+    cudaMemcpy(d_V1y, V1y, num_elem * sizeof(float), cudaMemcpyHostToDevice);
+    cudaMemcpy(d_V2x, V2x, num_elem * sizeof(float), cudaMemcpyHostToDevice);
+    cudaMemcpy(d_V2y, V2y, num_elem * sizeof(float), cudaMemcpyHostToDevice);
+    cudaMemcpy(d_V3x, V3x, num_elem * sizeof(float), cudaMemcpyHostToDevice);
+    cudaMemcpy(d_V3y, V3y, num_elem * sizeof(float), cudaMemcpyHostToDevice);
+
+    cudaMemcpy(d_right_idx_list, right_elem, num_sides * sizeof(float), cudaMemcpyHostToDevice);
+    cudaMemcpy(d_left_idx_list , left_elem , num_sides * sizeof(float), cudaMemcpyHostToDevice);
 }
 
 int main() {
     checkCudaError("error before start.");
     int num_elem, num_sides;
-    int n_p;
+    int i, n_p;
     float *V1x, *V1y, *V2x, *V2y, *V3x, *V3y;
 
-    float *sides_x1, *sides_x2, *sides_x3;
-    float *sides_y1, *sides_y2, *sides_y3;
+    float *sides_x1, *sides_x2;
+    float *sides_y1, *sides_y2;
 
     float *left_elem, *right_elem;
     float *elem_s1, *elem_s2, *elem_s3;
 
     n_p = 0;
 
-    printf("starting execution.\n");
     FILE *mesh_file;
+    mesh_file = fopen("supersimple.out", "r");
 
     // first line should be the number of elements
-    fgets(line, 100 ,mesh_file);
+    char line[100];
+    fgets(line, 100, mesh_file);
     sscanf(line, "%i", &num_elem);
 
     // allocate vertex points
@@ -338,60 +379,77 @@ int main() {
     elem_s2 = (float *) malloc(num_elem * sizeof(float));
     elem_s3 = (float *) malloc(num_elem * sizeof(float));
 
-    // these are too big; should be a way to figure out how many we actually need
+    // TODO: these are too big; should be a way to figure out how many we actually need
     sides_x1 = (float *) malloc(3*num_elem * sizeof(float));
     sides_x2 = (float *) malloc(3*num_elem * sizeof(float));
-    sides_x3 = (float *) malloc(3*num_elem * sizeof(float));
     sides_y1 = (float *) malloc(3*num_elem * sizeof(float));
     sides_y2 = (float *) malloc(3*num_elem * sizeof(float));
-    sides_y3 = (float *) malloc(3*num_elem * sizeof(float));
 
-    left_elem  = (float *) malloc(num_elem * sizeof(float));
-    right_elem = (float *) malloc(num_elem * sizeof(float));
+    left_elem  = (float *) malloc(3*num_elem * sizeof(float));
+    right_elem = (float *) malloc(3*num_elem * sizeof(float));
 
     for (i = 0; i < num_elem; i++) {
         left_elem[i] = -1;
     }
 
-    printf("allocated data inside of the mesh generator successfully.\n");
+    read_mesh(mesh_file, &num_sides,
+                         V1x, V1y, V2x, V2y, V3x, V3y,
+                         sides_x1, sides_y1, 
+                         sides_x2, sides_y2, 
+                         elem_s1, elem_s2, elem_s3,
+                         left_elem, right_elem);
 
-    mesh_file = fopen(filename, "rt");
-    read_mesh(mesh_file, &num_elem, &num_sides,
-                                 V1x, V1y, V2x, V2y, V3x, V3y,
-                                 sides_x1, sides_y1, 
-                                 sides_x2, sides_y2, 
-                                 sides_x3, sides_y3, 
-                                 elem_s1, elem_s2, elem_s3,
-                                 left_elem, right_elem);
     fclose(mesh_file);
+    init_gpu(num_elem, num_sides, n_p,
+             V1x, V1y, V2x, V2y, V3x, V3y,
+             sides_x1, sides_y1,
+             sides_x2, sides_y2, 
+             elem_s1, elem_s2, elem_s3,
+             left_elem, right_elem);
+    
+    preval_side_length<<<1, num_sides>>>(d_s_len, d_s_V1x, d_s_V1y, d_s_V2x, d_s_V2y); 
+    preval_jacobian<<<1, num_elem>>>(d_J, d_V1x, d_V1y, d_V2x, d_V2y, d_V3x, d_V3y); 
 
-    init_gpu(num_elem, num_sides, n_p);
+    float *side_len = (float *)malloc(num_sides * sizeof(float));
+    float *J = (float *)malloc(num_elem * sizeof(float));
 
-    int i;
-    for (i = 0; i < num_elem; i++) {
-        printf("%i \n", V2x[i]);
+    cudaMemcpy(side_len, d_s_len, num_sides * sizeof(float), cudaMemcpyDeviceToHost);
+    cudaMemcpy(J, d_J, num_elem * sizeof(float), cudaMemcpyDeviceToHost);
+
+    for (i = 0; i < num_sides; i++) {
+        printf("side %i = %f\n", i, side_len[i]);
     }
+
+    float sum = 0;
+    for (i = 0; i < num_elem; i++) {
+        printf("J %i = %f\n", i, J[i]);
+        sum += J[i];
+    }
+
+    printf("total area = %f \n", sum);
+
+    free(side_len);
+    free(J);
+
     // free up memory
-    //free(V1x);
-    //free(V1y);
-    //free(V2x);
-    //free(V2y);
-    //free(V3x);
-    //free(V3y);
+    free(V1x);
+    free(V1y);
+    free(V2x);
+    free(V2y);
+    free(V3x);
+    free(V3y);
 
-    //free(sides_x1);
-    //free(sides_y1);
-    //free(sides_x2);
-    //free(sides_y2);
-    //free(sides_x3);
-    //free(sides_y3);
+    free(elem_s1);
+    free(elem_s2);
+    free(elem_s3);
 
-    //free(elem_s1);
-    //free(elem_s2);
-    //free(elem_s3);
+    free(sides_x1);
+    free(sides_x2);
+    free(sides_y1);
+    free(sides_y2);
 
-    //free(left_elem);
-    //free(right_elem);
+    free(left_elem);
+    free(right_elem);
 
     return 0;
 }
