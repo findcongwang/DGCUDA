@@ -226,7 +226,6 @@ void read_mesh(FILE *mesh_file,
                 s1 = 0;
                 // OK, we've added this side to some element before; which one?
                 right_elem[j] = i;
-                printf("right_elem[%i] = %i\n", j, i);
                 break;
             }
         }
@@ -239,7 +238,6 @@ void read_mesh(FILE *mesh_file,
                 s2 = 0;
                 // OK, we've added this side to some element before; which one?
                 right_elem[j] = i;
-                printf("right_elem[%i] = %i\n", j, i);
                 break;
             }
         }
@@ -252,7 +250,6 @@ void read_mesh(FILE *mesh_file,
                 s3 = 0;
                 // OK, we've added this side to some element before; which one?
                 right_elem[j] = i;
-                printf("right_elem[%i] = %i\n", j, i);
                 break;
             }
         }
@@ -564,10 +561,11 @@ int main() {
     right_elem  = (int *) malloc(3*num_elem * sizeof(int));
 
     for (i = 0; i < 3*num_elem; i++) {
-        left_elem [i] = -1;
+        left_elem [i] = -1; // not necessary
         right_elem[i] = -1;
     }
 
+    // read in the mesh and make all the mappings
     read_mesh(mesh_file, &num_sides, num_elem,
                          V1x, V1y, V2x, V2y, V3x, V3y,
                          side_number,
@@ -576,7 +574,10 @@ int main() {
                          elem_s1, elem_s2, elem_s3,
                          left_elem, right_elem);
 
+    // close the file
     fclose(mesh_file);
+
+    // initialize the gpu
     init_gpu(num_elem, num_sides, n_p,
              V1x, V1y, V2x, V2y, V3x, V3y,
              side_number,
@@ -590,15 +591,15 @@ int main() {
     preval_jacobian<<<1, num_elem>>>(d_J, d_V1x, d_V1y, d_V2x, d_V2y, d_V3x, d_V3y); 
     preval_normals<<<1, num_sides>>>(d_Nx, d_Ny, d_s_V1x, d_s_V1y, d_s_V2x, d_s_V2y); 
 
-    float *Nx = (float *) malloc(num_sides * sizeof(float));
-    float *Ny = (float *) malloc(num_sides * sizeof(float)); 
+    //float *Nx = (float *) malloc(num_sides * sizeof(float));
+    //float *Ny = (float *) malloc(num_sides * sizeof(float)); 
 
-    cudaMemcpy(Nx, d_Nx, num_sides * sizeof(float), cudaMemcpyDeviceToHost);
-    cudaMemcpy(Ny, d_Ny, num_sides * sizeof(float), cudaMemcpyDeviceToHost);
+    //cudaMemcpy(Nx, d_Nx, num_sides * sizeof(float), cudaMemcpyDeviceToHost);
+    //cudaMemcpy(Ny, d_Ny, num_sides * sizeof(float), cudaMemcpyDeviceToHost);
 
-    for (i = 0; i < num_sides; i++) {
-        printf("normals = (%f, %f)\n", Nx[i], Ny[i]);
-    }
+    //for (i = 0; i < num_sides; i++) {
+        //printf("normals = (%f, %f)\n", Nx[i], Ny[i]);
+    //}
 
     // no longer need vertices stored on the GPU
     cudaFree(d_V1x);
@@ -612,26 +613,26 @@ int main() {
     cudaFree(d_s_V2x);
     cudaFree(d_s_V2y);
 
-    float *side_len = (float *)malloc(num_sides * sizeof(float));
-    float *J = (float *)malloc(num_elem * sizeof(float));
+    //float *side_len = (float *)malloc(num_sides * sizeof(float));
+    //float *J = (float *)malloc(num_elem * sizeof(float));
 
-    cudaMemcpy(side_len, d_s_len, num_sides * sizeof(float), cudaMemcpyDeviceToHost);
-    cudaMemcpy(J, d_J, num_elem * sizeof(float), cudaMemcpyDeviceToHost);
+    //cudaMemcpy(side_len, d_s_len, num_sides * sizeof(float), cudaMemcpyDeviceToHost);
+    //cudaMemcpy(J, d_J, num_elem * sizeof(float), cudaMemcpyDeviceToHost);
 
-    for (i = 0; i < num_sides; i++) {
-        printf("index = %i: (%i, %i)\n", side_number[i], left_elem[i], right_elem[i]);
-    }
+    //for (i = 0; i < num_sides; i++) {
+        //printf("index = %i: (%i, %i)\n", side_number[i], left_elem[i], right_elem[i]);
+    //}
 
-    float sum = 0;
-    for (i = 0; i < num_elem; i++) {
+    //float sum = 0;
+    //for (i = 0; i < num_elem; i++) {
         //printf("J %i = %f\n", i, J[i]);
-        sum += J[i];
-    }
+        //sum += J[i];
+    //}
 
-    printf("total area = %f \n", sum);
+    //printf("total area = %f \n", sum);
 
-    free(side_len);
-    free(J);
+    //free(side_len);
+    //free(J);
 
     float dt = 0.001;
     int t;
@@ -667,6 +668,7 @@ int main() {
     cudaMemcpy(d_oned_w, oned_w, 1 * sizeof(float), cudaMemcpyHostToDevice);
 
     checkCudaError("error before time integration.");
+
     // time integration
     for (t = 0; t < 1; t++) {
         printf("---------\n", c[i]);
