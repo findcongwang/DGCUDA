@@ -8,25 +8,30 @@
  * DG method.
  */
 
-void set_quadrature(int p, int *num_quad_oned, int *num_quad_twod,
+void set_quadrature(int p,
                     float *r1, float *r2, float *w,
-                    float *s1_r1, *s1_r2,
-                    float *s2_r1, *s2_r2,
-                    float *s3_r1, *s3_r2,
+                    float *s1_r1, float *s1_r2,
+                    float *s2_r1, float *s2_r2,
+                    float *s3_r1, float *s3_r2,
                     float *oned_r, float *oned_w) {
     switch (p) {
         case 0:
-            // set number of 1d and 2d quadrature points
-            *num_quad_oned= 1;
-            *num_quad_twod = 1;
-
-            // set 2d integration points
+            // set 2d integration points and weights
             r1[0] = 0.333333333333333;
             r2[0] = 0.333333333333333;
-            w[0]  = 1.0;
+            w [0] = 1.0;
 
-            // set 1d integration points
+            // set 1d integration points and weights
+            s1_r1[0] = 0.5;
+            s1_r2[0] = 0.0;
+            
+            s2_r1[0] = 0.25;
+            s2_r1[0] = 0.25;
 
+            s3_r1[0] = 0.0;
+            s3_r2[0] = 0.5;
+
+            w[0] = 1;
 
             break;
         case 2:
@@ -213,16 +218,6 @@ void read_mesh(FILE *mesh_file,
                 // link this element to that side
                 elem_s1[i] = numsides;
                 side_number[numsides] = 1;
-                // and that side to this element either by left or right sided
-                // if there's no left element, make this the left element otherwise, 
-                // make this a right element 
-
-                // if left element is not set, make this the left element
-                if (left_elem[numsides] != -1) {
-                    left_elem[numsides] = i; // something like this
-                } else if (right_elem[numsides] != -1) {
-                    left_elem[numsides] = i; // something like this
-                }
             }
             if ((sides_x1[j] == V2x[i] && sides_y1[j] == V2y[i]
              && sides_x2[j] == V3x[i] && sides_y2[j] == V3y[i]) 
@@ -255,7 +250,7 @@ void read_mesh(FILE *mesh_file,
             side_number[numsides] = 1;
 
             // if left element is not set, make this the left element
-            if (left_elem[numsides] != -1) {
+            if (left_elem[numsides] == -1) {
                 left_elem[numsides] = i;
             } else {
                 right_elem[numsides] = i;
@@ -273,7 +268,7 @@ void read_mesh(FILE *mesh_file,
             side_number[numsides] = 2;
 
             // if left element is not set, make this the left element
-            if (left_elem[numsides] != -1) {
+            if (left_elem[numsides] == -1) {
                 left_elem[numsides] = i;
             } else {
                 right_elem[numsides] = i;
@@ -291,7 +286,7 @@ void read_mesh(FILE *mesh_file,
             side_number[numsides] = 3;
 
             // if left element is not set, make this the left element
-            if (left_elem[numsides] != -1) {
+            if (left_elem[numsides] == -1) {
                 left_elem[numsides] = i;
             } else {
                 right_elem[numsides] = i;
@@ -431,6 +426,12 @@ void init_gpu(int num_elem, int num_sides, int n_p,
     cudaMalloc((void **) &d_c  , num_elem * (n_p + 1) * sizeof(float));
     cudaMalloc((void **) &d_rhs, num_elem * (n_p + 1) * sizeof(float));
 
+    cudaMalloc((void **) &d_kstar, num_elem * (n_p + 1) * sizeof(float));
+    cudaMalloc((void **) &d_k1, num_elem * (n_p + 1) * sizeof(float));
+    cudaMalloc((void **) &d_k2, num_elem * (n_p + 1) * sizeof(float));
+    cudaMalloc((void **) &d_k3, num_elem * (n_p + 1) * sizeof(float));
+    cudaMalloc((void **) &d_k4, num_elem * (n_p + 1) * sizeof(float));
+
     cudaMalloc((void **) &d_r1, (n_p + 1) * sizeof(float));
     cudaMalloc((void **) &d_r2, (n_p + 1) * sizeof(float));
     cudaMalloc((void **) &d_w , (n_p + 1) * sizeof(float));
@@ -543,7 +544,7 @@ int main() {
     left_elem   = (float *) malloc(3*num_elem * sizeof(float));
     right_elem  = (float *) malloc(3*num_elem * sizeof(float));
 
-    for (i = 0; i < num_elem; i++) {
+    for (i = 0; i < 3*num_elem; i++) {
         left_elem[i] = -1;
     }
 
@@ -587,7 +588,7 @@ int main() {
     cudaMemcpy(J, d_J, num_elem * sizeof(float), cudaMemcpyDeviceToHost);
 
     for (i = 0; i < num_sides; i++) {
-        printf("side %i = %f\n", i, side_len[i]);
+        printf("left_idx %i = %f\n", i, left_elem[i]);
     }
 
     float sum = 0;
@@ -614,14 +615,37 @@ int main() {
     float *r1 = (float *) malloc(1 * sizeof(float));
     float *r2 = (float *) malloc(1 * sizeof(float));
     float *w =  (float *) malloc(1 * sizeof(float));
+    float *s1_r1 = (float *) malloc(1 * sizeof(float));
+    float *s1_r2 = (float *) malloc(1 * sizeof(float));
+    float *s2_r1 = (float *) malloc(1 * sizeof(float));
+    float *s2_r2 = (float *) malloc(1 * sizeof(float));
+    float *s3_r1 = (float *) malloc(1 * sizeof(float));
+    float *s3_r2 = (float *) malloc(1 * sizeof(float));
 
-    set_quadrature(n_p, r1, r2, w);
+    float *oned_r = (float *) malloc(1 * sizeof(float));
+    float *oned_w = (float *) malloc(1 * sizeof(float));
+
+    set_quadrature(n_p, r1, r2, w, 
+                   s1_r1, s1_r2, 
+                   s2_r1, s2_r2, 
+                   s3_r1, s3_r2, 
+                   oned_r, oned_w);
 
     checkCudaError("error before quadrature copy.");
 
     cudaMemcpy(d_r1, r1, 1 * sizeof(float), cudaMemcpyHostToDevice);
     cudaMemcpy(d_r2, r2, 1 * sizeof(float), cudaMemcpyHostToDevice);
     cudaMemcpy(d_w , w , 1 * sizeof(float), cudaMemcpyHostToDevice);
+
+    cudaMemcpy(d_s1_r1, s1_r1, 1 * sizeof(float), cudaMemcpyHostToDevice);
+    cudaMemcpy(d_s1_r2, s1_r2, 1 * sizeof(float), cudaMemcpyHostToDevice);
+    cudaMemcpy(d_s2_r1, s2_r1, 1 * sizeof(float), cudaMemcpyHostToDevice);
+    cudaMemcpy(d_s2_r2, s2_r2, 1 * sizeof(float), cudaMemcpyHostToDevice);
+    cudaMemcpy(d_s3_r1, s3_r1, 1 * sizeof(float), cudaMemcpyHostToDevice);
+    cudaMemcpy(d_s3_r2, s3_r2, 1 * sizeof(float), cudaMemcpyHostToDevice);
+
+    cudaMemcpy(d_oned_r, oned_r, 1 * sizeof(float), cudaMemcpyHostToDevice);
+    cudaMemcpy(d_oned_w, oned_w, 1 * sizeof(float), cudaMemcpyHostToDevice);
 
     checkCudaError("error before time integration.");
     // time integration

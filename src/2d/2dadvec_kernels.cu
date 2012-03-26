@@ -192,24 +192,6 @@ __device__ float riemann(float u_left, float u_right) {
  *
  ***********************/
 
-/* side number
- *
- * precomputes what side number to evaluate the boundary integral over for this side.
- * THREADS: n_sides
- */
-__global__ void preval_side_number(float *side_number,
-                                   float *s_V1x, float *s_V1y,
-                                   float *s_V2x, float *s_V2y) {
-    int idx = blockDim.x * blockIdx.x + threadIdx.x;
-
-    x1 = s_V1x[idx];
-    y1 = s_V1y[idx];
-    x2 = s_V2x[idx];
-    y2 = s_V2y[idx];
-
-    // calculate the mapping
-    r = -x1 
-}
 /* side length computer
  *
  * precomputes the length of each side.
