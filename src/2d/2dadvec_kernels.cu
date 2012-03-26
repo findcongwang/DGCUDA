@@ -149,16 +149,12 @@ __device__ float quad(float *c, float *r1, float *r2, float *w, float J, int idx
     float sum, u;
     register float register_c[10];
 
-    for (i = 0; i < N; i++) {
-        register_c[i] = c[i*N + idx];
-    }
-
     sum = 0.0;
     for (i = 0; i < N; i++) {
         // Evaluate u at the integration point.
         u = 0;
         for (j = 0; j < N; j++) {
-            u += register_c[j] * basis(r1[i], r2[i], j);
+            u += c[j] * basis(r1[i], r2[i], j);
         }
         // Add to the sum
         sum += w[i] * (  flux_x(u) * grad_basis_x(r1[i], r2[i], k) 
@@ -166,7 +162,7 @@ __device__ float quad(float *c, float *r1, float *r2, float *w, float J, int idx
     }
 
     // Multiply in the Jacobian
-    return J * sum;
+    return sum;
 }
 
 /* boundary elements
@@ -273,12 +269,12 @@ __global__ void eval_riemann(float *c, float *rhs,
                         float *oned_r, float *oned_w,
                         int *left_idx_list, int *right_idx_list,
                         int *side_number, 
-                        float *Nx, float *Ny, int n_p, int num_sides) {
+                        float *Nx, float *Ny, int n_p, int num_sides, int num_elem) {
     int idx = blockDim.x * blockIdx.x + threadIdx.x;
 
     if (idx < num_sides) {
         int left_idx, right_idx, side, i, j;
-        float c_left[10], c_right[10], u[10];
+        float c_left[10], c_right[10];
         float nx, ny, s;
         float u_left, u_right;
         float sum;
@@ -293,10 +289,18 @@ __global__ void eval_riemann(float *c, float *rhs,
 
         // Grab the coefficients for the left & right elements
         for (i = 0; i < (n_p + 1); i++) {
-            c_left[i]  = u[i*(n_p + 1) + left_idx];
-            c_right[i] = u[i*(n_p + 1) + right_idx];
+            c_left[i]  = c[i*num_elem + left_idx];
+            c_right[i] = c[i*num_elem + right_idx];
         }
-         
+
+        // if this is a boundary side
+        if (right_idx == -1) {
+            for (i = 0; i < (n_p + 1); i++) {
+                c_left[i]  = c[i*num_elem + left_idx];
+                c_right[i] = 0;
+            }
+        }
+
         // Need to find out what side we've got for evaluation (right, left, bottom)
         side = side_number[idx];
          
@@ -317,11 +321,11 @@ __global__ void eval_riemann(float *c, float *rhs,
                     for (j = 0; j < (n_p + 1); j++) {
                         // solve the Riemann problem at this integration point
                         s = riemann(u_left, u_right);
-                    sum += (nx * flux_x(s) + ny * flux_y(s) * oned_w[j]) * (oned_basis(oned_r[j], i));
-                }
+                        sum += (nx * flux_x(s) + ny * flux_y(s)) * oned_w[j] * (oned_basis(oned_r[j], i));
+                    }
                     // add each side's contribution to the rhs vector
-                    rhs[i*(n_p + 1) + left_idx]  += sum;
-                    rhs[i*(n_p + 1) + right_idx] += sum;
+                    rhs[i*num_elem + left_idx]  += sum;
+                    rhs[i*num_elem + right_idx] += sum;
                 }
                 break;
             case 2:
@@ -337,11 +341,11 @@ __global__ void eval_riemann(float *c, float *rhs,
                     for (j = 0; j < (n_p + 1); j++) {
                         // solve the Riemann problem at this integration point
                         s = riemann(u_left, u_right);
-                        sum += (nx * flux_x(s) + ny * flux_y(s) * oned_w[j]) * (oned_basis(oned_r[j], i));
+                        sum += (nx * flux_x(s) + ny * flux_y(s)) * oned_w[j] * (oned_basis(oned_r[j], i));
                     }
                     // add each side's contribution to the rhs vector
-                    rhs[i*(n_p + 1) + left_idx]  += sum;
-                    rhs[i*(n_p + 1) + right_idx] += sum;
+                    rhs[i*num_elem + left_idx]  += sum;
+                    rhs[i*num_elem + right_idx] += sum;
                 }
                 break;
             case 3:
@@ -357,11 +361,11 @@ __global__ void eval_riemann(float *c, float *rhs,
                     for (j = 0; j < (n_p + 1); j++) {
                         // solve the Riemann problem at this integration point
                         s = riemann(u_left, u_right);
-                        sum += (nx * flux_x(s) + ny * flux_y(s) * oned_w[j]) * (oned_basis(oned_r[j], i));
+                        sum += (nx * flux_x(s) + ny * flux_y(s)) * oned_w[j] * (oned_basis(oned_r[j], i));
                     }
                     // add each side's contribution to the rhs vector
-                    rhs[i*(n_p + 1) + left_idx]  += sum;
-                    rhs[i*(n_p + 1) + right_idx] += sum;
+                    rhs[i*num_elem + left_idx]  += sum;
+                    rhs[i*num_elem + right_idx] += sum;
                 }
                 break;
          }
@@ -384,7 +388,7 @@ __global__ void eval_riemann(float *c, float *rhs,
 
         // Get the coefficients for this element
         for (i = 0; i < (n_p + 1); i++) {
-            register_c[i] = c[i*(n_p + 1) + idx];
+            register_c[i] = c[i*num_elem + idx];
         }
          
         // Grab the Jacobian
@@ -395,7 +399,8 @@ __global__ void eval_riemann(float *c, float *rhs,
             quad_u = quad(register_c, r1, r2, w, register_J, idx, i, (n_p + 1));
 
             // add the volume contribution result to the rhs
-            rhs[i*(n_p + 1) + idx] += 1./register_J*(-quad_u);
+            rhs[i*num_elem + idx] += -quad_u;
+            rhs[i*num_elem + idx] /= register_J;
         }
     }
 }
@@ -404,11 +409,13 @@ __global__ void eval_riemann(float *c, float *rhs,
  *
  * stores the computed rhs vector into c and then resets it 0.
  */
-__global__ void eval_rhs(float *c, float *rhs) {
+__global__ void eval_rhs(float *c, float *rhs, float dt, int num_rhs) {
     int idx = blockDim.x * blockIdx.x + threadIdx.x;
 
-    c[idx]   = rhs[idx];
-    rhs[idx] = 0;
+    if (idx < num_rhs) {
+        c[idx]   = dt * rhs[idx];
+        rhs[idx] = 0;
+    }
 }
 
 /***********************
