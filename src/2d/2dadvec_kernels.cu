@@ -245,9 +245,11 @@ __global__ void preval_normals(float *Nx, float *Ny,
    y = s_V1y[idx] - s_V2y[idx];
 
    // normalize and store
+   // TODO: i think this is right but i'm too lazy to verify -
+   //       more interested in making it point the correct way.
    length = sqrtf(powf(x, 2) + powf(y, 2));
-   Nx[idx] = x / length;
-   Ny[idx] = y / length;
+   Nx[idx] = y / length;
+   Ny[idx] = x / length;
 }
 
 /***********************
@@ -255,7 +257,6 @@ __global__ void preval_normals(float *Nx, float *Ny,
  * MAIN FUNCTIONS
  *
  ***********************/
-
 
 /* flux evaluation
  *

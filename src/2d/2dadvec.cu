@@ -324,15 +324,12 @@ void time_integrate(float *c, float dt, int n_p, int num_elem, int num_sides) {
     eval_quad<<<n_blocks_quad, n_threads>>>
                     (d_c, d_rhs, d_r1, d_r2, d_w, d_J, n_p, num_elem);
     cudaThreadSynchronize();
-    checkCudaError("error after stage 1: eval_quad");
 
     eval_rhs<<<n_blocks_rhs, n_threads>>>(d_k1, d_rhs, dt, num_rhs);
     cudaThreadSynchronize();
-    checkCudaError("error after stage 1: eval_rhs");
 
     rk4_tempstorage<<<n_blocks_rhs, n_threads>>>(d_c, d_kstar, d_k1, 0.5, n_p, num_elem);
     cudaThreadSynchronize();
-    checkCudaError("error after stage 1: rk4_temp");
 
     checkCudaError("error after stage 1.");
 
