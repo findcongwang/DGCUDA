@@ -236,18 +236,63 @@ __global__ void preval_jacobian(float *J,
  */
 __global__ void preval_normals(float *Nx, float *Ny, 
                           float *s_V1x, float *s_V1y, 
-                          float *s_V2x, float *s_V2y) {
+                          float *s_V2x, float *s_V2y,
+                          float *V1x, float *V1y, 
+                          float *V2x, float *V2y, 
+                          float *V3x, float *V3y,
+                          int *left_elem) {
    int idx = blockDim.x * blockIdx.x + threadIdx.x;
    float x, y, length;
+   float v1x, v1y, v2x, v2y, v3x, v3y;
+   float s_v1x, s_v1y, s_v2x, s_v2y;
+   float dot;
+   int left_idx;
+
+   // read in global data
+   left_idx = left_elem[idx];
+   v1x = V1x[left_idx];
+   v1y = V1y[left_idx];
+   v2x = V2x[left_idx];
+   v2y = V2y[left_idx];
+   v3x = V3x[left_idx];
+   v3y = V3y[left_idx];
+   sv1x = s_V1x[idx];
+   sv1y = s_V1y[idx];
+   sv2x = s_V2x[idx];
+   sv2y = s_V2y[idx];
 
    // lengths of the vector components
-   x = s_V1x[idx] - s_V2x[idx];
-   y = s_V1y[idx] - s_V2y[idx];
+   x = sv1x - sv2x;
+   y = sv1y - sv2y;
 
-   // normalize and store
-   // TODO: i think this is right but i'm too lazy to verify -
-   //       more interested in making it point the correct way.
+   // normalize
    length = sqrtf(powf(x, 2) + powf(y, 2));
+
+   // coordinates from the left element
+   if  (v1x == sv1x && v1y == sv1y && v2x == sv2x && v2y == sv2y) ||
+       (v1x == sv2x && v1y == sv2y && v2x == sv1x && v2y == sv1y) {
+       left_x = V3x[left_idx];
+       left_y = V3y[left_idx];
+   }
+   else if  (v2x == sv1x && v2y == sv1y && v3x == sv2x && v3y == sv2y) ||
+       (v2x == sv2x && v2y == sv2y && v3x == sv1x && v3y == sv1y) {
+       left_x = V1x[left_idx];
+       left_y = V1y[left_idx];
+   }
+   // could just be else
+   else if  (v1x == sv1x && v1y == sv1y && v3x == sv2x && v3y == sv2y) ||
+       (v1x == sv2x && v1y == sv2y && v3x == sv1x && v3y == sv1y) {
+       left_x = V2x[left_idx];
+       left_y = V2y[left_idx];
+   }
+
+   // find the dot product
+   dot = x*left_x + y*left_y;
+
+   // correct the direction
+   length = (dot < 0) ? -length : length;
+
+   // store the result
    Nx[idx] = y / length;
    Ny[idx] = x / length;
 }
@@ -269,26 +314,27 @@ __global__ void eval_riemann(float *c, float *rhs,
                         float *s3_r1, float *s3_r2,
                         float *oned_r, float *oned_w,
                         int *left_idx_list, int *right_idx_list,
-                        int *side_number, 
+                        int *left_side_number, int *right_side_number, 
                         float *Nx, float *Ny, int n_p, int num_sides, int num_elem) {
     int idx = blockDim.x * blockIdx.x + threadIdx.x;
 
     if (idx < num_sides) {
-        int left_idx, right_idx, side, i, j;
+        int left_idx, right_idx, right_side, left_side, i, j;
         float c_left[10], c_right[10];
+        float left_r1[10], right_r1[10];
         float nx, ny, s;
         float u_left, u_right;
         float sum;
 
-        // Find the left and right elements
+        // find the left and right elements
         left_idx  = left_idx_list[idx];
         right_idx = right_idx_list[idx];
 
-        // Get the normal vector for this side
+        // get the normal vector for this side
         nx = Nx[idx];
         ny = Ny[idx];
 
-        // Grab the coefficients for the left & right elements
+        // grab the coefficients for the left & right elements
         for (i = 0; i < (n_p + 1); i++) {
             c_left[i]  = c[i*num_elem + left_idx];
             c_right[i] = c[i*num_elem + right_idx];
@@ -302,74 +348,77 @@ __global__ void eval_riemann(float *c, float *rhs,
             }
         }
 
-        // Need to find out what side we've got for evaluation (right, left, bottom)
-        side = side_number[idx];
+        // need to find out what side we've got for evaluation (right, left, bottom)
+        left_side  = left_side_number[idx];
+        right_side = left_side_number[idx];
+
+        // get the integration points for the left element's side
+        switch (left_side) {
+            case 1: 
+                for (i = 0; i < (n_p + 1); i++) {
+                    left_r1[i] = s1_r1[i];
+                    left_r2[i] = s1_r2[i];
+                }
+                break;
+            case 2: 
+                for (i = 0; i < (n_p + 1); i++) {
+                    left_r1[i] = s2_r1[i];
+                    left_r2[i] = s2_r2[i];
+                }
+                break;
+            case 3: 
+                for (i = 0; i < (n_p + 1); i++) {
+                    left_r1[i] = s3_r1[i];
+                    left_r2[i] = s3_r2[i];
+                }
+                break;
+        }
+
+        // get the integration points for the right element's side
+        switch (right_side) {
+            case 1: 
+                for (i = 0; i < (n_p + 1); i++) {
+                    right_r1[i] = s1_r1[i];
+                    right_r2[i] = s1_r2[i];
+                }
+                break;
+            case 2: 
+                for (i = 0; i < (n_p + 1); i++) {
+                    right_r1[i] = s2_r1[i];
+                    right_r2[i] = s2_r2[i];
+                }
+                break;
+            case 3: 
+                for (i = 0; i < (n_p + 1); i++) {
+                    right_r1[i] = s3_r1[i];
+                    right_r2[i] = s3_r2[i];
+                }
+                break;
+        }
          
-        // Evaluate the polynomial over that side for both elements
-        // TODO: Order the basis function evaluations (and coefficients) 
-        //       so that we can grab their values along the edges using some scheme
-        switch (side) {
-            case 1:
-                for (i = 0; i < (n_p + 1); i++) {
-                    // evaluate u at the integration points
-                    u_left  = 0;
-                    u_right = 0;
-                    for (j = 0; j < (n_p + 1); j++) {
-                        u_left  += c_left[i]  * basis(s1_r1[i], s1_r2[i], j) * oned_w[i];
-                        u_right += c_right[i] * basis(s1_r1[i], s1_r2[i], j) * oned_w[i];
-                    }
-                    sum = 0;
-                    for (j = 0; j < (n_p + 1); j++) {
-                        // solve the Riemann problem at this integration point
-                        s = riemann(u_left, u_right);
-                        sum += (nx * flux_x(s) + ny * flux_y(s)) * oned_w[j] * (oned_basis(oned_r[j], i));
-                    }
-                    // add each side's contribution to the rhs vector
-                    rhs[i*num_elem + left_idx]  += sum;
-                    rhs[i*num_elem + right_idx] += sum;
-                }
-                break;
-            case 2:
-                 for (i = 0; i < (n_p + 1); i++) {
-                    // evaluate u at the integration points
-                    u_left  = 0;
-                    u_right = 0;
-                    for (j = 0; j < (n_p + 1); j++) {
-                        u_left  += c_left[i]  * basis(s2_r1[i], s2_r2[i], j);
-                        u_right += c_right[i] * basis(s2_r1[i], s2_r2[i], j);
-                    }
-                    sum = 0;
-                    for (j = 0; j < (n_p + 1); j++) {
-                        // solve the Riemann problem at this integration point
-                        s = riemann(u_left, u_right);
-                        sum += (nx * flux_x(s) + ny * flux_y(s)) * oned_w[j] * (oned_basis(oned_r[j], i));
-                    }
-                    // add each side's contribution to the rhs vector
-                    rhs[i*num_elem + left_idx]  += sum;
-                    rhs[i*num_elem + right_idx] += sum;
-                }
-                break;
-            case 3:
-                for (i = 0; i < (n_p + 1); i++) {
-                    // evaluate u at the integration points
-                    u_left  = 0;
-                    u_right = 0;
-                    for (j = 0; j < (n_p + 1); j++) {
-                        u_left  += c_left[i]  * basis(s3_r1[i], s3_r2[i], j);
-                        u_right += c_right[i] * basis(s3_r1[i], s3_r2[i], j);
-                    }
-                    sum = 0;
-                    for (j = 0; j < (n_p + 1); j++) {
-                        // solve the Riemann problem at this integration point
-                        s = riemann(u_left, u_right);
-                        sum += (nx * flux_x(s) + ny * flux_y(s)) * oned_w[j] * (oned_basis(oned_r[j], i));
-                    }
-                    // add each side's contribution to the rhs vector
-                    rhs[i*num_elem + left_idx]  += sum;
-                    rhs[i*num_elem + right_idx] += sum;
-                }
-                break;
-         }
+        // evaluate the polynomial over that side for both elements and add the result to rhs
+        for (i = 0; i < (n_p + 1); i++) {
+            u_left  = 0;
+            u_right = 0;
+            sum = 0;
+
+            // compute u evaluated over the integration point
+            for (j = 0; j < (n_p + 1); j++) {
+                u_left  += c_left[i]  * basis(left_r1[i], left_r2[i], j) * oned_w[i];
+                u_right += c_right[i] * basis(right_r1[i], right_r2[i], j) * oned_w[i];
+            }
+
+            // solve the Riemann problem at this integration point
+            for (j = 0; j < (n_p + 1); j++) {
+                s = riemann(u_left, u_right);
+                sum += (nx * flux_x(s) + ny * flux_y(s)) * oned_w[j] * (oned_basis(oned_r[j], i));
+            }
+            
+            // add each side's contribution to the rhs vector
+            rhs[i*num_elem + left_idx]  += sum;
+            // normal points from left to right
+            rhs[i*num_elem + right_idx] -= sum;
+        }
     }
 }
 

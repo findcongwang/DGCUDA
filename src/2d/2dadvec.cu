@@ -226,6 +226,8 @@ void read_mesh(FILE *mesh_file,
                 s1 = 0;
                 // OK, we've added this side to some element before; which one?
                 right_elem[j] = i;
+                // link the added side to this element
+                right_side_number[numsides] = 1;
                 break;
             }
         }
@@ -238,6 +240,8 @@ void read_mesh(FILE *mesh_file,
                 s2 = 0;
                 // OK, we've added this side to some element before; which one?
                 right_elem[j] = i;
+                // link the added side to this element
+                right_side_number[numsides] = 2;
                 break;
             }
         }
@@ -250,6 +254,8 @@ void read_mesh(FILE *mesh_file,
                 s3 = 0;
                 // OK, we've added this side to some element before; which one?
                 right_elem[j] = i;
+                // link the added side to this element
+                right_side_number[numsides] = 3;
                 break;
             }
         }
@@ -261,7 +267,7 @@ void read_mesh(FILE *mesh_file,
             sides_y2[numsides] = V2y[i];
             
             // link the added side to this element
-            side_number[numsides] = 1;
+            left_side_number[numsides] = 1;
 
             // make this the left element
             left_elem[numsides] = i;
@@ -274,7 +280,7 @@ void read_mesh(FILE *mesh_file,
             sides_y2[numsides] = V3y[i];
 
             // link the added side to this element
-            side_number[numsides] = 2;
+            left_side_number[numsides] = 2;
 
             // make this the left element
             left_elem[numsides] = i;
@@ -287,7 +293,7 @@ void read_mesh(FILE *mesh_file,
             sides_y2[numsides] = V1y[i];
 
             // link the added side to this element
-            side_number[numsides] = 3;
+            left_side_number[numsides] = 3;
 
             // make this the left element
             left_elem[numsides] = i;
