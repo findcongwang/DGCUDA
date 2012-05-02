@@ -42,7 +42,7 @@ int *d_left_side_number;
 int *d_right_side_number;
 
 float *d_J;     // jacobian determinant 
-float *d_s_len; // length of sides
+float *d_s_length; // length of sides
 
 // the num_elem values of the x and y coordinates for the two vertices defining a side
 // TODO: can i delete these after the lengths are precomputed?
@@ -352,7 +352,8 @@ __global__ void preval_normals(float *Nx, float *Ny,
  * evaluate all the riemann problems for each element.
  * THREADS: num_sides
  */
-__global__ void eval_riemann(float *c, float *rhs,
+__global__ void eval_riemann(float *c, float *rhs, 
+                        float *J, float *s_length,
                         float *s1_r1, float *s1_r2,
                         float *s2_r1, float *s2_r2,
                         float *s3_r1, float *s3_r2,
@@ -369,11 +370,14 @@ __global__ void eval_riemann(float *c, float *rhs,
         float left_r2[10], right_r2[10];
         float nx, ny, s;
         float u_left, u_right;
-        float sum;
+        float len, sum;
 
         // find the left and right elements
         left_idx  = left_idx_list[idx];
         right_idx = right_idx_list[idx];
+
+        // get the length of the side
+        len = s_length[idx];
 
         // get the normal vector for this side
         nx = Nx[idx];
@@ -389,7 +393,7 @@ __global__ void eval_riemann(float *c, float *rhs,
         if (right_idx == -1) {
             for (i = 0; i < (n_p + 1); i++) {
                 c_left[i]  = c[i*num_elem + left_idx];
-                c_right[i] = 0;
+                c_right[i] = c_left[i];
             }
         }
 
@@ -462,13 +466,13 @@ __global__ void eval_riemann(float *c, float *rhs,
             // solve the Riemann problem at this integration point
             for (j = 0; j < (n_p + 1); j++) {
                 s = riemann(u_left, u_right);
-                sum += (nx * flux_x(s) + ny * flux_y(s)) * oned_w[j] * (oned_basis(oned_r[j], i));
+                sum += (nx * flux_x(s) + ny * flux_y(s)) * oned_w[j] * basis(left_r1[i], left_r2[i], j);
             }
             
             // add each side's contribution to the rhs vector
-            rhs[i*num_elem + left_idx]  += sum;
+            rhs[i*num_elem + left_idx]  += 1. / len * sum;
             // normal points from left to right
-            rhs[i*num_elem + right_idx] -= sum;
+            rhs[i*num_elem + right_idx] -= 1. / len * sum;
         }
     }
 }

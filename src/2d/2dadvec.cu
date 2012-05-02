@@ -317,7 +317,9 @@ void time_integrate(float *c, float dt, int n_p, int num_elem, int num_sides) {
 
     // stage 1
     eval_riemann<<<n_blocks_riemann, n_threads>>>
-                    (d_c, d_rhs, d_s1_r1, d_s1_r2,
+                    (d_c, d_rhs, d_J, 
+                     d_s_length,
+                     d_s1_r1, d_s1_r2,
                      d_s2_r1, d_s2_r2,
                      d_s3_r1, d_s3_r2,
                      d_oned_r, d_oned_w, 
@@ -325,6 +327,12 @@ void time_integrate(float *c, float dt, int n_p, int num_elem, int num_sides) {
                      d_left_side_number, d_right_side_number,
                      d_Nx, d_Ny, n_p, num_sides, num_elem);
     cudaThreadSynchronize();
+    float *rhs = (float *) malloc(num_elem * (n_p + 1) * sizeof(float));
+    cudaMemcpy(rhs, d_rhs, num_elem * (n_p + 1) * sizeof(float), cudaMemcpyDeviceToHost);
+    for (int i = 0; i < num_elem * (n_p + 1); i++) {
+        printf(" > %f \n", rhs[i]);
+    }
+
     checkCudaError("error after stage 1: eval_riemann");
 
     eval_quad<<<n_blocks_quad, n_threads>>>
@@ -350,7 +358,9 @@ void time_integrate(float *c, float dt, int n_p, int num_elem, int num_sides) {
 
     // stage 2
     eval_riemann<<<n_blocks_riemann, n_threads>>>
-                    (d_kstar, d_rhs, d_s1_r1, d_s1_r2,
+                    (d_kstar, d_rhs, d_J, 
+                     d_s_length,
+                     d_s1_r1, d_s1_r2,
                      d_s2_r1, d_s2_r2,
                      d_s3_r1, d_s3_r2,
                      d_oned_r, d_oned_w, 
@@ -373,7 +383,9 @@ void time_integrate(float *c, float dt, int n_p, int num_elem, int num_sides) {
 
     // stage 3
     eval_riemann<<<n_blocks_riemann, n_threads>>>
-                    (d_kstar, d_rhs, d_s1_r1, d_s1_r2,
+                    (d_kstar, d_rhs, d_J, 
+                     d_s_length,
+                     d_s1_r1, d_s1_r2,
                      d_s2_r1, d_s2_r2,
                      d_s3_r1, d_s3_r2,
                      d_oned_r, d_oned_w, 
@@ -396,7 +408,9 @@ void time_integrate(float *c, float dt, int n_p, int num_elem, int num_sides) {
 
     // stage 4
     eval_riemann<<<n_blocks_riemann, n_threads>>>
-                    (d_kstar, d_rhs, d_s1_r1, d_s1_r2,
+                    (d_kstar, d_rhs, d_J, 
+                     d_s_length,
+                     d_s1_r1, d_s1_r2,
                      d_s2_r1, d_s2_r2,
                      d_s3_r1, d_s3_r2,
                      d_oned_r, d_oned_w, 
@@ -454,7 +468,7 @@ void init_gpu(int num_elem, int num_sides, int n_p,
     cudaMalloc((void **) &d_oned_w, (n_p + 1) * sizeof(float));
 
     cudaMalloc((void **) &d_J, num_elem * sizeof(float));
-    cudaMalloc((void **) &d_s_len, num_sides * sizeof(float));
+    cudaMalloc((void **) &d_s_length, num_sides * sizeof(float));
 
     cudaMalloc((void **) &d_s_V1x, num_sides * sizeof(float));
     cudaMalloc((void **) &d_s_V2x, num_sides * sizeof(float));
@@ -602,9 +616,13 @@ int main() {
              sides_x2, sides_y2, 
              elem_s1, elem_s2, elem_s3,
              left_elem, right_elem);
+
+    for (i = 0; i < num_elem; i++) {
+        printf(" ? %i \n", right_elem[i]);
+    }
     
     // pre computations
-    preval_side_length<<<1, num_sides>>>(d_s_len, d_s_V1x, d_s_V1y, d_s_V2x, d_s_V2y); 
+    preval_side_length<<<1, num_sides>>>(d_s_length, d_s_V1x, d_s_V1y, d_s_V2x, d_s_V2y); 
     preval_jacobian<<<1, num_elem>>>(d_J, d_V1x, d_V1y, d_V2x, d_V2y, d_V3x, d_V3y); 
     preval_normals<<<1, num_sides>>>(d_Nx, d_Ny, d_s_V1x, d_s_V1y, d_s_V2x, d_s_V2y,
                                      d_V1x, d_V1y, d_V2x, d_V2y, d_V3x, d_V3y, 
@@ -694,13 +712,18 @@ int main() {
 
     checkCudaError("error before time integration.");
 
+    printf("---------\n", c[i]);
+    for (i = 0; i < num_elem; i++) {
+        printf("%f \n", c[i]);
+    }
+
     // time integration
     for (t = 0; t < 1; t++) {
+        time_integrate(c, dt, n_p, num_elem, num_sides);
         printf("---------\n", c[i]);
         for (i = 0; i < num_elem; i++) {
             printf("%f \n", c[i]);
         }
-        time_integrate(c, dt, n_p, num_elem, num_sides);
     }
 
     // free up memory
