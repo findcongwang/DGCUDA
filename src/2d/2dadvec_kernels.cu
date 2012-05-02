@@ -38,7 +38,8 @@ float *d_s3_r1;
 float *d_s3_r2;
 
 // tells which side (1, 2, or 3) to evaluate this boundary integral over
-int *d_side_number;
+int *d_left_side_number;
+int *d_right_side_number;
 
 float *d_J;     // jacobian determinant 
 float *d_s_len; // length of sides
@@ -71,9 +72,8 @@ float *d_Nx;
 float *d_Ny;
 
 // index lists for sides
-int *d_right_idx_list; // index of right element for side idx
-int *d_left_idx_list;  // index of left  element for side idx
-
+int *d_left_elem;  // index of left  element for side idx
+int *d_right_elem; // index of right element for side idx
 
 /***********************
  *
@@ -244,8 +244,8 @@ __global__ void preval_normals(float *Nx, float *Ny,
    int idx = blockDim.x * blockIdx.x + threadIdx.x;
    float x, y, length;
    float v1x, v1y, v2x, v2y, v3x, v3y;
-   float s_v1x, s_v1y, s_v2x, s_v2y;
-   float dot;
+   float sv1x, sv1y, sv2x, sv2y;
+   float dot, left_x, left_y;
    int left_idx;
 
    // read in global data
@@ -269,19 +269,19 @@ __global__ void preval_normals(float *Nx, float *Ny,
    length = sqrtf(powf(x, 2) + powf(y, 2));
 
    // coordinates from the left element
-   if  (v1x == sv1x && v1y == sv1y && v2x == sv2x && v2y == sv2y) ||
-       (v1x == sv2x && v1y == sv2y && v2x == sv1x && v2y == sv1y) {
+   if  ((v1x == sv1x && v1y == sv1y && v2x == sv2x && v2y == sv2y) ||
+       (v1x == sv2x && v1y == sv2y && v2x == sv1x && v2y == sv1y)) {
        left_x = V3x[left_idx];
        left_y = V3y[left_idx];
    }
-   else if  (v2x == sv1x && v2y == sv1y && v3x == sv2x && v3y == sv2y) ||
-       (v2x == sv2x && v2y == sv2y && v3x == sv1x && v3y == sv1y) {
+   else if  ((v2x == sv1x && v2y == sv1y && v3x == sv2x && v3y == sv2y) ||
+       (v2x == sv2x && v2y == sv2y && v3x == sv1x && v3y == sv1y)) {
        left_x = V1x[left_idx];
        left_y = V1y[left_idx];
    }
    // could just be else
-   else if  (v1x == sv1x && v1y == sv1y && v3x == sv2x && v3y == sv2y) ||
-       (v1x == sv2x && v1y == sv2y && v3x == sv1x && v3y == sv1y) {
+   else if  ((v1x == sv1x && v1y == sv1y && v3x == sv2x && v3y == sv2y) ||
+       (v1x == sv2x && v1y == sv2y && v3x == sv1x && v3y == sv1y)) {
        left_x = V2x[left_idx];
        left_y = V2y[left_idx];
    }
@@ -322,6 +322,7 @@ __global__ void eval_riemann(float *c, float *rhs,
         int left_idx, right_idx, right_side, left_side, i, j;
         float c_left[10], c_right[10];
         float left_r1[10], right_r1[10];
+        float left_r2[10], right_r2[10];
         float nx, ny, s;
         float u_left, u_right;
         float sum;

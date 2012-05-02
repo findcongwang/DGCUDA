@@ -189,7 +189,7 @@ void read_mesh(FILE *mesh_file,
               float *V1x, float *V1y,
               float *V2x, float *V2y,
               float *V3x, float *V3y,
-              int *side_number,
+              int *left_side_number, int *right_side_number,
               float *sides_x1, float *sides_y1,
               float *sides_x2, float *sides_y2,
               int *elem_s1,  int *elem_s2, int *elem_s3,
@@ -321,8 +321,8 @@ void time_integrate(float *c, float dt, int n_p, int num_elem, int num_sides) {
                      d_s2_r1, d_s2_r2,
                      d_s3_r1, d_s3_r2,
                      d_oned_r, d_oned_w, 
-                     d_left_idx_list, d_right_idx_list,
-                     d_side_number,
+                     d_left_elem, d_right_elem,
+                     d_left_side_number, d_right_side_number,
                      d_Nx, d_Ny, n_p, num_sides, num_elem);
     cudaThreadSynchronize();
     checkCudaError("error after stage 1: eval_riemann");
@@ -345,8 +345,8 @@ void time_integrate(float *c, float dt, int n_p, int num_elem, int num_sides) {
                      d_s2_r1, d_s2_r2,
                      d_s3_r1, d_s3_r2,
                      d_oned_r, d_oned_w, 
-                     d_left_idx_list, d_right_idx_list,
-                     d_side_number,
+                     d_left_elem, d_right_elem,
+                     d_left_side_number, d_right_side_number,
                      d_Nx, d_Ny, n_p, num_sides, num_elem);
     cudaThreadSynchronize();
 
@@ -368,8 +368,8 @@ void time_integrate(float *c, float dt, int n_p, int num_elem, int num_sides) {
                      d_s2_r1, d_s2_r2,
                      d_s3_r1, d_s3_r2,
                      d_oned_r, d_oned_w, 
-                     d_left_idx_list, d_right_idx_list,
-                     d_side_number,
+                     d_left_elem, d_right_elem,
+                     d_left_side_number, d_right_side_number,
                      d_Nx, d_Ny, n_p, num_sides, num_elem);
     cudaThreadSynchronize();
 
@@ -391,8 +391,8 @@ void time_integrate(float *c, float dt, int n_p, int num_elem, int num_sides) {
                      d_s2_r1, d_s2_r2,
                      d_s3_r1, d_s3_r2,
                      d_oned_r, d_oned_w, 
-                     d_left_idx_list, d_right_idx_list,
-                     d_side_number,
+                     d_left_elem, d_right_elem,
+                     d_left_side_number, d_right_side_number,
                      d_Nx, d_Ny, n_p, num_sides, num_elem);
     cudaThreadSynchronize();
 
@@ -418,7 +418,7 @@ void init_gpu(int num_elem, int num_sides, int n_p,
               float *V1x, float *V1y, 
               float *V2x, float *V2y, 
               float *V3x, float *V3y, 
-              int *side_number,
+              int *left_side_number, int *right_side_number,
               float *sides_x1, float *sides_y1,
               float *sides_x2, float *sides_y2,
               int *elem_s1, int *elem_s2, int *elem_s3,
@@ -470,13 +470,14 @@ void init_gpu(int num_elem, int num_sides, int n_p,
     cudaMalloc((void **) &d_s3_r1, (n_p + 1) * sizeof(float));
     cudaMalloc((void **) &d_s3_r2, (n_p + 1) * sizeof(float));
     
-    cudaMalloc((void **) &d_side_number, num_sides * sizeof(int));
+    cudaMalloc((void **) &d_left_side_number , num_sides * sizeof(int));
+    cudaMalloc((void **) &d_right_side_number, num_sides * sizeof(int));
 
     cudaMalloc((void **) &d_Nx, num_sides * sizeof(float));
     cudaMalloc((void **) &d_Ny, num_sides * sizeof(float));
 
-    cudaMalloc((void **) &d_right_idx_list, num_sides * sizeof(int));
-    cudaMalloc((void **) &d_left_idx_list , num_sides * sizeof(int));
+    cudaMalloc((void **) &d_right_elem, num_sides * sizeof(int));
+    cudaMalloc((void **) &d_left_elem , num_sides * sizeof(int));
 
     // set d_rhs to 0
     cudaMemset(d_rhs, 0, num_elem * (n_p + 1) * sizeof(float));
@@ -487,7 +488,8 @@ void init_gpu(int num_elem, int num_sides, int n_p,
     cudaMemcpy(d_s_V2x, sides_x2, num_sides * sizeof(float), cudaMemcpyHostToDevice);
     cudaMemcpy(d_s_V2y, sides_y2, num_sides * sizeof(float), cudaMemcpyHostToDevice);
 
-    cudaMemcpy(d_side_number, side_number, num_elem * sizeof(int), cudaMemcpyHostToDevice);
+    cudaMemcpy(d_left_side_number , left_side_number , num_elem * sizeof(int), cudaMemcpyHostToDevice);
+    cudaMemcpy(d_right_side_number, right_side_number, num_elem * sizeof(int), cudaMemcpyHostToDevice);
 
     cudaMemcpy(d_elem_s1, elem_s1, num_elem * sizeof(float), cudaMemcpyHostToDevice);
     cudaMemcpy(d_elem_s2, elem_s2, num_elem * sizeof(float), cudaMemcpyHostToDevice);
@@ -500,8 +502,8 @@ void init_gpu(int num_elem, int num_sides, int n_p,
     cudaMemcpy(d_V3x, V3x, num_elem * sizeof(float), cudaMemcpyHostToDevice);
     cudaMemcpy(d_V3y, V3y, num_elem * sizeof(float), cudaMemcpyHostToDevice);
 
-    cudaMemcpy(d_right_idx_list, right_elem, num_sides * sizeof(float), cudaMemcpyHostToDevice);
-    cudaMemcpy(d_left_idx_list , left_elem , num_sides * sizeof(float), cudaMemcpyHostToDevice);
+    cudaMemcpy(d_left_elem , left_elem , num_sides * sizeof(float), cudaMemcpyHostToDevice);
+    cudaMemcpy(d_right_elem, right_elem, num_sides * sizeof(float), cudaMemcpyHostToDevice);
 }
 
 int main() {
@@ -511,12 +513,12 @@ int main() {
 
     float *V1x, *V1y, *V2x, *V2y, *V3x, *V3y;
 
-    int *side_number;
     float *sides_x1, *sides_x2;
     float *sides_y1, *sides_y2;
 
     int *left_elem, *right_elem;
     int *elem_s1, *elem_s2, *elem_s3;
+    int *left_side_number, *right_side_number;
 
     n_p = 0;
 
@@ -542,6 +544,7 @@ int main() {
     float *oned_r = (float *) malloc(1 * sizeof(float));
     float *oned_w = (float *) malloc(1 * sizeof(float));
 
+
     // allocate vertex points
     V1x = (float *) malloc(num_elem * sizeof(float));
     V1y = (float *) malloc(num_elem * sizeof(float));
@@ -555,7 +558,9 @@ int main() {
     elem_s3 = (int *) malloc(num_elem * sizeof(int));
 
     // TODO: these are too big; should be a way to figure out how many we actually need
-    side_number = (int *)   malloc(3*num_elem * sizeof(int));
+    left_side_number  = (int *)   malloc(3*num_elem * sizeof(int));
+    right_side_number = (int *)   malloc(3*num_elem * sizeof(int));
+
     sides_x1    = (float *) malloc(3*num_elem * sizeof(float));
     sides_x2    = (float *) malloc(3*num_elem * sizeof(float));
     sides_y1    = (float *) malloc(3*num_elem * sizeof(float));
@@ -571,7 +576,7 @@ int main() {
     // read in the mesh and make all the mappings
     read_mesh(mesh_file, &num_sides, num_elem,
                          V1x, V1y, V2x, V2y, V3x, V3y,
-                         side_number,
+                         left_side_number, right_side_number,
                          sides_x1, sides_y1, 
                          sides_x2, sides_y2, 
                          elem_s1, elem_s2, elem_s3,
@@ -583,7 +588,7 @@ int main() {
     // initialize the gpu
     init_gpu(num_elem, num_sides, n_p,
              V1x, V1y, V2x, V2y, V3x, V3y,
-             side_number,
+             left_side_number, right_side_number,
              sides_x1, sides_y1,
              sides_x2, sides_y2, 
              elem_s1, elem_s2, elem_s3,
@@ -592,7 +597,9 @@ int main() {
     // pre computations
     preval_side_length<<<1, num_sides>>>(d_s_len, d_s_V1x, d_s_V1y, d_s_V2x, d_s_V2y); 
     preval_jacobian<<<1, num_elem>>>(d_J, d_V1x, d_V1y, d_V2x, d_V2y, d_V3x, d_V3y); 
-    preval_normals<<<1, num_sides>>>(d_Nx, d_Ny, d_s_V1x, d_s_V1y, d_s_V2x, d_s_V2y); 
+    preval_normals<<<1, num_sides>>>(d_Nx, d_Ny, d_s_V1x, d_s_V1y, d_s_V2x, d_s_V2y,
+                                     d_V1x, d_V1y, d_V2x, d_V2y, d_V3x, d_V3y, 
+                                     d_left_elem); 
 
     //float *Nx = (float *) malloc(num_sides * sizeof(float));
     //float *Ny = (float *) malloc(num_sides * sizeof(float)); 
