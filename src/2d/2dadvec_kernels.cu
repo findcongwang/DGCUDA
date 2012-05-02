@@ -184,6 +184,49 @@ __device__ float riemann(float u_left, float u_right) {
 
 /***********************
  *
+ * INITIAL CONDITIONS
+ *
+ ***********************/
+
+/* initial condition function
+ *
+ * returns the value of the intial condition at point x
+ */
+__device__ float u0(float x, float y) {
+    return 1.;
+}
+
+/* initial conditions
+ *
+ * computes the coefficients for the initial conditions
+ * THREADS: num_elem
+ */
+__global__ void init_conditions(float *c, 
+                                float *V1x, float *V1y,
+                                float *V2x, float *V2y,
+                                float *V3x, float *V3y,
+                                float *r1, float *r2,
+                                float *w,
+                                int n_p, int num_elem) {
+    int idx = blockDim.x * blockIdx.x + threadIdx.x;
+    int i, j;
+    float x, y, u;
+
+    for (i = 0; i < n_p + 1; i++) {
+        u = 0;
+        for (j = 0; j < n_p + 1; j++) {
+            // map from the canonical element to the actual point on the mesh
+            x = (1 - r1[j] - r2[j]) * V1x[idx] + r1[j] * V2x[idx] + r2[j]*V3x[idx];
+            y = (1 - r1[j] - r2[j]) * V1y[idx] + r1[j] * V2y[idx] + r2[j]*V3y[idx];
+            // evaluate u there
+            u += w[j] * u0(x, y) * basis(r1[j], r2[j], i);
+        }
+        c[i*num_elem + idx] = (2.*i + 1.) / 2. * u;
+    }
+}
+
+/***********************
+ *
  * PRECOMPUTING
  *
  ***********************/
@@ -268,20 +311,21 @@ __global__ void preval_normals(float *Nx, float *Ny,
    // normalize
    length = sqrtf(powf(x, 2) + powf(y, 2));
 
+   // make it point the correct direction by learning the third vertex point
    // coordinates from the left element
    if  ((v1x == sv1x && v1y == sv1y && v2x == sv2x && v2y == sv2y) ||
-       (v1x == sv2x && v1y == sv2y && v2x == sv1x && v2y == sv1y)) {
+        (v1x == sv2x && v1y == sv2y && v2x == sv1x && v2y == sv1y)) {
        left_x = V3x[left_idx];
        left_y = V3y[left_idx];
    }
    else if  ((v2x == sv1x && v2y == sv1y && v3x == sv2x && v3y == sv2y) ||
-       (v2x == sv2x && v2y == sv2y && v3x == sv1x && v3y == sv1y)) {
+             (v2x == sv2x && v2y == sv2y && v3x == sv1x && v3y == sv1y)) {
        left_x = V1x[left_idx];
        left_y = V1y[left_idx];
    }
    // could just be else
    else if  ((v1x == sv1x && v1y == sv1y && v3x == sv2x && v3y == sv2y) ||
-       (v1x == sv2x && v1y == sv2y && v3x == sv1x && v3y == sv1y)) {
+             (v1x == sv2x && v1y == sv2y && v3x == sv1x && v3y == sv1y)) {
        left_x = V2x[left_idx];
        left_y = V2y[left_idx];
    }
@@ -350,8 +394,8 @@ __global__ void eval_riemann(float *c, float *rhs,
         }
 
         // need to find out what side we've got for evaluation (right, left, bottom)
-        left_side  = left_side_number[idx];
-        right_side = left_side_number[idx];
+        left_side  = left_side_number [idx];
+        right_side = right_side_number[idx];
 
         // get the integration points for the left element's side
         switch (left_side) {
@@ -375,6 +419,9 @@ __global__ void eval_riemann(float *c, float *rhs,
                 break;
         }
 
+        // TODO: does this speed it up?
+        __syncthreads();
+         
         // get the integration points for the right element's side
         switch (right_side) {
             case 1: 
@@ -396,6 +443,9 @@ __global__ void eval_riemann(float *c, float *rhs,
                 }
                 break;
         }
+
+        // TODO: does this speed it up?
+        __syncthreads();
          
         // evaluate the polynomial over that side for both elements and add the result to rhs
         for (i = 0; i < (n_p + 1); i++) {

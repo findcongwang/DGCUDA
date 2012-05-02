@@ -331,6 +331,15 @@ void time_integrate(float *c, float dt, int n_p, int num_elem, int num_sides) {
                     (d_c, d_rhs, d_r1, d_r2, d_w, d_J, n_p, num_elem);
     cudaThreadSynchronize();
 
+    /////////////////////
+    // GOOD: the quadrature is giving us zeros for n_p = 0;
+    //float *rhs = (float *) malloc(num_elem * (n_p + 1) * sizeof(float));
+    //cudaMemcpy(rhs, d_rhs, num_elem * (n_p + 1) * sizeof(float), cudaMemcpyDeviceToHost);
+    //for (int i = 0; i < num_elem * (n_p + 1); i++) {
+    //    printf(" > %f \n", rhs[i]);
+    //}
+    /////////////////////
+
     eval_rhs<<<n_blocks_rhs, n_threads>>>(d_k1, d_rhs, dt, num_rhs);
     cudaThreadSynchronize();
 
@@ -611,18 +620,6 @@ int main() {
         //printf("normals = (%f, %f)\n", Nx[i], Ny[i]);
     //}
 
-    // no longer need vertices stored on the GPU
-    cudaFree(d_V1x);
-    cudaFree(d_V1y);
-    cudaFree(d_V2x);
-    cudaFree(d_V2y);
-    cudaFree(d_V3x);
-    cudaFree(d_V3y);
-    cudaFree(d_s_V1x);
-    cudaFree(d_s_V1y);
-    cudaFree(d_s_V2x);
-    cudaFree(d_s_V2y);
-
     //float *side_len = (float *)malloc(num_sides * sizeof(float));
     //float *J = (float *)malloc(num_elem * sizeof(float));
 
@@ -648,18 +645,36 @@ int main() {
     int t;
 
     // meaningless initial conditions.
-    float *c = (float *) malloc(num_elem * (n_p + 1) * sizeof(float));
-    for (i = 0; i < num_elem * (n_p + 1); i++) {
-        c[i] = 1;
-    }
+    //for (i = 0; i < num_elem * (n_p + 1); i++) {
+        //c[i] = 1;
+    //}
 
-    cudaMemcpy(d_c, c, num_elem * (n_p + 1) * sizeof(float), cudaMemcpyHostToDevice);
+    //cudaMemcpy(d_c, c, num_elem * (n_p + 1) * sizeof(float), cudaMemcpyHostToDevice);
 
     set_quadrature(n_p, r1, r2, w, 
                    s1_r1, s1_r2, 
                    s2_r1, s2_r2, 
                    s3_r1, s3_r2, 
                    oned_r, oned_w);
+
+    // initial conditions
+    init_conditions<<<1, num_elem>>>(d_c, d_V1x, d_V1y, d_V2x, d_V2y, d_V3x, d_V3y,
+                    d_r1, d_r2, d_w, n_p, num_elem);
+
+    float *c = (float *) malloc(num_elem * (n_p + 1) * sizeof(float));
+    cudaMemcpy(c, d_c, num_elem * (n_p + 1) * sizeof(float), cudaMemcpyDeviceToHost);
+
+    // no longer need vertices stored on the GPU
+    cudaFree(d_V1x);
+    cudaFree(d_V1y);
+    cudaFree(d_V2x);
+    cudaFree(d_V2y);
+    cudaFree(d_V3x);
+    cudaFree(d_V3y);
+    cudaFree(d_s_V1x);
+    cudaFree(d_s_V1y);
+    cudaFree(d_s_V2x);
+    cudaFree(d_s_V2y);
 
     checkCudaError("error before quadrature copy.");
 
@@ -682,10 +697,10 @@ int main() {
     // time integration
     for (t = 0; t < 1; t++) {
         printf("---------\n", c[i]);
-        time_integrate(c, dt, n_p, num_elem, num_sides);
         for (i = 0; i < num_elem; i++) {
             printf("%f \n", c[i]);
         }
+        time_integrate(c, dt, n_p, num_elem, num_sides);
     }
 
     // free up memory
