@@ -315,6 +315,8 @@ void time_integrate(float *c, float dt, int n_p, int num_elem, int num_sides) {
 
     int num_rhs = (n_p + 1) * num_elem;
 
+    float *rhs = (float *) malloc(num_elem * (n_p + 1) * sizeof(float));
+
     // stage 1
     eval_riemann<<<n_blocks_riemann, n_threads>>>
                     (d_c, d_rhs, d_J, 
@@ -327,7 +329,6 @@ void time_integrate(float *c, float dt, int n_p, int num_elem, int num_sides) {
                      d_left_side_number, d_right_side_number,
                      d_Nx, d_Ny, n_p, num_sides, num_elem);
     cudaThreadSynchronize();
-    float *rhs = (float *) malloc(num_elem * (n_p + 1) * sizeof(float));
     cudaMemcpy(rhs, d_rhs, num_elem * (n_p + 1) * sizeof(float), cudaMemcpyDeviceToHost);
     for (int i = 0; i < num_elem * (n_p + 1); i++) {
         printf(" > %f \n", rhs[i]);
@@ -546,7 +547,7 @@ int main() {
     n_p = 0;
 
     FILE *mesh_file;
-    mesh_file = fopen("supersimple.out", "r");
+    mesh_file = fopen("canonical.out", "r");
 
     // first line should be the number of elements
     char line[100];
@@ -628,11 +629,11 @@ int main() {
                                      d_V1x, d_V1y, d_V2x, d_V2y, d_V3x, d_V3y, 
                                      d_left_elem); 
 
-    //float *Nx = (float *) malloc(num_sides * sizeof(float));
-    //float *Ny = (float *) malloc(num_sides * sizeof(float)); 
+    float *Nx = (float *) malloc(num_sides * sizeof(float));
+    float *Ny = (float *) malloc(num_sides * sizeof(float)); 
 
-    //cudaMemcpy(Nx, d_Nx, num_sides * sizeof(float), cudaMemcpyDeviceToHost);
-    //cudaMemcpy(Ny, d_Ny, num_sides * sizeof(float), cudaMemcpyDeviceToHost);
+    cudaMemcpy(Nx, d_Nx, num_sides * sizeof(float), cudaMemcpyDeviceToHost);
+    cudaMemcpy(Ny, d_Ny, num_sides * sizeof(float), cudaMemcpyDeviceToHost);
 
     //for (i = 0; i < num_sides; i++) {
         //printf("normals = (%f, %f)\n", Nx[i], Ny[i]);
@@ -662,13 +663,7 @@ int main() {
     float dt = 0.001;
     int t;
 
-    // meaningless initial conditions.
-    //for (i = 0; i < num_elem * (n_p + 1); i++) {
-        //c[i] = 1;
-    //}
-
-    //cudaMemcpy(d_c, c, num_elem * (n_p + 1) * sizeof(float), cudaMemcpyHostToDevice);
-
+    // get the correct quadrature rules for this scheme
     set_quadrature(n_p, r1, r2, w, 
                    s1_r1, s1_r2, 
                    s2_r1, s2_r2, 
@@ -676,11 +671,9 @@ int main() {
                    oned_r, oned_w);
 
     // initial conditions
+    printf("num_elem = %i\n", num_elem);
     init_conditions<<<1, num_elem>>>(d_c, d_V1x, d_V1y, d_V2x, d_V2y, d_V3x, d_V3y,
                     d_r1, d_r2, d_w, n_p, num_elem);
-
-    float *c = (float *) malloc(num_elem * (n_p + 1) * sizeof(float));
-    cudaMemcpy(c, d_c, num_elem * (n_p + 1) * sizeof(float), cudaMemcpyDeviceToHost);
 
     // no longer need vertices stored on the GPU
     cudaFree(d_V1x);
@@ -711,6 +704,9 @@ int main() {
     cudaMemcpy(d_oned_w, oned_w, 1 * sizeof(float), cudaMemcpyHostToDevice);
 
     checkCudaError("error before time integration.");
+
+    float *c = (float *) malloc(num_elem * (n_p + 1) * sizeof(float));
+    cudaMemcpy(c, d_c, num_elem * (n_p + 1) * sizeof(float), cudaMemcpyDeviceToHost);
 
     printf("---------\n", c[i]);
     for (i = 0; i < num_elem; i++) {

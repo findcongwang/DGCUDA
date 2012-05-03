@@ -35,6 +35,7 @@ def genmesh(inFilename, outFilename):
     # add the vertices for each element into elem_list
     for i in xrange(0,num_elements):
         s = inFile.readline().split()
+        print s
         if len(s) == 8:
             v1 = int(s[5]) - 1
             v2 = int(s[6]) - 1
@@ -51,9 +52,7 @@ def genmesh(inFilename, outFilename):
                                                elem[2][0], elem[2][1]))
 
 if __name__ == "__main__":
-    try:
-        inFilename  = argv[1] 
-        outFilename = argv[2]
-        genmesh(inFilename, outFilename)
-    except:
-        print "usage: genmesh.py [infile] [outfile]"
+    inFilename  = argv[1] 
+    outFilename = argv[2]
+    genmesh(inFilename, outFilename)
+    print "usage: genmesh.py [infile] [outfile]"
