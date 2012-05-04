@@ -11,10 +11,9 @@
  *
  ***********************/
 /* These are always prefixed with d_ for "device" */
-float *d_c;      // holds coefficients for each element
-float *d_rhs;    // the right hand side: 
-                 //     we reset to 0 between each and add to this to build d_c
-                 //     coefficients for each time step.
+float *d_c;           // holds coefficients for each element
+float *d_quad_rhs;    // the right hand side containing the quadrature contributions
+float *d_riemann_rhs; // the right hand side containing the riemann contributions
 
 // runge kutta variables
 float *d_kstar;
@@ -192,16 +191,18 @@ __global__ void init_conditions(float *c,
     int i, j;
     float x, y, u;
 
-    for (i = 0; i < n_p + 1; i++) {
-        u = 0;
-        for (j = 0; j < n_p + 1; j++) {
-            // map from the canonical element to the actual point on the mesh
-            x = (1 - r1[j] - r2[j]) * V1x[idx] + r1[j] * V2x[idx] + r2[j]*V3x[idx];
-            y = (1 - r1[j] - r2[j]) * V1y[idx] + r1[j] * V2y[idx] + r2[j]*V3y[idx];
-            // evaluate u there
-            u += w[j] * u0(x, y) * basis(r1[j], r2[j], i);
+    if (idx < num_elem) {
+        for (i = 0; i < n_p + 1; i++) {
+            u = 0;
+            for (j = 0; j < n_p + 1; j++) {
+                // map from the canonical element to the actual point on the mesh
+                x = (1 - r1[j] - r2[j]) * V1x[idx] + r1[j] * V2x[idx] + r2[j]*V3x[idx];
+                y = (1 - r1[j] - r2[j]) * V1y[idx] + r1[j] * V2y[idx] + r2[j]*V3y[idx];
+                // evaluate u there
+                u += w[j] * u0(x, y) * basis(r1[j], r2[j], i);
+            }
+            c[i*num_elem + idx] = (2.*i + 1.) / 2. * u;
         }
-        c[i*num_elem + idx] = (2.*i + 1.) / 2. * u;
     }
 }
 
@@ -218,11 +219,14 @@ __global__ void init_conditions(float *c,
  */ 
 __global__ void preval_side_length(float *s_length, 
                               float *s_V1x, float *s_V1y, 
-                              float *s_V2x, float *s_V2y) {
+                              float *s_V2x, float *s_V2y,
+                              int num_sides) {
     int idx = blockDim.x * blockIdx.x + threadIdx.x;
 
-    // compute and store the length of the side
-    s_length[idx] = sqrtf(powf(s_V1x[idx] - s_V2x[idx],2) + powf(s_V1y[idx] - s_V2y[idx],2));
+    if (idx < num_sides) {
+        // compute and store the length of the side
+        s_length[idx] = sqrtf(powf(s_V1x[idx] - s_V2x[idx],2) + powf(s_V1y[idx] - s_V2y[idx],2));
+    }
 }
 
 /* jacobian computing
@@ -233,20 +237,24 @@ __global__ void preval_side_length(float *s_length,
 __global__ void preval_jacobian(float *J, 
                            float *V1x, float *V1y, 
                            float *V2x, float *V2y, 
-                           float *V3x, float *V3y) {
+                           float *V3x, float *V3y,
+                           int num_elem) {
     int idx = blockDim.x * blockIdx.x + threadIdx.x;
-    float x1, y1, x2, y2, x3, y3;
 
-    // read vertex points
-    x1 = V1x[idx];
-    y1 = V1y[idx];
-    x2 = V2x[idx];
-    y2 = V2y[idx];
-    x3 = V3x[idx];
-    y3 = V3y[idx];
+    if (idx < num_elem) {
+        float x1, y1, x2, y2, x3, y3;
 
-    // calculate jacobian determinant
-    J[idx] = (-x1 + x2) * (-y1 + y3) - (-x1 + x3) * (-y1 + y2);
+        // read vertex points
+        x1 = V1x[idx];
+        y1 = V1y[idx];
+        x2 = V2x[idx];
+        y2 = V2y[idx];
+        x3 = V3x[idx];
+        y3 = V3y[idx];
+
+        // calculate jacobian determinant
+        J[idx] = (-x1 + x2) * (-y1 + y3) - (-x1 + x3) * (-y1 + y2);
+    }
 }
 
 /* evaluate normal vectors
@@ -263,62 +271,65 @@ __global__ void preval_normals(float *Nx, float *Ny,
                           float *V1x, float *V1y, 
                           float *V2x, float *V2y, 
                           float *V3x, float *V3y,
-                          int *left_elem) {
+                          int *left_elem, int num_sides) {
    int idx = blockDim.x * blockIdx.x + threadIdx.x;
-   float x, y, length;
-   float v1x, v1y, v2x, v2y, v3x, v3y;
-   float sv1x, sv1y, sv2x, sv2y;
-   float dot, left_x, left_y;
-   int left_idx;
 
-   // read in global data
-   left_idx = left_elem[idx];
-   v1x = V1x[left_idx];
-   v1y = V1y[left_idx];
-   v2x = V2x[left_idx];
-   v2y = V2y[left_idx];
-   v3x = V3x[left_idx];
-   v3y = V3y[left_idx];
-   sv1x = s_V1x[idx];
-   sv1y = s_V1y[idx];
-   sv2x = s_V2x[idx];
-   sv2y = s_V2y[idx];
+   if (idx < num_sides) {
+       float x, y, length;
+       float v1x, v1y, v2x, v2y, v3x, v3y;
+       float sv1x, sv1y, sv2x, sv2y;
+       float dot, left_x, left_y;
+       int left_idx;
 
-   // lengths of the vector components
-   x = sv1x - sv2x;
-   y = sv1y - sv2y;
+       // read in global data
+       left_idx = left_elem[idx];
+       v1x = V1x[left_idx];
+       v1y = V1y[left_idx];
+       v2x = V2x[left_idx];
+       v2y = V2y[left_idx];
+       v3x = V3x[left_idx];
+       v3y = V3y[left_idx];
+       sv1x = s_V1x[idx];
+       sv1y = s_V1y[idx];
+       sv2x = s_V2x[idx];
+       sv2y = s_V2y[idx];
 
-   // normalize
-   length = sqrtf(powf(x, 2) + powf(y, 2));
+       // lengths of the vector components
+       x = sv1x - sv2x;
+       y = sv1y - sv2y;
 
-   // make it point the correct direction by learning the third vertex point
-   // coordinates from the left element
-   if  ((v1x == sv1x && v1y == sv1y && v2x == sv2x && v2y == sv2y) ||
-        (v1x == sv2x && v1y == sv2y && v2x == sv1x && v2y == sv1y)) {
-       left_x = v3x;
-       left_y = v3y;
-   }
-   else if  ((v2x == sv1x && v2y == sv1y && v3x == sv2x && v3y == sv2y) ||
-             (v2x == sv2x && v2y == sv2y && v3x == sv1x && v3y == sv1y)) {
-       left_x = v1x;
-       left_y = v1y;
-   }
-   // could just be else
-   else if  ((v1x == sv1x && v1y == sv1y && v3x == sv2x && v3y == sv2y) ||
-             (v1x == sv2x && v1y == sv2y && v3x == sv1x && v3y == sv1y)) {
-       left_x = v2x;
-       left_y = v2y;
-   }
+       // normalize
+       length = sqrtf(powf(x, 2) + powf(y, 2));
 
-   // find the dot product between the normal vector and the third vetrex point
-   dot = -y*left_x + x*left_y;
+       // make it point the correct direction by learning the third vertex point
+       // coordinates from the left element
+       if  ((v1x == sv1x && v1y == sv1y && v2x == sv2x && v2y == sv2y) ||
+            (v1x == sv2x && v1y == sv2y && v2x == sv1x && v2y == sv1y)) {
+           left_x = v3x;
+           left_y = v3y;
+       }
+       else if  ((v2x == sv1x && v2y == sv1y && v3x == sv2x && v3y == sv2y) ||
+                 (v2x == sv2x && v2y == sv2y && v3x == sv1x && v3y == sv1y)) {
+           left_x = v1x;
+           left_y = v1y;
+       }
+       // could just be else
+       else if  ((v1x == sv1x && v1y == sv1y && v3x == sv2x && v3y == sv2y) ||
+                 (v1x == sv2x && v1y == sv2y && v3x == sv1x && v3y == sv1y)) {
+           left_x = v2x;
+           left_y = v2y;
+       }
 
-   // correct the direction
-   length = (dot > 0) ? -length : length;
+       // find the dot product between the normal vector and the third vetrex point
+       dot = -y*left_x + x*left_y;
 
-   // store the result
-   Nx[idx] = -y / length;
-   Ny[idx] =  x / length;
+       // correct the direction
+       length = (dot > 0) ? -length : length;
+
+       // store the result
+       Nx[idx] = -y / length;
+       Ny[idx] =  x / length;
+    }
 }
 
 /***********************
@@ -332,7 +343,7 @@ __global__ void preval_normals(float *Nx, float *Ny,
  * evaluate all the riemann problems for each element.
  * THREADS: num_sides
  */
-__global__ void eval_riemann(float *c, float *rhs, 
+__global__ void eval_riemann(float *c, float *riemann_rhs, 
                         float *J, float *s_length,
                         float *s1_r1, float *s1_r2,
                         float *s2_r1, float *s2_r2,
@@ -436,16 +447,15 @@ __global__ void eval_riemann(float *c, float *rhs,
         __syncthreads();
          
         // evaluate the polynomial over that side for both elements and add the result to rhs
+        left_sum  = 0;
+        right_sum = 0;
         for (i = 0; i < (n_p + 1); i++) {
             u_left  = 0;
             u_right = 0;
-            left_sum  = 0;
-            right_sum = 0;
-
             // compute u evaluated over the integration point
             for (j = 0; j < (n_p + 1); j++) {
-                u_left  += c_left[i]  * basis(left_r1[i], left_r2[i], j) * oned_w[i];
-                u_right += c_right[i] * basis(right_r1[i], right_r2[i], j) * oned_w[i];
+                u_left  += c_left[i]  * basis(left_r1[i], left_r2[i], j);
+                u_right += c_right[i] * basis(right_r1[i], right_r2[i], j);
             }
 
             // solve the Riemann problem at this integration point
@@ -453,33 +463,24 @@ __global__ void eval_riemann(float *c, float *rhs,
 
             // calculate the quadrature over [-1,1] for these sides
             for (j = 0; j < (n_p + 1); j++) {
+                // TODO: not sure which one of these should be used...
+                // also, what exactly is happening here wrt these loops... i need to go through this again.
                 left_sum  += (nx * flux_x(s) + ny * flux_y(s)) * oned_w[i] * basis(left_r1[i],  left_r2[i],  j);
                 right_sum += (nx * flux_x(s) + ny * flux_y(s)) * oned_w[i] * basis(right_r1[i], right_r2[i], j);
             }
-            
-            // add each side's contribution to the rhs vector
-            rhs[i*num_elem + right_idx] += len / 2. * left_sum;
-            // normal points from left to right
-            if (right_idx != -1) {
-                rhs[i*num_elem + right_idx] -= len / 2. * right_sum;
-            }
         }
+
+        // store this side's contribution in the riemann rhs vector
+        riemann_rhs[idx] = len / 2. * left_sum;
     }
-}
-
-// ah, this doesn't work.
-__global__ void fuckthis(float *rhs, float *Nx, float *Ny, float *side_length) {
-    int idx = threadIdx.x;
-
-    rhs[0] = (Nx[idx] + Nx[idx]) * side_length[idx];
 }
 
 /* volume integrals
  *
  * evaluates and adds the volume integral to the rhs vector
- * THREADS: K
+ * THREADS: num_elem
  */
- __global__ void eval_quad(float *c, float *rhs, 
+ __global__ void eval_quad(float *c, float *quad_rhs, 
                      float *r1, float *r2, float *w, float *J, int n_p, int num_elem) {
     int idx = blockDim.x * blockIdx.x + threadIdx.x;
 
@@ -496,27 +497,58 @@ __global__ void fuckthis(float *rhs, float *Nx, float *Ny, float *side_length) {
         // Grab the Jacobian
         register_J = J[idx];
 
+        // Evaluate the volume integral
         for (i = 0; i < (n_p + 1); i++) {
-            // Evaluate the volume integral
             quad_u = quad(register_c, r1, r2, w, register_J, idx, i, (n_p + 1));
-
             // add the volume contribution result to the rhs
-            rhs[i*num_elem + idx] += -quad_u;
-            rhs[i*num_elem + idx] /= register_J;
+            quad_rhs[idx] += -quad_u / register_J;
         }
     }
 }
 
 /* right hand side
  *
- * stores the computed rhs vector into c and then resets it 0.
+ * computes the sum of the quadrature and the riemann flux for the 
+ * coefficients for each element
+ * THREADS: num_elem
  */
-__global__ void eval_rhs(float *c, float *rhs, float dt, int num_rhs) {
+__global__ void eval_rhs(float *c, float *quad_rhs, float *riemann_rhs, 
+                         int *elem_s1, int *elem_s2, int *elem_s3,
+                         int *left_elem, float dt, int num_elem) {
     int idx = blockDim.x * blockIdx.x + threadIdx.x;
 
-    if (idx < num_rhs) {
-        c[idx]   = dt * rhs[idx];
-        rhs[idx] = 0;
+    if (idx < num_elem) {
+        float s1, s2, s3;
+        int s1_idx, s2_idx, s3_idx;
+
+        // get the indicies for the riemann contributions for this element
+        s1_idx = elem_s1[idx];
+        s2_idx = elem_s2[idx];
+        s3_idx = elem_s3[idx];
+
+        // get the riemann contributions
+        s1 = riemann_rhs[s1_idx];
+        s2 = riemann_rhs[s2_idx];
+        s3 = riemann_rhs[s3_idx];
+
+        // determine left or right pointing
+        // if this element is the left one, add; else, subtract
+        // TODO: WTF? why does this work like this?
+        if (idx != left_elem[s1_idx]) {
+            s1 = -s1;
+        }
+        if (idx != left_elem[s2_idx]) {
+            s2 = -s2;
+        }
+        if (idx != left_elem[s3_idx]) {
+            s3 = -s3;
+        }
+
+        // calculate the coefficient c
+        c[idx] = dt * (quad_rhs[idx] + s1 + s2 + s3);
+
+        // reset quad_rhs
+        quad_rhs[idx] = 0;
     }
 }
 

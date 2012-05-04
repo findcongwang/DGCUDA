@@ -226,6 +226,7 @@ void read_mesh(FILE *mesh_file,
                 s1 = 0;
                 // OK, we've added this side to some element before; which one?
                 right_elem[j] = i;
+                elem_s1[i] = j;
                 // link the added side to this element
                 right_side_number[numsides] = 1;
                 break;
@@ -240,6 +241,7 @@ void read_mesh(FILE *mesh_file,
                 s2 = 0;
                 // OK, we've added this side to some element before; which one?
                 right_elem[j] = i;
+                elem_s2[i] = j;
                 // link the added side to this element
                 right_side_number[numsides] = 2;
                 break;
@@ -254,6 +256,7 @@ void read_mesh(FILE *mesh_file,
                 s3 = 0;
                 // OK, we've added this side to some element before; which one?
                 right_elem[j] = i;
+                elem_s3[i] = j;
                 // link the added side to this element
                 right_side_number[numsides] = 3;
                 break;
@@ -268,6 +271,8 @@ void read_mesh(FILE *mesh_file,
             
             // link the added side to this element
             left_side_number[numsides] = 1;
+            // and link the element to this side
+            elem_s1[i] = numsides;
 
             // make this the left element
             left_elem[numsides] = i;
@@ -281,6 +286,8 @@ void read_mesh(FILE *mesh_file,
 
             // link the added side to this element
             left_side_number[numsides] = 2;
+            // and link the element to this side
+            elem_s2[i] = numsides;
 
             // make this the left element
             left_elem[numsides] = i;
@@ -294,6 +301,8 @@ void read_mesh(FILE *mesh_file,
 
             // link the added side to this element
             left_side_number[numsides] = 3;
+            // and link the element to this side
+            elem_s3[i] = numsides;
 
             // make this the left element
             left_elem[numsides] = i;
@@ -308,19 +317,16 @@ void read_mesh(FILE *mesh_file,
 void time_integrate(float *c, float dt, int n_p, int num_elem, int num_sides) {
     int n_threads = 128;
 
-    int n_blocks_quad    = (num_elem  / n_threads) + ((num_elem  % n_threads) ? 1 : 0);
-    int n_blocks_riemann = (num_sides / n_threads) + ((num_sides % n_threads) ? 1 : 0);
-    int n_blocks_rhs     = (((n_p + 1) * num_elem ) / n_threads) 
-                           + (((n_p + 1) * num_elem % n_threads) ? 1 : 0);
+    int n_blocks_elem    = (num_elem  / n_threads) + ((num_elem  % n_threads) ? 1 : 0);
+    int n_blocks_sides   = (num_sides / n_threads) + ((num_sides % n_threads) ? 1 : 0);
 
     int num_rhs = (n_p + 1) * num_elem;
 
     float *rhs = (float *) malloc(num_elem * (n_p + 1) * sizeof(float));
 
     // stage 1
-    /*
-    eval_riemann<<<n_blocks_riemann, n_threads>>>
-                    (d_c, d_rhs, d_J, 
+    eval_riemann<<<n_blocks_sides, n_threads>>>
+                    (d_c, d_riemann_rhs, d_J, 
                      d_s_length,
                      d_s1_r1, d_s1_r2,
                      d_s2_r1, d_s2_r2,
@@ -329,18 +335,12 @@ void time_integrate(float *c, float dt, int n_p, int num_elem, int num_sides) {
                      d_left_elem, d_right_elem,
                      d_left_side_number, d_right_side_number,
                      d_Nx, d_Ny, n_p, num_sides, num_elem);
-    */
-    fuckthis<<<1,3>>>(d_rhs, d_Nx, d_Ny, d_s_length);
     cudaThreadSynchronize();
-    cudaMemcpy(rhs, d_rhs, num_elem * (n_p + 1) * sizeof(float), cudaMemcpyDeviceToHost);
-    for (int i = 0; i < num_elem * (n_p + 1); i++) {
-        printf(" > %f \n", rhs[i]);
-    }
 
     checkCudaError("error after stage 1: eval_riemann");
 
-    eval_quad<<<n_blocks_quad, n_threads>>>
-                    (d_c, d_rhs, d_r1, d_r2, d_w, d_J, n_p, num_elem);
+    eval_quad<<<n_blocks_elem, n_threads>>>
+                    (d_c, d_quad_rhs, d_r1, d_r2, d_w, d_J, n_p, num_elem);
     cudaThreadSynchronize();
 
     /////////////////////
@@ -352,17 +352,23 @@ void time_integrate(float *c, float dt, int n_p, int num_elem, int num_sides) {
     //}
     /////////////////////
 
-    eval_rhs<<<n_blocks_rhs, n_threads>>>(d_k1, d_rhs, dt, num_rhs);
+    eval_rhs<<<n_blocks_elem, n_threads>>>(d_k1, d_quad_rhs, d_riemann_rhs, 
+                                          d_elem_s1, d_elem_s2, d_elem_s3, 
+                                          d_left_elem, dt, num_elem);
     cudaThreadSynchronize();
+    cudaMemcpy(rhs, d_k1, num_elem * (n_p + 1) * sizeof(float), cudaMemcpyDeviceToHost);
+    for (int i = 0; i < num_elem * (n_p + 1); i++) {
+        printf(" > %f \n", rhs[i]);
+    }
 
-    rk4_tempstorage<<<n_blocks_rhs, n_threads>>>(d_c, d_kstar, d_k1, 0.5, n_p, num_elem);
+    rk4_tempstorage<<<n_blocks_elem, n_threads>>>(d_c, d_kstar, d_k1, 0.5, n_p, num_elem);
     cudaThreadSynchronize();
 
     checkCudaError("error after stage 1.");
 
     // stage 2
-    eval_riemann<<<n_blocks_riemann, n_threads>>>
-                    (d_kstar, d_rhs, d_J, 
+    eval_riemann<<<n_blocks_sides, n_threads>>>
+                    (d_kstar, d_riemann_rhs, d_J, 
                      d_s_length,
                      d_s1_r1, d_s1_r2,
                      d_s2_r1, d_s2_r2,
@@ -373,21 +379,23 @@ void time_integrate(float *c, float dt, int n_p, int num_elem, int num_sides) {
                      d_Nx, d_Ny, n_p, num_sides, num_elem);
     cudaThreadSynchronize();
 
-    eval_quad<<<n_blocks_quad, n_threads>>>
-                    (d_kstar, d_rhs, d_r1, d_r2, d_w, d_J, n_p, num_elem);
+    eval_quad<<<n_blocks_elem, n_threads>>>
+                    (d_kstar, d_quad_rhs, d_r1, d_r2, d_w, d_J, n_p, num_elem);
     cudaThreadSynchronize();
 
-    eval_rhs<<<n_blocks_rhs, n_threads>>>(d_k2, d_rhs, dt, num_rhs);
+    eval_rhs<<<n_blocks_elem, n_threads>>>(d_k2, d_quad_rhs, d_riemann_rhs,
+                                          d_elem_s1, d_elem_s2, d_elem_s3, 
+                                          d_left_elem, dt, num_elem);
     cudaThreadSynchronize();
 
-    rk4_tempstorage<<<n_blocks_rhs, n_threads>>>(d_c, d_kstar, d_k2, 0.5, n_p, num_elem);
+    rk4_tempstorage<<<n_blocks_elem, n_threads>>>(d_c, d_kstar, d_k2, 0.5, n_p, num_elem);
     cudaThreadSynchronize();
 
     checkCudaError("error after stage 2.");
 
     // stage 3
-    eval_riemann<<<n_blocks_riemann, n_threads>>>
-                    (d_kstar, d_rhs, d_J, 
+    eval_riemann<<<n_blocks_sides, n_threads>>>
+                    (d_kstar, d_riemann_rhs, d_J, 
                      d_s_length,
                      d_s1_r1, d_s1_r2,
                      d_s2_r1, d_s2_r2,
@@ -398,21 +406,23 @@ void time_integrate(float *c, float dt, int n_p, int num_elem, int num_sides) {
                      d_Nx, d_Ny, n_p, num_sides, num_elem);
     cudaThreadSynchronize();
 
-    eval_quad<<<n_blocks_quad, n_threads>>>
-                    (d_kstar, d_rhs, d_r1, d_r2, d_w, d_J, n_p, num_elem);
+    eval_quad<<<n_blocks_elem, n_threads>>>
+                    (d_kstar, d_quad_rhs, d_r1, d_r2, d_w, d_J, n_p, num_elem);
     cudaThreadSynchronize();
 
-    eval_rhs<<<n_blocks_rhs, n_threads>>>(d_k3, d_rhs, dt, num_rhs);
+    eval_rhs<<<n_blocks_elem, n_threads>>>(d_k3, d_quad_rhs, d_riemann_rhs, 
+                                          d_elem_s1, d_elem_s2, d_elem_s3, 
+                                          d_left_elem, dt, num_elem);
     cudaThreadSynchronize();
 
-    rk4_tempstorage<<<n_blocks_rhs, n_threads>>>(d_c, d_kstar, d_k3, 1.0, n_p, num_elem);
+    rk4_tempstorage<<<n_blocks_elem, n_threads>>>(d_c, d_kstar, d_k3, 1.0, n_p, num_elem);
     cudaThreadSynchronize();
 
     checkCudaError("error after stage 3.");
 
     // stage 4
-    eval_riemann<<<n_blocks_riemann, n_threads>>>
-                    (d_kstar, d_rhs, d_J, 
+    eval_riemann<<<n_blocks_sides, n_threads>>>
+                    (d_kstar, d_riemann_rhs, d_J, 
                      d_s_length,
                      d_s1_r1, d_s1_r2,
                      d_s2_r1, d_s2_r2,
@@ -423,17 +433,19 @@ void time_integrate(float *c, float dt, int n_p, int num_elem, int num_sides) {
                      d_Nx, d_Ny, n_p, num_sides, num_elem);
     cudaThreadSynchronize();
 
-    eval_quad<<<n_blocks_quad, n_threads>>>
-                    (d_kstar, d_rhs, d_r1, d_r2, d_w, d_J, n_p, num_elem);
+    eval_quad<<<n_blocks_elem, n_threads>>>
+                    (d_kstar, d_quad_rhs, d_r1, d_r2, d_w, d_J, n_p, num_elem);
     cudaThreadSynchronize();
 
-    eval_rhs<<<n_blocks_rhs, n_threads>>>(d_k4, d_rhs, dt, num_rhs);
+    eval_rhs<<<n_blocks_elem, n_threads>>>(d_k4, d_quad_rhs, d_riemann_rhs, 
+                                          d_elem_s1, d_elem_s2, d_elem_s3, 
+                                          d_left_elem, dt, num_elem);
     cudaThreadSynchronize();
 
     checkCudaError("error after stage 4.");
     
     // final stage
-    rk4<<<n_blocks_rhs, n_threads>>>(d_c, d_k1, d_k2, d_k3, d_k4, n_p, num_elem);
+    rk4<<<n_blocks_elem, n_threads>>>(d_c, d_k1, d_k2, d_k3, d_k4, n_p, num_elem);
     cudaThreadSynchronize();
 
     cudaMemcpy(c, d_c, num_elem * (n_p + 1) * sizeof(float), cudaMemcpyDeviceToHost);
@@ -456,7 +468,8 @@ void init_gpu(int num_elem, int num_sides, int n_p,
     // allocate allllllllllll the memory.
     // TODO: this takes a really really long time on valor.
     cudaMalloc((void **) &d_c  , num_elem * (n_p + 1) * sizeof(float));
-    cudaMalloc((void **) &d_rhs, num_elem * (n_p + 1) * sizeof(float));
+    cudaMalloc((void **) &d_quad_rhs, num_elem * sizeof(float));
+    cudaMalloc((void **) &d_riemann_rhs, num_sides * sizeof(float));
 
     cudaMalloc((void **) &d_kstar, num_elem * (n_p + 1) * sizeof(float));
     cudaMalloc((void **) &d_k1, num_elem * (n_p + 1) * sizeof(float));
@@ -506,8 +519,8 @@ void init_gpu(int num_elem, int num_sides, int n_p,
     cudaMalloc((void **) &d_right_elem, num_sides * sizeof(int));
     cudaMalloc((void **) &d_left_elem , num_sides * sizeof(int));
 
-    // set d_rhs to 0
-    cudaMemset(d_rhs, 0, num_elem * (n_p + 1) * sizeof(float));
+    // set quad_rhs to 0
+    cudaMemset(d_quad_rhs, 0., num_elem * sizeof(float));
 
     // copy over data
     cudaMemcpy(d_s_V1x, sides_x1, num_sides * sizeof(float), cudaMemcpyHostToDevice);
@@ -620,16 +633,21 @@ int main() {
              elem_s1, elem_s2, elem_s3,
              left_elem, right_elem);
 
-    for (i = 0; i < num_elem; i++) {
-        printf(" ? %i \n", right_elem[i]);
-    }
+    //for (i = 0; i < num_elem; i++) {
+        //printf(" ? (%i, %i, %i) \n", elem_s1[i], elem_s2[i], elem_s3[i]);
+    //}
     
+    int n_threads        = 128;
+    int n_blocks_elem    = (num_elem  / n_threads) + ((num_elem  % n_threads) ? 1 : 0);
+    int n_blocks_sides   = (num_sides / n_threads) + ((num_sides % n_threads) ? 1 : 0);
+
     // pre computations
-    preval_side_length<<<1, num_sides>>>(d_s_length, d_s_V1x, d_s_V1y, d_s_V2x, d_s_V2y); 
-    preval_jacobian<<<1, num_elem>>>(d_J, d_V1x, d_V1y, d_V2x, d_V2y, d_V3x, d_V3y); 
-    preval_normals<<<1, num_sides>>>(d_Nx, d_Ny, d_s_V1x, d_s_V1y, d_s_V2x, d_s_V2y,
-                                     d_V1x, d_V1y, d_V2x, d_V2y, d_V3x, d_V3y, 
-                                     d_left_elem); 
+    preval_side_length<<<n_blocks_sides, n_threads>>>(d_s_length, d_s_V1x, d_s_V1y, d_s_V2x, d_s_V2y, 
+                                                      num_sides); 
+    preval_jacobian<<<n_blocks_elem, n_threads>>>(d_J, d_V1x, d_V1y, d_V2x, d_V2y, d_V3x, d_V3y, num_elem); 
+    preval_normals<<<n_blocks_sides, n_threads>>>(d_Nx, d_Ny, d_s_V1x, d_s_V1y, d_s_V2x, d_s_V2y,
+                                                  d_V1x, d_V1y, d_V2x, d_V2y, d_V3x, d_V3y, 
+                                                  d_left_elem, num_sides); 
     checkCudaError("error after prevals.");
 
     float *Nx = (float *) malloc(num_sides * sizeof(float));
@@ -648,9 +666,9 @@ int main() {
     cudaMemcpy(side_len, d_s_length, num_sides * sizeof(float), cudaMemcpyDeviceToHost);
     //cudaMemcpy(J, d_J, num_elem * sizeof(float), cudaMemcpyDeviceToHost);
 
-    for (i = 0; i < num_sides; i++) {
-        printf("len = %f \n", side_len[i]);
-    }
+    //for (i = 0; i < num_sides; i++) {
+        //printf("len = %f \n", side_len[i]);
+    //}
 
     //float sum = 0;
     //for (i = 0; i < num_elem; i++) {
@@ -675,7 +693,7 @@ int main() {
 
     // initial conditions
     printf("num_elem = %i\n", num_elem);
-    init_conditions<<<1, num_elem>>>(d_c, d_V1x, d_V1y, d_V2x, d_V2y, d_V3x, d_V3y,
+    init_conditions<<<n_blocks_elem, n_threads>>>(d_c, d_V1x, d_V1y, d_V2x, d_V2y, d_V3x, d_V3y,
                     d_r1, d_r2, d_w, n_p, num_elem);
     checkCudaError("error after initial conditions.");
 
