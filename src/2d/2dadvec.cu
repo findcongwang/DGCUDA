@@ -318,6 +318,7 @@ void time_integrate(float *c, float dt, int n_p, int num_elem, int num_sides) {
     float *rhs = (float *) malloc(num_elem * (n_p + 1) * sizeof(float));
 
     // stage 1
+    /*
     eval_riemann<<<n_blocks_riemann, n_threads>>>
                     (d_c, d_rhs, d_J, 
                      d_s_length,
@@ -328,6 +329,8 @@ void time_integrate(float *c, float dt, int n_p, int num_elem, int num_sides) {
                      d_left_elem, d_right_elem,
                      d_left_side_number, d_right_side_number,
                      d_Nx, d_Ny, n_p, num_sides, num_elem);
+    */
+    fuckthis<<<1,3>>>(d_rhs, d_Nx, d_Ny, d_s_length);
     cudaThreadSynchronize();
     cudaMemcpy(rhs, d_rhs, num_elem * (n_p + 1) * sizeof(float), cudaMemcpyDeviceToHost);
     for (int i = 0; i < num_elem * (n_p + 1); i++) {
@@ -593,7 +596,6 @@ int main() {
     right_elem  = (int *) malloc(3*num_elem * sizeof(int));
 
     for (i = 0; i < 3*num_elem; i++) {
-        left_elem [i] = -1; // not necessary
         right_elem[i] = -1;
     }
 
@@ -628,6 +630,7 @@ int main() {
     preval_normals<<<1, num_sides>>>(d_Nx, d_Ny, d_s_V1x, d_s_V1y, d_s_V2x, d_s_V2y,
                                      d_V1x, d_V1y, d_V2x, d_V2y, d_V3x, d_V3y, 
                                      d_left_elem); 
+    checkCudaError("error after prevals.");
 
     float *Nx = (float *) malloc(num_sides * sizeof(float));
     float *Ny = (float *) malloc(num_sides * sizeof(float)); 
@@ -635,19 +638,19 @@ int main() {
     cudaMemcpy(Nx, d_Nx, num_sides * sizeof(float), cudaMemcpyDeviceToHost);
     cudaMemcpy(Ny, d_Ny, num_sides * sizeof(float), cudaMemcpyDeviceToHost);
 
-    //for (i = 0; i < num_sides; i++) {
-        //printf("normals = (%f, %f)\n", Nx[i], Ny[i]);
-    //}
+    for (i = 0; i < num_sides; i++) {
+        printf("normals = (%f, %f)\n", Nx[i], Ny[i]);
+    }
 
-    //float *side_len = (float *)malloc(num_sides * sizeof(float));
+    float *side_len = (float *)malloc(num_sides * sizeof(float));
     //float *J = (float *)malloc(num_elem * sizeof(float));
 
-    //cudaMemcpy(side_len, d_s_len, num_sides * sizeof(float), cudaMemcpyDeviceToHost);
+    cudaMemcpy(side_len, d_s_length, num_sides * sizeof(float), cudaMemcpyDeviceToHost);
     //cudaMemcpy(J, d_J, num_elem * sizeof(float), cudaMemcpyDeviceToHost);
 
-    //for (i = 0; i < num_sides; i++) {
-        //printf("index = %i: (%i, %i)\n", side_number[i], left_elem[i], right_elem[i]);
-    //}
+    for (i = 0; i < num_sides; i++) {
+        printf("len = %f \n", side_len[i]);
+    }
 
     //float sum = 0;
     //for (i = 0; i < num_elem; i++) {
@@ -674,6 +677,7 @@ int main() {
     printf("num_elem = %i\n", num_elem);
     init_conditions<<<1, num_elem>>>(d_c, d_V1x, d_V1y, d_V2x, d_V2y, d_V3x, d_V3y,
                     d_r1, d_r2, d_w, n_p, num_elem);
+    checkCudaError("error after initial conditions.");
 
     // no longer need vertices stored on the GPU
     cudaFree(d_V1x);

@@ -314,7 +314,7 @@ __global__ void preval_normals(float *Nx, float *Ny,
    dot = -y*left_x + x*left_y;
 
    // correct the direction
-   length = (dot < 0) ? -length : length;
+   length = (dot > 0) ? -length : length;
 
    // store the result
    Nx[idx] = -y / length;
@@ -458,13 +458,20 @@ __global__ void eval_riemann(float *c, float *rhs,
             }
             
             // add each side's contribution to the rhs vector
-            rhs[i*num_elem + left_idx]  += nx + ny;//len / 2. * left_sum;
+            rhs[i*num_elem + right_idx] += len / 2. * left_sum;
             // normal points from left to right
             if (right_idx != -1) {
-                rhs[i*num_elem + right_idx] -= nx + ny;//len / 2. * right_sum;
+                rhs[i*num_elem + right_idx] -= len / 2. * right_sum;
             }
         }
     }
+}
+
+// ah, this doesn't work.
+__global__ void fuckthis(float *rhs, float *Nx, float *Ny, float *side_length) {
+    int idx = threadIdx.x;
+
+    rhs[0] = (Nx[idx] + Nx[idx]) * side_length[idx];
 }
 
 /* volume integrals
