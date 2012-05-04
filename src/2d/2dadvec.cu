@@ -224,11 +224,11 @@ void read_mesh(FILE *mesh_file,
             || (sides_x2[j] == V1x[i] && sides_y2[j] == V1y[i]
              && sides_x1[j] == V2x[i] && sides_y1[j] == V2y[i]))) {
                 s1 = 0;
-                // OK, we've added this side to some element before; which one?
+                // OK, we've added this side to element i
                 right_elem[j] = i;
+                // link the added side j to this element
                 elem_s1[i] = j;
-                // link the added side to this element
-                right_side_number[numsides] = 1;
+                right_side_number[j] = 1;
                 break;
             }
         }
@@ -243,7 +243,7 @@ void read_mesh(FILE *mesh_file,
                 right_elem[j] = i;
                 elem_s2[i] = j;
                 // link the added side to this element
-                right_side_number[numsides] = 2;
+                right_side_number[j] = 2;
                 break;
             }
         }
@@ -258,7 +258,7 @@ void read_mesh(FILE *mesh_file,
                 right_elem[j] = i;
                 elem_s3[i] = j;
                 // link the added side to this element
-                right_side_number[numsides] = 3;
+                right_side_number[j] = 3;
                 break;
             }
         }
@@ -326,7 +326,7 @@ void time_integrate(float *c, float dt, int n_p, int num_elem, int num_sides) {
 
     // stage 1
     eval_riemann<<<n_blocks_sides, n_threads>>>
-                    (d_c, d_riemann_rhs, d_J, 
+                    (d_c, d_left_riemann_rhs, d_right_riemann_rhs, d_J, 
                      d_s_length,
                      d_s1_r1, d_s1_r2,
                      d_s2_r1, d_s2_r2,
@@ -352,7 +352,7 @@ void time_integrate(float *c, float dt, int n_p, int num_elem, int num_sides) {
     //}
     /////////////////////
 
-    eval_rhs<<<n_blocks_elem, n_threads>>>(d_k1, d_quad_rhs, d_riemann_rhs, 
+    eval_rhs<<<n_blocks_elem, n_threads>>>(d_k1, d_quad_rhs, d_left_riemann_rhs, d_right_riemann_rhs, 
                                           d_elem_s1, d_elem_s2, d_elem_s3, 
                                           d_left_elem, dt, num_elem);
     cudaThreadSynchronize();
@@ -368,7 +368,7 @@ void time_integrate(float *c, float dt, int n_p, int num_elem, int num_sides) {
 
     // stage 2
     eval_riemann<<<n_blocks_sides, n_threads>>>
-                    (d_kstar, d_riemann_rhs, d_J, 
+                    (d_kstar, d_left_riemann_rhs, d_right_riemann_rhs, d_J, 
                      d_s_length,
                      d_s1_r1, d_s1_r2,
                      d_s2_r1, d_s2_r2,
@@ -383,7 +383,7 @@ void time_integrate(float *c, float dt, int n_p, int num_elem, int num_sides) {
                     (d_kstar, d_quad_rhs, d_r1, d_r2, d_w, d_J, n_p, num_elem);
     cudaThreadSynchronize();
 
-    eval_rhs<<<n_blocks_elem, n_threads>>>(d_k2, d_quad_rhs, d_riemann_rhs,
+    eval_rhs<<<n_blocks_elem, n_threads>>>(d_k2, d_quad_rhs, d_left_riemann_rhs, d_right_riemann_rhs,
                                           d_elem_s1, d_elem_s2, d_elem_s3, 
                                           d_left_elem, dt, num_elem);
     cudaThreadSynchronize();
@@ -395,7 +395,7 @@ void time_integrate(float *c, float dt, int n_p, int num_elem, int num_sides) {
 
     // stage 3
     eval_riemann<<<n_blocks_sides, n_threads>>>
-                    (d_kstar, d_riemann_rhs, d_J, 
+                    (d_kstar, d_left_riemann_rhs, d_right_riemann_rhs, d_J, 
                      d_s_length,
                      d_s1_r1, d_s1_r2,
                      d_s2_r1, d_s2_r2,
@@ -410,7 +410,7 @@ void time_integrate(float *c, float dt, int n_p, int num_elem, int num_sides) {
                     (d_kstar, d_quad_rhs, d_r1, d_r2, d_w, d_J, n_p, num_elem);
     cudaThreadSynchronize();
 
-    eval_rhs<<<n_blocks_elem, n_threads>>>(d_k3, d_quad_rhs, d_riemann_rhs, 
+    eval_rhs<<<n_blocks_elem, n_threads>>>(d_k3, d_quad_rhs, d_left_riemann_rhs, d_right_riemann_rhs, 
                                           d_elem_s1, d_elem_s2, d_elem_s3, 
                                           d_left_elem, dt, num_elem);
     cudaThreadSynchronize();
@@ -422,7 +422,7 @@ void time_integrate(float *c, float dt, int n_p, int num_elem, int num_sides) {
 
     // stage 4
     eval_riemann<<<n_blocks_sides, n_threads>>>
-                    (d_kstar, d_riemann_rhs, d_J, 
+                    (d_kstar, d_left_riemann_rhs, d_right_riemann_rhs, d_J, 
                      d_s_length,
                      d_s1_r1, d_s1_r2,
                      d_s2_r1, d_s2_r2,
@@ -437,7 +437,7 @@ void time_integrate(float *c, float dt, int n_p, int num_elem, int num_sides) {
                     (d_kstar, d_quad_rhs, d_r1, d_r2, d_w, d_J, n_p, num_elem);
     cudaThreadSynchronize();
 
-    eval_rhs<<<n_blocks_elem, n_threads>>>(d_k4, d_quad_rhs, d_riemann_rhs, 
+    eval_rhs<<<n_blocks_elem, n_threads>>>(d_k4, d_quad_rhs, d_left_riemann_rhs, d_right_riemann_rhs, 
                                           d_elem_s1, d_elem_s2, d_elem_s3, 
                                           d_left_elem, dt, num_elem);
     cudaThreadSynchronize();
@@ -469,7 +469,8 @@ void init_gpu(int num_elem, int num_sides, int n_p,
     // TODO: this takes a really really long time on valor.
     cudaMalloc((void **) &d_c  , num_elem * (n_p + 1) * sizeof(float));
     cudaMalloc((void **) &d_quad_rhs, num_elem * sizeof(float));
-    cudaMalloc((void **) &d_riemann_rhs, num_sides * sizeof(float));
+    cudaMalloc((void **) &d_left_riemann_rhs, num_sides * sizeof(float));
+    cudaMalloc((void **) &d_right_riemann_rhs, num_sides * sizeof(float));
 
     cudaMalloc((void **) &d_kstar, num_elem * (n_p + 1) * sizeof(float));
     cudaMalloc((void **) &d_k1, num_elem * (n_p + 1) * sizeof(float));
@@ -520,7 +521,7 @@ void init_gpu(int num_elem, int num_sides, int n_p,
     cudaMalloc((void **) &d_left_elem , num_sides * sizeof(int));
 
     // set quad_rhs to 0
-    cudaMemset(d_quad_rhs, 0., num_elem * sizeof(float));
+    //cudaMemset(d_quad_rhs, 0., num_elem * sizeof(float));
 
     // copy over data
     cudaMemcpy(d_s_V1x, sides_x1, num_sides * sizeof(float), cudaMemcpyHostToDevice);
@@ -633,6 +634,9 @@ int main() {
              elem_s1, elem_s2, elem_s3,
              left_elem, right_elem);
 
+    for (i = 0; i < num_sides; i++) {
+        printf(" ? (%i, %i) \n", left_side_number[i], right_side_number[i]);
+    }
     //for (i = 0; i < num_elem; i++) {
         //printf(" ? (%i, %i, %i) \n", elem_s1[i], elem_s2[i], elem_s3[i]);
     //}

@@ -13,7 +13,8 @@
 /* These are always prefixed with d_ for "device" */
 float *d_c;           // holds coefficients for each element
 float *d_quad_rhs;    // the right hand side containing the quadrature contributions
-float *d_riemann_rhs; // the right hand side containing the riemann contributions
+float *d_left_riemann_rhs;  // the right hand side containing the left riemann contributions
+float *d_right_riemann_rhs; // the right hand side containing the right riemann contributions
 
 // runge kutta variables
 float *d_kstar;
@@ -343,7 +344,7 @@ __global__ void preval_normals(float *Nx, float *Ny,
  * evaluate all the riemann problems for each element.
  * THREADS: num_sides
  */
-__global__ void eval_riemann(float *c, float *riemann_rhs, 
+__global__ void eval_riemann(float *c, float *left_riemann_rhs, float *right_riemann_rhs, 
                         float *J, float *s_length,
                         float *s1_r1, float *s1_r2,
                         float *s2_r1, float *s2_r2,
@@ -385,7 +386,7 @@ __global__ void eval_riemann(float *c, float *riemann_rhs,
             // this is a boundary side
             for (i = 0; i < (n_p + 1); i++) {
                 c_left[i]  = c[i*num_elem + left_idx];
-                c_right[i] = 0;
+                c_right[i] = c[i*num_elem + left_idx];
             }
         }
 
@@ -465,13 +466,18 @@ __global__ void eval_riemann(float *c, float *riemann_rhs,
             for (j = 0; j < (n_p + 1); j++) {
                 // TODO: not sure which one of these should be used...
                 // also, what exactly is happening here wrt these loops... i need to go through this again.
+                // which test function are we multiplying by?
+                //  - the one that the left element's side maps to, or the one from the right side
                 left_sum  += (nx * flux_x(s) + ny * flux_y(s)) * oned_w[i] * basis(left_r1[i],  left_r2[i],  j);
                 right_sum += (nx * flux_x(s) + ny * flux_y(s)) * oned_w[i] * basis(right_r1[i], right_r2[i], j);
             }
         }
 
         // store this side's contribution in the riemann rhs vector
-        riemann_rhs[idx] = len / 2. * left_sum;
+        //riemann_rhs[idx] = len / 2. * left_sum;
+        // store these in different places & figure out which side to use
+        left_riemann_rhs[idx] =   len / 2. * left_sum;
+        right_riemann_rhs[idx] = -len / 2. * right_sum;
     }
 }
 
@@ -498,11 +504,12 @@ __global__ void eval_riemann(float *c, float *riemann_rhs,
         register_J = J[idx];
 
         // Evaluate the volume integral
+        quad_u = 0;
         for (i = 0; i < (n_p + 1); i++) {
-            quad_u = quad(register_c, r1, r2, w, register_J, idx, i, (n_p + 1));
-            // add the volume contribution result to the rhs
-            quad_rhs[idx] += -quad_u / register_J;
+            quad_u += quad(register_c, r1, r2, w, register_J, idx, i, (n_p + 1));
         }
+        // store the volume contribution result to the rhs
+        quad_rhs[idx] = -quad_u / register_J;
     }
 }
 
@@ -512,7 +519,7 @@ __global__ void eval_riemann(float *c, float *riemann_rhs,
  * coefficients for each element
  * THREADS: num_elem
  */
-__global__ void eval_rhs(float *c, float *quad_rhs, float *riemann_rhs, 
+__global__ void eval_rhs(float *c, float *quad_rhs, float *left_riemann_rhs, float *right_riemann_rhs, 
                          int *elem_s1, int *elem_s2, int *elem_s3,
                          int *left_elem, float dt, int num_elem) {
     int idx = blockDim.x * blockIdx.x + threadIdx.x;
@@ -526,29 +533,27 @@ __global__ void eval_rhs(float *c, float *quad_rhs, float *riemann_rhs,
         s2_idx = elem_s2[idx];
         s3_idx = elem_s3[idx];
 
-        // get the riemann contributions
-        s1 = riemann_rhs[s1_idx];
-        s2 = riemann_rhs[s2_idx];
-        s3 = riemann_rhs[s3_idx];
-
         // determine left or right pointing
-        // if this element is the left one, add; else, subtract
-        // TODO: WTF? why does this work like this?
-        if (idx != left_elem[s1_idx]) {
-            s1 = -s1;
+        if (idx == left_elem[s1_idx]) {
+            s1 = left_riemann_rhs[s1_idx];
+        } else {
+            s1 = right_riemann_rhs[s1_idx];
         }
-        if (idx != left_elem[s2_idx]) {
-            s2 = -s2;
+
+        if (idx == left_elem[s2_idx]) {
+            s2 = left_riemann_rhs[s2_idx];
+        } else {
+            s2 = right_riemann_rhs[s2_idx];
         }
-        if (idx != left_elem[s3_idx]) {
-            s3 = -s3;
+
+        if (idx == left_elem[s3_idx]) {
+            s3 = left_riemann_rhs[s3_idx];
+        } else {
+            s3 = right_riemann_rhs[s3_idx];
         }
 
         // calculate the coefficient c
         c[idx] = dt * (quad_rhs[idx] + s1 + s2 + s3);
-
-        // reset quad_rhs
-        quad_rhs[idx] = 0;
     }
 }
 
