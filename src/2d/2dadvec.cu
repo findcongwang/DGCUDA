@@ -195,7 +195,7 @@ void read_mesh(FILE *mesh_file,
               int *elem_s1,  int *elem_s2, int *elem_s3,
               int *left_elem, int *right_elem) {
 
-    int i, j, s1, s2, s3, numsides, which_elem;
+    int i, j, s1, s2, s3, numsides;
     char line[100];
     numsides = 0;
     // stores the number of sides this element has.
@@ -268,7 +268,9 @@ void read_mesh(FILE *mesh_file,
             sides_y1[numsides] = V1y[i];
             sides_x2[numsides] = V2x[i];
             sides_y2[numsides] = V2y[i];
-            
+            //third_x[numsides] = V3x[i];
+            //third_y[numsides] = V3y[i];
+
             // link the added side to this element
             left_side_number[numsides] = 1;
             // and link the element to this side
@@ -467,9 +469,9 @@ void init_gpu(int num_elem, int num_sides, int n_p,
 
     // allocate allllllllllll the memory.
     // TODO: this takes a really really long time on valor.
-    cudaMalloc((void **) &d_c  , num_elem * (n_p + 1) * sizeof(float));
+    cudaMalloc((void **) &d_c,        num_elem * (n_p + 1) * sizeof(float));
     cudaMalloc((void **) &d_quad_rhs, num_elem * sizeof(float));
-    cudaMalloc((void **) &d_left_riemann_rhs, num_sides * sizeof(float));
+    cudaMalloc((void **) &d_left_riemann_rhs,  num_sides * sizeof(float));
     cudaMalloc((void **) &d_right_riemann_rhs, num_sides * sizeof(float));
 
     cudaMalloc((void **) &d_kstar, num_elem * (n_p + 1) * sizeof(float));
@@ -547,13 +549,69 @@ void init_gpu(int num_elem, int num_sides, int n_p,
     cudaMemcpy(d_right_elem, right_elem, num_sides * sizeof(float), cudaMemcpyHostToDevice);
 }
 
+void free_gpu() {
+    cudaFree(d_c);
+    cudaFree(d_quad_rhs);
+    cudaFree(d_left_riemann_rhs);
+    cudaFree(d_right_riemann_rhs);
+
+    cudaFree(d_kstar);
+    cudaFree(d_k1);
+    cudaFree(d_k2);
+    cudaFree(d_k3);
+    cudaFree(d_k4);
+
+    cudaFree(d_r1);
+    cudaFree(d_r2);
+    cudaFree(d_w);
+
+    cudaFree(d_oned_r);
+    cudaFree(d_oned_w);
+
+    cudaFree(d_J);
+    cudaFree(d_s_length);
+
+    cudaFree(d_s_V1x);
+    cudaFree(d_s_V2x);
+    cudaFree(d_s_V1y);
+    cudaFree(d_s_V2y);
+
+    cudaFree(d_elem_s1);
+    cudaFree(d_elem_s2);
+    cudaFree(d_elem_s3);
+
+    cudaFree(d_V1x);
+    cudaFree(d_V1y);
+    cudaFree(d_V2x);
+    cudaFree(d_V2y);
+    cudaFree(d_V3x);
+    cudaFree(d_V3y);
+
+    cudaFree(d_s1_r1);
+    cudaFree(d_s1_r2);
+    cudaFree(d_s2_r1);
+    cudaFree(d_s2_r2);
+    cudaFree(d_s3_r1);
+    cudaFree(d_s3_r2);
+    
+    cudaFree(d_left_side_number);
+    cudaFree(d_right_side_number);
+
+    cudaFree(d_Nx);
+    cudaFree(d_Ny);
+
+    cudaFree(d_right_elem);
+    cudaFree(d_left_elem);
+}
+
 int main() {
     checkCudaError("error before start.");
     int num_elem, num_sides;
-    int i, n_p;
+    int n_threads, n_blocks_elem, n_blocks_sides;
+    int i, n_p, t;
 
+    float dt; 
     float *V1x, *V1y, *V2x, *V2y, *V3x, *V3y;
-
     float *sides_x1, *sides_x2;
     float *sides_y1, *sides_y2;
 
@@ -561,15 +619,11 @@ int main() {
     int *elem_s1, *elem_s2, *elem_s3;
     int *left_side_number, *right_side_number;
 
-    n_p = 0;
-
     FILE *mesh_file;
-    mesh_file = fopen("canonical.out", "r");
 
-    // first line should be the number of elements
     char line[100];
-    fgets(line, 100, mesh_file);
-    sscanf(line, "%i", &num_elem);
+
+    float *c;
 
     // allocate integration points
     float *r1 = (float *) malloc(1 * sizeof(float));
@@ -585,6 +639,14 @@ int main() {
     float *oned_r = (float *) malloc(1 * sizeof(float));
     float *oned_w = (float *) malloc(1 * sizeof(float));
 
+    // set the order of the approximation & timestep
+    n_p = 0;
+    dt  = 0.001;
+
+    // open the mesh to get num_elem for allocations
+    mesh_file = fopen("crazysimple.out", "r");
+    fgets(line, 100, mesh_file);
+    sscanf(line, "%i", &num_elem);
 
     // allocate vertex points
     V1x = (float *) malloc(num_elem * sizeof(float));
@@ -612,7 +674,6 @@ int main() {
     for (i = 0; i < 3*num_elem; i++) {
         right_elem[i] = -1;
     }
-
     // read in the mesh and make all the mappings
     read_mesh(mesh_file, &num_sides, num_elem,
                          V1x, V1y, V2x, V2y, V3x, V3y,
@@ -625,6 +686,40 @@ int main() {
     // close the file
     fclose(mesh_file);
 
+    /*
+    printf("----------\n");
+    float dot, nx, ny, x, y, third_x, third_y, left_x, left_y;
+    for (i = 0; i < num_sides; i++) {
+       
+        x = sides_x2[i] - sides_x1[i];
+        y = sides_y2[i] - sides_y1[i];
+
+        switch(left_side_number[i]) {
+            case 1: 
+                left_x = V3x[left_elem[i]];
+                left_y = V3y[left_elem[i]];
+
+                break;
+            case 2:
+                left_x = V1x[left_elem[i]];
+                left_y = V1y[left_elem[i]];
+
+                break;
+            case 3:
+                left_x = V2x[left_elem[i]];
+                left_y = V2y[left_elem[i]];
+
+                break;
+        }
+        third_x = left_x - (sides_x1[i] + sides_x2[i]) / 2.;
+        third_y = left_y - (sides_y1[i] + sides_y2[i]) / 2.;
+    
+        // find the dot product between the normal vector and the third vetrex point
+        dot = -y*third_x + x*third_y;
+        printf("DOT = %f\n", dot);
+    }
+    */
+
     // initialize the gpu
     init_gpu(num_elem, num_sides, n_p,
              V1x, V1y, V2x, V2y, V3x, V3y,
@@ -634,59 +729,21 @@ int main() {
              elem_s1, elem_s2, elem_s3,
              left_elem, right_elem);
 
-    for (i = 0; i < num_sides; i++) {
-        printf(" ? (%i, %i) \n", left_side_number[i], right_side_number[i]);
-    }
-    //for (i = 0; i < num_elem; i++) {
-        //printf(" ? (%i, %i, %i) \n", elem_s1[i], elem_s2[i], elem_s3[i]);
-    //}
-    
-    int n_threads        = 128;
-    int n_blocks_elem    = (num_elem  / n_threads) + ((num_elem  % n_threads) ? 1 : 0);
-    int n_blocks_sides   = (num_sides / n_threads) + ((num_sides % n_threads) ? 1 : 0);
+    n_threads        = 128;
+    n_blocks_elem    = (num_elem  / n_threads) + ((num_elem  % n_threads) ? 1 : 0);
+    n_blocks_sides   = (num_sides / n_threads) + ((num_sides % n_threads) ? 1 : 0);
 
     // pre computations
     preval_side_length<<<n_blocks_sides, n_threads>>>(d_s_length, d_s_V1x, d_s_V1y, d_s_V2x, d_s_V2y, 
                                                       num_sides); 
     preval_jacobian<<<n_blocks_elem, n_threads>>>(d_J, d_V1x, d_V1y, d_V2x, d_V2y, d_V3x, d_V3y, num_elem); 
-    preval_normals<<<n_blocks_sides, n_threads>>>(d_Nx, d_Ny, d_s_V1x, d_s_V1y, d_s_V2x, d_s_V2y,
-                                                  d_V1x, d_V1y, d_V2x, d_V2y, d_V3x, d_V3y, 
-                                                  d_left_elem, num_sides); 
+    preval_normals<<<n_blocks_sides, n_threads>>>(d_Nx, d_Ny, 
+                                                  d_s_V1x, d_s_V1y, d_s_V2x, d_s_V2y,
+                                                  d_V1x, d_V1y, 
+                                                  d_V2x, d_V2y, 
+                                                  d_V3x, d_V3y, 
+                                                  d_left_elem, d_left_side_number, num_sides); 
     checkCudaError("error after prevals.");
-
-    float *Nx = (float *) malloc(num_sides * sizeof(float));
-    float *Ny = (float *) malloc(num_sides * sizeof(float)); 
-
-    cudaMemcpy(Nx, d_Nx, num_sides * sizeof(float), cudaMemcpyDeviceToHost);
-    cudaMemcpy(Ny, d_Ny, num_sides * sizeof(float), cudaMemcpyDeviceToHost);
-
-    for (i = 0; i < num_sides; i++) {
-        printf("normals = (%f, %f)\n", Nx[i], Ny[i]);
-    }
-
-    float *side_len = (float *)malloc(num_sides * sizeof(float));
-    //float *J = (float *)malloc(num_elem * sizeof(float));
-
-    cudaMemcpy(side_len, d_s_length, num_sides * sizeof(float), cudaMemcpyDeviceToHost);
-    //cudaMemcpy(J, d_J, num_elem * sizeof(float), cudaMemcpyDeviceToHost);
-
-    //for (i = 0; i < num_sides; i++) {
-        //printf("len = %f \n", side_len[i]);
-    //}
-
-    //float sum = 0;
-    //for (i = 0; i < num_elem; i++) {
-        //printf("J %i = %f\n", i, J[i]);
-        //sum += J[i];
-    //}
-
-    //printf("total area = %f \n", sum);
-
-    //free(side_len);
-    //free(J);
-
-    float dt = 0.001;
-    int t;
 
     // get the correct quadrature rules for this scheme
     set_quadrature(n_p, r1, r2, w, 
@@ -696,22 +753,23 @@ int main() {
                    oned_r, oned_w);
 
     // initial conditions
-    printf("num_elem = %i\n", num_elem);
+    printf("num_elem  = %i\n", num_elem);
+    printf("num_sides = %i\n", num_sides);
     init_conditions<<<n_blocks_elem, n_threads>>>(d_c, d_V1x, d_V1y, d_V2x, d_V2y, d_V3x, d_V3y,
                     d_r1, d_r2, d_w, n_p, num_elem);
     checkCudaError("error after initial conditions.");
 
     // no longer need vertices stored on the GPU
-    cudaFree(d_V1x);
-    cudaFree(d_V1y);
-    cudaFree(d_V2x);
-    cudaFree(d_V2y);
-    cudaFree(d_V3x);
-    cudaFree(d_V3y);
-    cudaFree(d_s_V1x);
-    cudaFree(d_s_V1y);
-    cudaFree(d_s_V2x);
-    cudaFree(d_s_V2y);
+    //cudaFree(d_V1x);
+    //cudaFree(d_V1y);
+    //cudaFree(d_V2x);
+    //cudaFree(d_V2y);
+    //cudaFree(d_V3x);
+    //cudaFree(d_V3y);
+    //cudaFree(d_s_V1x);
+    //cudaFree(d_s_V1y);
+    //cudaFree(d_s_V2x);
+    //cudaFree(d_s_V2y);
 
     checkCudaError("error before quadrature copy.");
 
@@ -731,7 +789,7 @@ int main() {
 
     checkCudaError("error before time integration.");
 
-    float *c = (float *) malloc(num_elem * (n_p + 1) * sizeof(float));
+    c = (float *) malloc(num_elem * (n_p + 1) * sizeof(float));
     cudaMemcpy(c, d_c, num_elem * (n_p + 1) * sizeof(float), cudaMemcpyDeviceToHost);
 
     printf("---------\n", c[i]);
@@ -748,7 +806,11 @@ int main() {
         }
     }
 
-    // free up memory
+
+    // free variables
+    free_gpu();
+    free(c);
+
     free(V1x);
     free(V1y);
     free(V2x);
@@ -767,6 +829,20 @@ int main() {
 
     free(left_elem);
     free(right_elem);
+    free(left_side_number);
+    free(right_side_number);
+
+    free(r1);
+    free(r2);
+    free(w);
+    free(s1_r1);
+    free(s1_r2);
+    free(s2_r1);
+    free(s2_r2);
+    free(s3_r1);
+    free(s3_r2);
+    free(oned_r);
+    free(oned_w);
 
     return 0;
 }

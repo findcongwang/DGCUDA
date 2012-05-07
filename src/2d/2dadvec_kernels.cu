@@ -127,7 +127,6 @@ __device__ float grad_basis_y(float x, float y, int i) {
 __device__ float quad(float *c, float *r1, float *r2, float *w, float J, int idx, int k, int N) {
     int i, j;
     float sum, u;
-    register float register_c[10];
 
     sum = 0.0;
     for (i = 0; i < N; i++) {
@@ -263,8 +262,6 @@ __global__ void preval_jacobian(float *J,
  * computes the normal vectors for each element along each side.
  * THREADS: num_sides
  *
- * TODO: what the hell direction does this point? somehow i need to always
- *       make them point out of the cell, so... remember somehow?
  */
 __global__ void preval_normals(float *Nx, float *Ny, 
                           float *s_V1x, float *s_V1y, 
@@ -272,64 +269,65 @@ __global__ void preval_normals(float *Nx, float *Ny,
                           float *V1x, float *V1y, 
                           float *V2x, float *V2y, 
                           float *V3x, float *V3y,
-                          int *left_elem, int num_sides) {
-   int idx = blockDim.x * blockIdx.x + threadIdx.x;
+                          int *left_elem, int *left_side_number, int num_sides) {
 
-   if (idx < num_sides) {
-       float x, y, length;
-       float v1x, v1y, v2x, v2y, v3x, v3y;
-       float sv1x, sv1y, sv2x, sv2y;
-       float dot, left_x, left_y;
-       int left_idx;
+    int idx = blockDim.x * blockIdx.x + threadIdx.x;
 
-       // read in global data
-       left_idx = left_elem[idx];
-       v1x = V1x[left_idx];
-       v1y = V1y[left_idx];
-       v2x = V2x[left_idx];
-       v2y = V2y[left_idx];
-       v3x = V3x[left_idx];
-       v3y = V3y[left_idx];
-       sv1x = s_V1x[idx];
-       sv1y = s_V1y[idx];
-       sv2x = s_V2x[idx];
-       sv2y = s_V2y[idx];
+    if (idx < num_sides) {
+        float x, y, length;
+        float sv1x, sv1y, sv2x, sv2y;
+        float dot, left_x, left_y;
+        float third_x, third_y;
+        int left_idx, side;
+    
+        // get left side's vertices
+        left_idx = left_elem[idx];
+        side     = left_side_number[idx];
 
-       // lengths of the vector components
-       x = sv1x - sv2x;
-       y = sv1y - sv2y;
+        sv1x = s_V1x[idx];
+        sv1y = s_V1y[idx];
+        sv2x = s_V2x[idx];
+        sv2y = s_V2y[idx];
+    
+        // lengths of the vector components
+        x = sv2x - sv1x;
+        y = sv2y - sv1y;
+    
+        // normalize
+        length = sqrtf(powf(x, 2) + powf(y, 2));
+    
+        // make it point the correct direction by learning the third vertex point
+        switch (side) {
+            case 1: 
+                left_x = V3x[left_idx];
+                left_y = V3y[left_idx];
 
-       // normalize
-       length = sqrtf(powf(x, 2) + powf(y, 2));
+                break;
+            case 2:
+                left_x = V1x[left_idx];
+                left_y = V1y[left_idx];
 
-       // make it point the correct direction by learning the third vertex point
-       // coordinates from the left element
-       if  ((v1x == sv1x && v1y == sv1y && v2x == sv2x && v2y == sv2y) ||
-            (v1x == sv2x && v1y == sv2y && v2x == sv1x && v2y == sv1y)) {
-           left_x = v3x;
-           left_y = v3y;
-       }
-       else if  ((v2x == sv1x && v2y == sv1y && v3x == sv2x && v3y == sv2y) ||
-                 (v2x == sv2x && v2y == sv2y && v3x == sv1x && v3y == sv1y)) {
-           left_x = v1x;
-           left_y = v1y;
-       }
-       // could just be else
-       else if  ((v1x == sv1x && v1y == sv1y && v3x == sv2x && v3y == sv2y) ||
-                 (v1x == sv2x && v1y == sv2y && v3x == sv1x && v3y == sv1y)) {
-           left_x = v2x;
-           left_y = v2y;
-       }
+                break;
+            case 3:
+                left_x = V2x[left_idx];
+                left_y = V2y[left_idx];
 
-       // find the dot product between the normal vector and the third vetrex point
-       dot = -y*left_x + x*left_y;
+                break;
+        }
 
-       // correct the direction
-       length = (dot > 0) ? -length : length;
-
-       // store the result
-       Nx[idx] = -y / length;
-       Ny[idx] =  x / length;
+        // create the vector pointing towards the third vertex point
+        third_x = left_x - (sv1x + sv2x) / 2.;
+        third_y = left_y - (sv1y + sv2y) / 2.;
+    
+        // find the dot product between the normal vector and the third vetrex point
+        dot = -y*third_x + x*third_y;
+    
+        // if the dot product is negative, reverse direction to point left to right
+        length = (dot < 0) ? -length : length;
+    
+        // store the result
+        Nx[idx] = -y / length;
+        Ny[idx] =  x / length;
     }
 }
 
@@ -424,6 +422,12 @@ __global__ void eval_riemann(float *c, float *left_riemann_rhs, float *right_rie
          
         // get the integration points for the right element's side
         switch (right_side) {
+            case 0:
+                for (i = 0; i < (n_p + 1); i++) {
+                    right_r1[i] = left_r1[i];
+                    right_r2[i] = left_r2[i];
+                }
+                break;
             case 1: 
                 for (i = 0; i < (n_p + 1); i++) {
                     right_r1[i] = s1_r1[i];
@@ -476,7 +480,7 @@ __global__ void eval_riemann(float *c, float *left_riemann_rhs, float *right_rie
         // store this side's contribution in the riemann rhs vector
         //riemann_rhs[idx] = len / 2. * left_sum;
         // store these in different places & figure out which side to use
-        left_riemann_rhs[idx] =   len / 2. * left_sum;
+        left_riemann_rhs[idx]  =  len / 2. * left_sum;
         right_riemann_rhs[idx] = -len / 2. * right_sum;
     }
 }
@@ -553,7 +557,7 @@ __global__ void eval_rhs(float *c, float *quad_rhs, float *left_riemann_rhs, flo
         }
 
         // calculate the coefficient c
-        c[idx] = dt * (quad_rhs[idx] + s1 + s2 + s3);
+        c[idx] = s1 + s2 + s3;//dt * (quad_rhs[idx] + s1 + s2 + s3);
     }
 }
 
