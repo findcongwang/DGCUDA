@@ -647,7 +647,7 @@ int main() {
     dt  = 0.001;
 
     // open the mesh to get num_elem for allocations
-    mesh_file = fopen("crazysimple.out", "r");
+    mesh_file = fopen("simple.out", "r");
     fgets(line, 100, mesh_file);
     sscanf(line, "%i", &num_elem);
 
