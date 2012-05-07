@@ -26,7 +26,7 @@ void set_quadrature(int p,
             s1_r2[0] = 0.0;
             
             s2_r1[0] = 0.25;
-            s2_r1[0] = 0.25;
+            s2_r2[0] = 0.25;
 
             s3_r1[0] = 0.0;
             s3_r2[0] = 0.5;
@@ -317,14 +317,14 @@ void read_mesh(FILE *mesh_file,
 }
 
 void time_integrate(float *c, float dt, int n_p, int num_elem, int num_sides) {
-    int n_threads = 128;
+    int n_threads = 256;
 
     int n_blocks_elem    = (num_elem  / n_threads) + ((num_elem  % n_threads) ? 1 : 0);
     int n_blocks_sides   = (num_sides / n_threads) + ((num_sides % n_threads) ? 1 : 0);
 
-    int num_rhs = (n_p + 1) * num_elem;
+    //int num_rhs = (n_p + 1) * num_elem;
 
-    float *rhs = (float *) malloc(num_elem * (n_p + 1) * sizeof(float));
+    float *rhs = (float *) malloc(num_sides * (n_p + 1) * sizeof(float));
 
     // stage 1
     eval_riemann<<<n_blocks_sides, n_threads>>>
@@ -344,6 +344,11 @@ void time_integrate(float *c, float dt, int n_p, int num_elem, int num_sides) {
     eval_quad<<<n_blocks_elem, n_threads>>>
                     (d_c, d_quad_rhs, d_r1, d_r2, d_w, d_J, n_p, num_elem);
     cudaThreadSynchronize();
+    //cudaMemcpy(rhs, d_left_riemann_rhs, num_sides * (n_p + 1) * sizeof(float), cudaMemcpyDeviceToHost);
+    //for (int i = 0; i < num_sides; i++) {
+        //printf(" > %f \n", rhs[i]);
+    //}
+    free(rhs);
 
     /////////////////////
     // GOOD: the quadrature is giving us zeros for n_p = 0;
@@ -358,10 +363,6 @@ void time_integrate(float *c, float dt, int n_p, int num_elem, int num_sides) {
                                           d_elem_s1, d_elem_s2, d_elem_s3, 
                                           d_left_elem, dt, num_elem);
     cudaThreadSynchronize();
-    cudaMemcpy(rhs, d_k1, num_elem * (n_p + 1) * sizeof(float), cudaMemcpyDeviceToHost);
-    for (int i = 0; i < num_elem * (n_p + 1); i++) {
-        printf(" > %f \n", rhs[i]);
-    }
 
     rk4_tempstorage<<<n_blocks_elem, n_threads>>>(d_c, d_kstar, d_k1, 0.5, n_p, num_elem);
     cudaThreadSynchronize();
@@ -610,7 +611,9 @@ int main() {
     int n_threads, n_blocks_elem, n_blocks_sides;
     int i, n_p, t;
 
+    float dot, x, y, third_x, third_y, left_x, left_y, length;
     float dt; 
+    float *Nx, *Ny;
     float *V1x, *V1y, *V2x, *V2y, *V3x, *V3y;
     float *sides_x1, *sides_x2;
     float *sides_y1, *sides_y2;
@@ -686,9 +689,9 @@ int main() {
     // close the file
     fclose(mesh_file);
 
-    /*
-    printf("----------\n");
-    float dot, nx, ny, x, y, third_x, third_y, left_x, left_y;
+    Nx = (float *) malloc(num_sides * sizeof(float));
+    Ny = (float *) malloc(num_sides * sizeof(float));
+
     for (i = 0; i < num_sides; i++) {
        
         x = sides_x2[i] - sides_x1[i];
@@ -715,10 +718,17 @@ int main() {
         third_y = left_y - (sides_y1[i] + sides_y2[i]) / 2.;
     
         // find the dot product between the normal vector and the third vetrex point
+        length = sqrtf(powf(x,2) + powf(y,2));
         dot = -y*third_x + x*third_y;
-        printf("DOT = %f\n", dot);
+
+        // if the dot product is negative, reverse direction
+        if (dot < 0) {
+            length *= -1;
+        }
+
+        Nx[i] = -y / length;
+        Ny[i] =  x / length;
     }
-    */
 
     // initialize the gpu
     init_gpu(num_elem, num_sides, n_p,
@@ -737,13 +747,16 @@ int main() {
     preval_side_length<<<n_blocks_sides, n_threads>>>(d_s_length, d_s_V1x, d_s_V1y, d_s_V2x, d_s_V2y, 
                                                       num_sides); 
     preval_jacobian<<<n_blocks_elem, n_threads>>>(d_J, d_V1x, d_V1y, d_V2x, d_V2y, d_V3x, d_V3y, num_elem); 
-    preval_normals<<<n_blocks_sides, n_threads>>>(d_Nx, d_Ny, 
-                                                  d_s_V1x, d_s_V1y, d_s_V2x, d_s_V2y,
-                                                  d_V1x, d_V1y, 
-                                                  d_V2x, d_V2y, 
-                                                  d_V3x, d_V3y, 
-                                                  d_left_elem, d_left_side_number, num_sides); 
+    //preval_normals<<<n_blocks_sides, n_threads>>>(d_Nx, d_Ny, 
+                                                  //d_s_V1x, d_s_V1y, d_s_V2x, d_s_V2y,
+                                                  //d_V1x, d_V1y, 
+                                                  //d_V2x, d_V2y, 
+                                                  //d_V3x, d_V3y, 
+                                                  //d_left_elem, d_left_side_number, num_sides); 
     checkCudaError("error after prevals.");
+
+    cudaMemcpy(d_Nx, Nx, num_sides * sizeof(float), cudaMemcpyHostToDevice);
+    cudaMemcpy(d_Ny, Ny, num_sides * sizeof(float), cudaMemcpyHostToDevice);
 
     // get the correct quadrature rules for this scheme
     set_quadrature(n_p, r1, r2, w, 
@@ -807,8 +820,10 @@ int main() {
     }
 
 
+
     // free variables
     free_gpu();
+    
     free(c);
 
     free(V1x);
@@ -843,6 +858,9 @@ int main() {
     free(s3_r2);
     free(oned_r);
     free(oned_w);
+
+    free(Nx);
+    free(Ny);
 
     return 0;
 }

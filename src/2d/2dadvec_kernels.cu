@@ -324,7 +324,7 @@ __global__ void preval_normals(float *Nx, float *Ny,
     
         // if the dot product is negative, reverse direction to point left to right
         length = (dot < 0) ? -length : length;
-    
+
         // store the result
         Nx[idx] = -y / length;
         Ny[idx] =  x / length;
