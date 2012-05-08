@@ -13,15 +13,37 @@ void set_quadrature(int p,
                     float *s1_r1, float *s1_r2,
                     float *s2_r1, float *s2_r2,
                     float *s3_r1, float *s3_r2,
-                    float *oned_r, float *oned_w) {
+                    float *oned_r, float *oned_w,
+                    int *n_quad, int *n_quad1d) {
+    /*
+     * The sides are mapped to the canonical element, so we want the integration points
+     * for the boundary integrals for sides s1, s2, and s3 as shown below:
+
+     r2     |\
+     ^      | \
+     |      |  \
+     |      |   \
+     |   s3 |    \ s2
+     |      |     \
+     |      |      \
+     |      |       \
+     |      |________\
+     |         s1
+     |
+     ------------------------> r1
+
+    *
+    */
     switch (p) {
         case 0:
-            // set 2d integration points and weights
+            // set 2d 
             r1[0] = 0.333333333333333;
             r2[0] = 0.333333333333333;
             w [0] = 1.0;
 
-            // set 1d integration points and weights
+            *n_quad = 1;
+
+            // set 1d 
             s1_r1[0] = 0.5;
             s1_r2[0] = 0.0;
             
@@ -32,9 +54,12 @@ void set_quadrature(int p,
             s3_r2[0] = 0.5;
 
             oned_w[0] = 1.0;
+            
+            *n_quad1d = 1;
 
             break;
         case 2:
+            // set 2d
             r1[0] = 0.166666666666666;
             r2[0] = 0.166666666666666;
             w[0]  = 0.333333333333333;
@@ -44,6 +69,12 @@ void set_quadrature(int p,
             r1[2] = 0.166666666666666;
             r2[2] = 0.666666666666666;
             w[2]  = 0.333333333333333;
+
+            *n_quad = 3;
+            
+            // set 1d
+
+
             break;
     }
 }
@@ -316,7 +347,7 @@ void read_mesh(FILE *mesh_file,
     *num_sides = numsides;
 }
 
-void time_integrate(float *c, float dt, int n_p, int num_elem, int num_sides) {
+void time_integrate(float *c, float dt, int n_quad, int n_quad1d, int n_p, int num_elem, int num_sides) {
     int n_threads = 256;
 
     int n_blocks_elem    = (num_elem  / n_threads) + ((num_elem  % n_threads) ? 1 : 0);
@@ -324,7 +355,7 @@ void time_integrate(float *c, float dt, int n_p, int num_elem, int num_sides) {
 
     //int num_rhs = (n_p + 1) * num_elem;
 
-    float *rhs = (float *) malloc(num_sides * (n_p + 1) * sizeof(float));
+    float *rhs = (float *) malloc(num_elem * (n_p + 1) * sizeof(float));
 
     // stage 1
     eval_riemann<<<n_blocks_sides, n_threads>>>
@@ -336,18 +367,19 @@ void time_integrate(float *c, float dt, int n_p, int num_elem, int num_sides) {
                      d_oned_r, d_oned_w, 
                      d_left_elem, d_right_elem,
                      d_left_side_number, d_right_side_number,
-                     d_Nx, d_Ny, n_p, num_sides, num_elem);
+                     d_Nx, d_Ny, 
+                     n_quad1d, n_p, num_sides, num_elem);
     cudaThreadSynchronize();
 
     checkCudaError("error after stage 1: eval_riemann");
 
     eval_quad<<<n_blocks_elem, n_threads>>>
-                    (d_c, d_quad_rhs, d_r1, d_r2, d_w, d_J, n_p, num_elem);
+                    (d_c, d_quad_rhs, d_r1, d_r2, d_w, d_J, n_quad, n_p, num_elem);
     cudaThreadSynchronize();
-    //cudaMemcpy(rhs, d_left_riemann_rhs, num_sides * (n_p + 1) * sizeof(float), cudaMemcpyDeviceToHost);
-    //for (int i = 0; i < num_sides; i++) {
-        //printf(" > %f \n", rhs[i]);
-    //}
+    cudaMemcpy(rhs, d_c, num_elem * (n_p + 1) * sizeof(float), cudaMemcpyDeviceToHost);
+    for (int i = 0; i < num_elem; i++) {
+        printf(" > %f \n", rhs[i]);
+    }
     free(rhs);
 
     /////////////////////
@@ -361,7 +393,7 @@ void time_integrate(float *c, float dt, int n_p, int num_elem, int num_sides) {
 
     eval_rhs<<<n_blocks_elem, n_threads>>>(d_k1, d_quad_rhs, d_left_riemann_rhs, d_right_riemann_rhs, 
                                           d_elem_s1, d_elem_s2, d_elem_s3, 
-                                          d_left_elem, dt, num_elem);
+                                          d_left_elem, dt, n_p, num_sides, num_elem);
     cudaThreadSynchronize();
 
     rk4_tempstorage<<<n_blocks_elem, n_threads>>>(d_c, d_kstar, d_k1, 0.5, n_p, num_elem);
@@ -379,16 +411,17 @@ void time_integrate(float *c, float dt, int n_p, int num_elem, int num_sides) {
                      d_oned_r, d_oned_w, 
                      d_left_elem, d_right_elem,
                      d_left_side_number, d_right_side_number,
-                     d_Nx, d_Ny, n_p, num_sides, num_elem);
+                     d_Nx, d_Ny, 
+                     n_quad1d, n_p, num_sides, num_elem);
     cudaThreadSynchronize();
 
     eval_quad<<<n_blocks_elem, n_threads>>>
-                    (d_kstar, d_quad_rhs, d_r1, d_r2, d_w, d_J, n_p, num_elem);
+                    (d_kstar, d_quad_rhs, d_r1, d_r2, d_w, d_J, n_quad, n_p, num_elem);
     cudaThreadSynchronize();
 
     eval_rhs<<<n_blocks_elem, n_threads>>>(d_k2, d_quad_rhs, d_left_riemann_rhs, d_right_riemann_rhs,
                                           d_elem_s1, d_elem_s2, d_elem_s3, 
-                                          d_left_elem, dt, num_elem);
+                                          d_left_elem, dt, n_p, num_sides, num_elem);
     cudaThreadSynchronize();
 
     rk4_tempstorage<<<n_blocks_elem, n_threads>>>(d_c, d_kstar, d_k2, 0.5, n_p, num_elem);
@@ -406,16 +439,17 @@ void time_integrate(float *c, float dt, int n_p, int num_elem, int num_sides) {
                      d_oned_r, d_oned_w, 
                      d_left_elem, d_right_elem,
                      d_left_side_number, d_right_side_number,
-                     d_Nx, d_Ny, n_p, num_sides, num_elem);
+                     d_Nx, d_Ny, 
+                     n_quad1d, n_p, num_sides, num_elem);
     cudaThreadSynchronize();
 
     eval_quad<<<n_blocks_elem, n_threads>>>
-                    (d_kstar, d_quad_rhs, d_r1, d_r2, d_w, d_J, n_p, num_elem);
+                    (d_kstar, d_quad_rhs, d_r1, d_r2, d_w, d_J, n_quad, n_p, num_elem);
     cudaThreadSynchronize();
 
     eval_rhs<<<n_blocks_elem, n_threads>>>(d_k3, d_quad_rhs, d_left_riemann_rhs, d_right_riemann_rhs, 
                                           d_elem_s1, d_elem_s2, d_elem_s3, 
-                                          d_left_elem, dt, num_elem);
+                                          d_left_elem, dt, n_p, num_sides, num_elem);
     cudaThreadSynchronize();
 
     rk4_tempstorage<<<n_blocks_elem, n_threads>>>(d_c, d_kstar, d_k3, 1.0, n_p, num_elem);
@@ -433,16 +467,17 @@ void time_integrate(float *c, float dt, int n_p, int num_elem, int num_sides) {
                      d_oned_r, d_oned_w, 
                      d_left_elem, d_right_elem,
                      d_left_side_number, d_right_side_number,
-                     d_Nx, d_Ny, n_p, num_sides, num_elem);
+                     d_Nx, d_Ny, 
+                     n_quad1d, n_p, num_sides, num_elem);
     cudaThreadSynchronize();
 
     eval_quad<<<n_blocks_elem, n_threads>>>
-                    (d_kstar, d_quad_rhs, d_r1, d_r2, d_w, d_J, n_p, num_elem);
+                    (d_kstar, d_quad_rhs, d_r1, d_r2, d_w, d_J, n_quad, n_p, num_elem);
     cudaThreadSynchronize();
 
     eval_rhs<<<n_blocks_elem, n_threads>>>(d_k4, d_quad_rhs, d_left_riemann_rhs, d_right_riemann_rhs, 
                                           d_elem_s1, d_elem_s2, d_elem_s3, 
-                                          d_left_elem, dt, num_elem);
+                                          d_left_elem, dt, n_p, num_sides, num_elem);
     cudaThreadSynchronize();
 
     checkCudaError("error after stage 4.");
@@ -471,9 +506,9 @@ void init_gpu(int num_elem, int num_sides, int n_p,
     // allocate allllllllllll the memory.
     // TODO: this takes a really really long time on valor.
     cudaMalloc((void **) &d_c,        num_elem * (n_p + 1) * sizeof(float));
-    cudaMalloc((void **) &d_quad_rhs, num_elem * sizeof(float));
-    cudaMalloc((void **) &d_left_riemann_rhs,  num_sides * sizeof(float));
-    cudaMalloc((void **) &d_right_riemann_rhs, num_sides * sizeof(float));
+    cudaMalloc((void **) &d_quad_rhs, num_elem * (n_p + 1) * sizeof(float));
+    cudaMalloc((void **) &d_left_riemann_rhs,  num_sides * (n_p + 1) * sizeof(float));
+    cudaMalloc((void **) &d_right_riemann_rhs, num_sides * (n_p + 1) * sizeof(float));
 
     cudaMalloc((void **) &d_kstar, num_elem * (n_p + 1) * sizeof(float));
     cudaMalloc((void **) &d_k1, num_elem * (n_p + 1) * sizeof(float));
@@ -525,6 +560,7 @@ void init_gpu(int num_elem, int num_sides, int n_p,
 
     // set quad_rhs to 0
     //cudaMemset(d_quad_rhs, 0., num_elem * sizeof(float));
+    cudaMemset(d_c, 0., num_elem * (n_p + 1) * sizeof(float));
 
     // copy over data
     cudaMemcpy(d_s_V1x, sides_x1, num_sides * sizeof(float), cudaMemcpyHostToDevice);
@@ -609,7 +645,7 @@ int main() {
     checkCudaError("error before start.");
     int num_elem, num_sides;
     int n_threads, n_blocks_elem, n_blocks_sides;
-    int i, n_p, t;
+    int i, n_p, t, n_quad, n_quad1d;
 
     float dot, x, y, third_x, third_y, left_x, left_y, length;
     float dt; 
@@ -647,7 +683,7 @@ int main() {
     dt  = 0.001;
 
     // open the mesh to get num_elem for allocations
-    mesh_file = fopen("simple.out", "r");
+    mesh_file = fopen("supersimple.out", "r");
     fgets(line, 100, mesh_file);
     sscanf(line, "%i", &num_elem);
 
@@ -692,6 +728,9 @@ int main() {
     Nx = (float *) malloc(num_sides * sizeof(float));
     Ny = (float *) malloc(num_sides * sizeof(float));
 
+    // ugh, this is so dumb. the stupid gpu (on gale) won't 
+    // reverse the normal vectors all the time. it'll sometimes do it,
+    // sometimes not. fucking ridiculous. so here it's done on the cpu.
     for (i = 0; i < num_sides; i++) {
        
         x = sides_x2[i] - sides_x1[i];
@@ -763,7 +802,8 @@ int main() {
                    s1_r1, s1_r2, 
                    s2_r1, s2_r2, 
                    s3_r1, s3_r2, 
-                   oned_r, oned_w);
+                   oned_r, oned_w,
+                   &n_quad, &n_quad1d);
 
     // initial conditions
     printf("num_elem  = %i\n", num_elem);
@@ -812,7 +852,7 @@ int main() {
 
     // time integration
     for (t = 0; t < 1; t++) {
-        time_integrate(c, dt, n_p, num_elem, num_sides);
+        time_integrate(c, dt, n_quad, n_quad1d, n_p, num_elem, num_sides);
         printf("---------\n", c[i]);
         for (i = 0; i < num_elem; i++) {
             printf("%f \n", c[i]);
