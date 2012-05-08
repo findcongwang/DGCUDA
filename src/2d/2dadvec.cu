@@ -13,7 +13,7 @@ void set_quadrature(int p,
                     float *s1_r1, float *s1_r2,
                     float *s2_r1, float *s2_r2,
                     float *s3_r1, float *s3_r2,
-                    float *oned_r, float *oned_w,
+                    float *oned_w,
                     int *n_quad, int *n_quad1d) {
     /*
      * The sides are mapped to the canonical element, so we want the integration points
@@ -364,7 +364,7 @@ void time_integrate(float *c, float dt, int n_quad, int n_quad1d, int n_p, int n
                      d_s1_r1, d_s1_r2,
                      d_s2_r1, d_s2_r2,
                      d_s3_r1, d_s3_r2,
-                     d_oned_r, d_oned_w, 
+                     d_oned_w,
                      d_left_elem, d_right_elem,
                      d_left_side_number, d_right_side_number,
                      d_Nx, d_Ny, 
@@ -408,7 +408,7 @@ void time_integrate(float *c, float dt, int n_quad, int n_quad1d, int n_p, int n
                      d_s1_r1, d_s1_r2,
                      d_s2_r1, d_s2_r2,
                      d_s3_r1, d_s3_r2,
-                     d_oned_r, d_oned_w, 
+                     d_oned_w, 
                      d_left_elem, d_right_elem,
                      d_left_side_number, d_right_side_number,
                      d_Nx, d_Ny, 
@@ -436,7 +436,7 @@ void time_integrate(float *c, float dt, int n_quad, int n_quad1d, int n_p, int n
                      d_s1_r1, d_s1_r2,
                      d_s2_r1, d_s2_r2,
                      d_s3_r1, d_s3_r2,
-                     d_oned_r, d_oned_w, 
+                     d_oned_w, 
                      d_left_elem, d_right_elem,
                      d_left_side_number, d_right_side_number,
                      d_Nx, d_Ny, 
@@ -464,7 +464,7 @@ void time_integrate(float *c, float dt, int n_quad, int n_quad1d, int n_p, int n
                      d_s1_r1, d_s1_r2,
                      d_s2_r1, d_s2_r2,
                      d_s3_r1, d_s3_r2,
-                     d_oned_r, d_oned_w, 
+                     d_oned_w, 
                      d_left_elem, d_right_elem,
                      d_left_side_number, d_right_side_number,
                      d_Nx, d_Ny, 
@@ -520,7 +520,6 @@ void init_gpu(int num_elem, int num_sides, int n_p,
     cudaMalloc((void **) &d_r2, (n_p + 1) * sizeof(float));
     cudaMalloc((void **) &d_w , (n_p + 1) * sizeof(float));
 
-    cudaMalloc((void **) &d_oned_r, (n_p + 1) * sizeof(float));
     cudaMalloc((void **) &d_oned_w, (n_p + 1) * sizeof(float));
 
     cudaMalloc((void **) &d_J, num_elem * sizeof(float));
@@ -558,9 +557,8 @@ void init_gpu(int num_elem, int num_sides, int n_p,
     cudaMalloc((void **) &d_right_elem, num_sides * sizeof(int));
     cudaMalloc((void **) &d_left_elem , num_sides * sizeof(int));
 
-    // set quad_rhs to 0
-    //cudaMemset(d_quad_rhs, 0., num_elem * sizeof(float));
-    cudaMemset(d_c, 0., num_elem * (n_p + 1) * sizeof(float));
+    // set d_c to 0 not necessary
+    //cudaMemset(d_c, 0., num_elem * (n_p + 1) * sizeof(float));
 
     // copy over data
     cudaMemcpy(d_s_V1x, sides_x1, num_sides * sizeof(float), cudaMemcpyHostToDevice);
@@ -602,7 +600,6 @@ void free_gpu() {
     cudaFree(d_r2);
     cudaFree(d_w);
 
-    cudaFree(d_oned_r);
     cudaFree(d_oned_w);
 
     cudaFree(d_J);
@@ -675,7 +672,6 @@ int main() {
     float *s3_r1 = (float *) malloc(1 * sizeof(float));
     float *s3_r2 = (float *) malloc(1 * sizeof(float));
 
-    float *oned_r = (float *) malloc(1 * sizeof(float));
     float *oned_w = (float *) malloc(1 * sizeof(float));
 
     // set the order of the approximation & timestep
@@ -802,7 +798,7 @@ int main() {
                    s1_r1, s1_r2, 
                    s2_r1, s2_r2, 
                    s3_r1, s3_r2, 
-                   oned_r, oned_w,
+                   oned_w,
                    &n_quad, &n_quad1d);
 
     // initial conditions
@@ -837,7 +833,6 @@ int main() {
     cudaMemcpy(d_s3_r1, s3_r1, 1 * sizeof(float), cudaMemcpyHostToDevice);
     cudaMemcpy(d_s3_r2, s3_r2, 1 * sizeof(float), cudaMemcpyHostToDevice);
 
-    cudaMemcpy(d_oned_r, oned_r, 1 * sizeof(float), cudaMemcpyHostToDevice);
     cudaMemcpy(d_oned_w, oned_w, 1 * sizeof(float), cudaMemcpyHostToDevice);
 
     checkCudaError("error before time integration.");
@@ -858,8 +853,6 @@ int main() {
             printf("%f \n", c[i]);
         }
     }
-
-
 
     // free variables
     free_gpu();
@@ -896,7 +889,6 @@ int main() {
     free(s2_r2);
     free(s3_r1);
     free(s3_r2);
-    free(oned_r);
     free(oned_w);
 
     free(Nx);

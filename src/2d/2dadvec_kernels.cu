@@ -26,7 +26,6 @@ float *d_k4;
 float *d_r1;     // integration points (x) for 2d integration
 float *d_r2;     // integration points (y) for 2d integration
 float *d_w;      // weights for 2d integration
-float *d_oned_r; // integration points (x) for 1d integration
 float *d_oned_w; // weights for 2d integration
 
 // evaluation points for the boundary integrals depending on the side
@@ -348,7 +347,7 @@ __global__ void eval_riemann(float *c, float *left_riemann_rhs, float *right_rie
                         float *s1_r1, float *s1_r2,
                         float *s2_r1, float *s2_r2,
                         float *s3_r1, float *s3_r2,
-                        float *oned_r, float *oned_w,
+                        float *oned_w,
                         int *left_idx_list, int *right_idx_list,
                         int *left_side_number, int *right_side_number, 
                         float *Nx, float *Ny, 
