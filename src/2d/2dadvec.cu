@@ -44,20 +44,24 @@ void set_quadrature(int p,
             *n_quad = 1;
 
             // set 1d 
+            // s1
             s1_r1[0] = 0.5;
             s1_r2[0] = 0.0;
             
-            s2_r1[0] = 0.25;
-            s2_r2[0] = 0.25;
+            // s2
+            s2_r1[0] = 0.5;
+            s2_r2[0] = 0.5;
 
+            // s3
             s3_r1[0] = 0.0;
             s3_r2[0] = 0.5;
 
-            oned_w[0] = 1.0;
+            oned_w[0] = 2.0;
             
             *n_quad1d = 1;
 
             break;
+        case 1:
         case 2:
             // set 2d
             r1[0] = 0.166666666666666;
@@ -73,6 +77,29 @@ void set_quadrature(int p,
             *n_quad = 3;
             
             // set 1d
+            // s1
+            s1_r1[0] = -1./sqrt(3.) * 0.5 + 0.5;
+            s1_r2[0] = 0;
+            s1_r1[1] = 1./sqrt(3.) * 0.5 + 0.5;
+            s1_r2[1] = 0;
+
+            // s2
+            s1_r1[0] = -1./sqrt(3.) * 0.5 + 0.5;
+            s1_r2[0] = -1./sqrt(3.) * 0.5 + 0.5;
+            s1_r1[1] = 1./sqrt(3.) * 0.5 + 0.5;
+            s1_r2[1] = 1./sqrt(3.) * 0.5 + 0.5;
+
+    
+            // s3
+            s1_r1[0] = 0;
+            s1_r2[0] = -1./sqrt(3.) * 0.5 + 0.5;
+            s1_r1[1] = 0;
+            s1_r2[1] = 1./sqrt(3.) * 0.5 + 0.5;
+
+            oned_w[0] = 1.;
+            oned_w[1] = 1.;
+
+            *n_quad1d = 2;
 
 
             break;
@@ -675,7 +702,7 @@ int main() {
     float *oned_w = (float *) malloc(1 * sizeof(float));
 
     // set the order of the approximation & timestep
-    n_p = 0;
+    n_p = 1;
     dt  = 0.001;
 
     // open the mesh to get num_elem for allocations
@@ -849,7 +876,7 @@ int main() {
     for (t = 0; t < 1; t++) {
         time_integrate(c, dt, n_quad, n_quad1d, n_p, num_elem, num_sides);
         printf("---------\n", c[i]);
-        for (i = 0; i < num_elem; i++) {
+        for (i = 0; i < num_elem * (n_p + 1); i++) {
             printf("%f \n", c[i]);
         }
     }

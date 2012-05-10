@@ -93,10 +93,12 @@ __device__ float flux_y(float u) {
 
 /* basis functions
  *
+ * using the multidimensional normalized lagrange polynomials
  */
 __device__ float basis(float x, float y, int i) {
     switch (i) {
-        case 0: return 1.41421356;
+        case 0: return 1.414213562373095;
+        case 1: return -1.999999999999999 + 5.999999999999999 * x;
     }
     return -1;
 }
@@ -108,13 +110,13 @@ __device__ float grad_basis_x(float x, float y, int i) {
     switch (i) {
         case 0: return 0;
     }
-    return -1;
+    return 0;
 }
 __device__ float grad_basis_y(float x, float y, int i) {
     switch (i) {
         case 0: return 0;
     }
-    return -1;
+    return 0;
 }
 
 /* quadrature 
