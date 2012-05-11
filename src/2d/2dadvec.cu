@@ -101,7 +101,6 @@ void set_quadrature(int p,
 
             *n_quad1d = 2;
 
-
             break;
     }
 }
@@ -669,7 +668,7 @@ int main() {
     checkCudaError("error before start.");
     int num_elem, num_sides;
     int n_threads, n_blocks_elem, n_blocks_sides;
-    int i, n_p, t, n_quad, n_quad1d;
+    int i, n, n_p, t, n_quad, n_quad1d;
 
     float dot, x, y, third_x, third_y, left_x, left_y, length;
     float dt; 
@@ -702,7 +701,8 @@ int main() {
     float *oned_w = (float *) malloc(1 * sizeof(float));
 
     // set the order of the approximation & timestep
-    n_p = 1;
+    n   = 1;
+    n_p = (n + 1) * (n + 2) / 2;
     dt  = 0.001;
 
     // open the mesh to get num_elem for allocations

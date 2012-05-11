@@ -98,7 +98,9 @@ __device__ float flux_y(float u) {
 __device__ float basis(float x, float y, int i) {
     switch (i) {
         case 0: return 1.414213562373095;
-        case 1: return -1.999999999999999 + 5.999999999999999 * x;
+        case 1: return 1.414213562373095 + 6*x;
+        case 2: return -3.464101615137754 + 3.464101615137750*x + 6.928203230275512*x*y;
+        case 3: return  2.449489742783153E+00 + -1.959591794226528E+01*x + 1.648597081617952E-14*x*y + 2.449489742783160E+01*x*x;
     }
     return -1;
 }
