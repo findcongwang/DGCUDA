@@ -96,11 +96,11 @@ __device__ float flux_y(float u) {
  * using the multidimensional normalized lagrange polynomials
  */
 __device__ float basis(float x, float y, int i) {
-    switch (i) {
+switch (i) {
         case 0: return 1.414213562373095;
         case 1: return 1.414213562373095 + 6*x;
-        case 2: return -3.464101615137754 + 3.464101615137750*x + 6.928203230275512*x*y;
-        case 3: return  2.449489742783153E+00 + -1.959591794226528E+01*x + 1.648597081617952E-14*x*y + 2.449489742783160E+01*x*x;
+        case 2: return -3.464101615137754 + 3.464101615137750*x + 6.928203230275512*y;
+        case 3: return  2.449489742783153E+00 + -1.959591794226528E+01*x + 1.648597081617952E-14*y + 2.449489742783160E+01*x*x;
     }
     return -1;
 }
@@ -111,12 +111,16 @@ __device__ float basis(float x, float y, int i) {
 __device__ float grad_basis_x(float x, float y, int i) {
     switch (i) {
         case 0: return 0;
+        case 1: return 6;
+        case 2: return 3.464101615137750;
     }
     return 0;
 }
 __device__ float grad_basis_y(float x, float y, int i) {
     switch (i) {
         case 0: return 0;
+        case 1: return 0;
+        case 2: return 6.928203230275512;
     }
     return 0;
 }
@@ -127,8 +131,9 @@ __device__ float grad_basis_y(float x, float y, int i) {
  * element k. takes the coefficients for u_k in c, the integration 
  * points and weights r1, r2 and w, and the jacobian J.
  */
-__device__ float quad(float *c, float *r1, float *r2, float *w, float J, 
-                      int k, int n_quad, int n_p) {
+__device__ float quad(float *c, float *r1, float *r2, float *w, 
+                      float x_r, float y_r, float x_s, float y_s,
+                      float J, int k, int n_quad, int n_p) {
     int i, j;
     float sum, u;
 
@@ -140,8 +145,8 @@ __device__ float quad(float *c, float *r1, float *r2, float *w, float J,
             u += c[j] * basis(r1[i], r2[i], j);
         }
         // Add to the sum
-        sum += w[i] * (  flux_x(u) * grad_basis_x(r1[i], r2[i], k) 
-                       + flux_y(u) * grad_basis_y(r1[i], r2[i], k));
+        sum += w[i] * (  flux_x(u) * grad_basis_x(r1[i], r2[i], k) * (x_r + x_s) 
+                       + flux_y(u) * grad_basis_y(r1[i], r2[i], k) * (y_r + y_s));
     }
 
     // Multiply in the Jacobian
@@ -190,15 +195,16 @@ __global__ void init_conditions(float *c,
                                 float *V3x, float *V3y,
                                 float *r1, float *r2,
                                 float *w,
-                                int n_p, int num_elem) {
+                                int n_quad, int n_p, int num_elem) {
     int idx = blockDim.x * blockIdx.x + threadIdx.x;
     int i, j;
     float x, y, u;
 
     if (idx < num_elem) {
-        for (i = 0; i < n_p + 1; i++) {
+        for (i = 0; i < (n_p + 1); i++) {
             u = 0;
-            for (j = 0; j < n_p + 1; j++) {
+            // perform quadrature
+            for (j = 0; j < n_quad; j++) {
                 // map from the canonical element to the actual point on the mesh
                 x = (1 - r1[j] - r2[j]) * V1x[idx] + r1[j] * V2x[idx] + r2[j]*V3x[idx];
                 y = (1 - r1[j] - r2[j]) * V1y[idx] + r1[j] * V2y[idx] + r2[j]*V3y[idx];
@@ -481,7 +487,7 @@ __global__ void eval_riemann(float *c, float *left_riemann_rhs, float *right_rie
 
             // store this side's contribution in the riemann rhs vector
             __syncthreads();
-           //c [i * num_elem + left_idx]  += len / 2. * left_sum;
+            //c[i * num_elem + left_idx]  += len / 2. * left_sum;
             //c[i * num_elem + right_idx] -= len / 2. * right_sum;
             left_riemann_rhs [i * num_sides + idx] =  len / 2. * left_sum;
             right_riemann_rhs[i * num_sides + idx] = -len / 2. * right_sum;
@@ -495,6 +501,9 @@ __global__ void eval_riemann(float *c, float *left_riemann_rhs, float *right_rie
  * THREADS: num_elem
  */
  __global__ void eval_quad(float *c, float *quad_rhs, 
+                     float *V1x, float *V1y,
+                     float *V2x, float *V2y,
+                     float *V3x, float *V3y,
                      float *r1, float *r2, float *w, float *J, 
                      int n_quad, int n_p, int num_elem) {
     int idx = blockDim.x * blockIdx.x + threadIdx.x;
@@ -503,6 +512,13 @@ __global__ void eval_riemann(float *c, float *left_riemann_rhs, float *right_rie
         int i;
         float quad_u, register_J;
         float register_c[10];
+        float x_r, x_s, y_r, y_s;
+
+        x_r = V1x[idx] - V3x[idx];
+        y_r = V1y[idx] - V3y[idx];
+
+        x_s = V2x[idx] - V3x[idx];
+        y_s = V2y[idx] - V3y[idx];
 
         // get the coefficients for this element
         for (i = 0; i < (n_p + 1); i++) {
@@ -514,7 +530,9 @@ __global__ void eval_riemann(float *c, float *left_riemann_rhs, float *right_rie
 
         // evaluate the volume integral for each coefficient
         for (i = 0; i < n_p; i++) {
-            quad_u = quad(register_c, r1, r2, w, register_J, i, n_quad, n_p);
+            quad_u = quad(register_c, r1, r2, w, 
+                          x_r, y_r, x_s, y_s,
+                          register_J, i, n_quad, n_p);
             quad_rhs[i * num_elem + idx] += -quad_u / register_J;
         }
     }
@@ -563,6 +581,7 @@ __global__ void eval_rhs(float *c, float *quad_rhs, float *left_riemann_rhs, flo
 
             // calculate the coefficient c
             c[i * num_elem + idx] = dt * (quad_rhs[i * num_elem + idx] + s1 + s2 + s3);
+            quad_rhs[i * num_elem + idx] = 0;
         }
     }
 }

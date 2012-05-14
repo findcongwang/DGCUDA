@@ -9,12 +9,11 @@
  */
 
 void set_quadrature(int p,
-                    float *r1, float *r2, float *w,
-                    float *s1_r1, float *s1_r2,
-                    float *s2_r1, float *s2_r2,
-                    float *s3_r1, float *s3_r2,
-                    float *oned_w,
-                    int *n_quad, int *n_quad1d) {
+                    float **r1, float **r2, float **w,
+                    float **s1_r1, float **s1_r2,
+                    float **s2_r1, float **s2_r2,
+                    float **s3_r1, float **s3_r2,
+                    float **oned_w, int *n_quad, int *n_quad1d) {
     /*
      * The sides are mapped to the canonical element, so we want the integration points
      * for the boundary integrals for sides s1, s2, and s3 as shown below:
@@ -35,71 +34,84 @@ void set_quadrature(int p,
     *
     */
     switch (p) {
-        case 0:
-            // set 2d 
-            r1[0] = 0.333333333333333;
-            r2[0] = 0.333333333333333;
-            w [0] = 1.0;
+        case 0: *n_quad = 1;
+                *n_quad1d = 1;
+                break;
+        case 1: *n_quad = 3;
+                *n_quad1d = 2;
+                break;
+    }
+    printf("%i: %i, %i\n", p, *n_quad, *n_quad1d);
+    // allocate integration points
+    *r1 = (float *) malloc(*n_quad * sizeof(float));
+    *r2 = (float *) malloc(*n_quad * sizeof(float));
+    *w =  (float *) malloc(*n_quad * sizeof(float));
 
-            *n_quad = 1;
+    *s1_r1 = (float *) malloc(*n_quad1d * sizeof(float));
+    *s1_r2 = (float *) malloc(*n_quad1d * sizeof(float));
+    *s2_r1 = (float *) malloc(*n_quad1d * sizeof(float));
+    *s2_r2 = (float *) malloc(*n_quad1d * sizeof(float));
+    *s3_r1 = (float *) malloc(*n_quad1d * sizeof(float));
+    *s3_r2 = (float *) malloc(*n_quad1d * sizeof(float));
+    *oned_w = (float *) malloc(*n_quad1d * sizeof(float));
+
+    switch (p) {
+        case 0:
+
+            // set 2d 
+            (*r1)[0] = 0.333333333333333;
+            (*r2)[0] = 0.333333333333333;
+            (*w )[0] = 1.0;
 
             // set 1d 
             // s1
-            s1_r1[0] = 0.5;
-            s1_r2[0] = 0.0;
+            (*s1_r1)[0] = 0.5;
+            (*s1_r2)[0] = 0.0;
             
             // s2
-            s2_r1[0] = 0.5;
-            s2_r2[0] = 0.5;
+            (*s2_r1)[0] = 0.5;
+            (*s2_r2)[0] = 0.5;
 
             // s3
-            s3_r1[0] = 0.0;
-            s3_r2[0] = 0.5;
+            (*s3_r1)[0] = 0.0;
+            (*s3_r2)[0] = 0.5;
 
-            oned_w[0] = 2.0;
+            (*oned_w)[0] = 2.0;
             
-            *n_quad1d = 1;
-
             break;
         case 1:
-        case 2:
             // set 2d
-            r1[0] = 0.166666666666666;
-            r2[0] = 0.166666666666666;
-            w[0]  = 0.333333333333333;
-            r1[1] = 0.666666666666666;
-            r2[1] = 0.166666666666666;
-            w[1]  = 0.333333333333333;
-            r1[2] = 0.166666666666666;
-            r2[2] = 0.666666666666666;
-            w[2]  = 0.333333333333333;
+            (*r1)[0] = 0.166666666666666;
+            (*r2)[0] = 0.166666666666666;
+            (*w)[0]  = 0.333333333333333;
+            (*r1)[1] = 0.666666666666666;
+            (*r2)[1] = 0.166666666666666;
+            (*w)[1]  = 0.333333333333333;
+            (*r1)[2] = 0.166666666666666;
+            (*r2)[2] = 0.666666666666666;
+            (*w)[2]  = 0.333333333333333;
 
-            *n_quad = 3;
-            
             // set 1d
             // s1
-            s1_r1[0] = -1./sqrt(3.) * 0.5 + 0.5;
-            s1_r2[0] = 0;
-            s1_r1[1] = 1./sqrt(3.) * 0.5 + 0.5;
-            s1_r2[1] = 0;
+            (*s1_r1)[0] = -1./sqrt(3.) * 0.5 + 0.5;
+            (*s1_r2)[0] = 0;
+            (*s1_r1)[1] = 1./sqrt(3.) * 0.5 + 0.5;
+            (*s1_r2)[1] = 0;
 
             // s2
-            s1_r1[0] = -1./sqrt(3.) * 0.5 + 0.5;
-            s1_r2[0] = -1./sqrt(3.) * 0.5 + 0.5;
-            s1_r1[1] = 1./sqrt(3.) * 0.5 + 0.5;
-            s1_r2[1] = 1./sqrt(3.) * 0.5 + 0.5;
+            (*s1_r1)[0] = -1./sqrt(3.) * 0.5 + 0.5;
+            (*s1_r2)[0] = -1./sqrt(3.) * 0.5 + 0.5;
+            (*s1_r1)[1] = 1./sqrt(3.) * 0.5 + 0.5;
+            (*s1_r2)[1] = 1./sqrt(3.) * 0.5 + 0.5;
 
-    
             // s3
-            s1_r1[0] = 0;
-            s1_r2[0] = -1./sqrt(3.) * 0.5 + 0.5;
-            s1_r1[1] = 0;
-            s1_r2[1] = 1./sqrt(3.) * 0.5 + 0.5;
+            (*s1_r1)[0] = 0;
+            (*s1_r2)[0] = -1./sqrt(3.) * 0.5 + 0.5;
+            (*s1_r1)[1] = 0;
+            (*s1_r2)[1] = 1./sqrt(3.) * 0.5 + 0.5;
 
-            oned_w[0] = 1.;
-            oned_w[1] = 1.;
-
-            *n_quad1d = 2;
+            (*oned_w)[0] = 1.;
+            (*oned_w)[1] = 1.;
 
             break;
     }
@@ -384,6 +396,7 @@ void time_integrate(float *c, float dt, int n_quad, int n_quad1d, int n_p, int n
     float *rhs = (float *) malloc(num_elem * (n_p + 1) * sizeof(float));
 
     // stage 1
+    checkCudaError("error before stage 1: eval_riemann");
     eval_riemann<<<n_blocks_sides, n_threads>>>
                     (d_c, d_left_riemann_rhs, d_right_riemann_rhs, d_J, 
                      d_s_length,
@@ -400,7 +413,9 @@ void time_integrate(float *c, float dt, int n_quad, int n_quad1d, int n_p, int n
     checkCudaError("error after stage 1: eval_riemann");
 
     eval_quad<<<n_blocks_elem, n_threads>>>
-                    (d_c, d_quad_rhs, d_r1, d_r2, d_w, d_J, n_quad, n_p, num_elem);
+                    (d_c, d_quad_rhs, d_r1, d_r2, d_w, 
+                     d_V1x, d_V1y, d_V2x, d_V2y, d_V3x, d_V3y,
+                     d_J, n_quad, n_p, num_elem);
     cudaThreadSynchronize();
     cudaMemcpy(rhs, d_c, num_elem * (n_p + 1) * sizeof(float), cudaMemcpyDeviceToHost);
     for (int i = 0; i < num_elem; i++) {
@@ -442,7 +457,9 @@ void time_integrate(float *c, float dt, int n_quad, int n_quad1d, int n_p, int n
     cudaThreadSynchronize();
 
     eval_quad<<<n_blocks_elem, n_threads>>>
-                    (d_kstar, d_quad_rhs, d_r1, d_r2, d_w, d_J, n_quad, n_p, num_elem);
+                    (d_c, d_quad_rhs, d_r1, d_r2, d_w, 
+                     d_V1x, d_V1y, d_V2x, d_V2y, d_V3x, d_V3y,
+                     d_J, n_quad, n_p, num_elem);
     cudaThreadSynchronize();
 
     eval_rhs<<<n_blocks_elem, n_threads>>>(d_k2, d_quad_rhs, d_left_riemann_rhs, d_right_riemann_rhs,
@@ -470,7 +487,9 @@ void time_integrate(float *c, float dt, int n_quad, int n_quad1d, int n_p, int n
     cudaThreadSynchronize();
 
     eval_quad<<<n_blocks_elem, n_threads>>>
-                    (d_kstar, d_quad_rhs, d_r1, d_r2, d_w, d_J, n_quad, n_p, num_elem);
+                    (d_c, d_quad_rhs, d_r1, d_r2, d_w, 
+                     d_V1x, d_V1y, d_V2x, d_V2y, d_V3x, d_V3y,
+                     d_J, n_quad, n_p, num_elem);
     cudaThreadSynchronize();
 
     eval_rhs<<<n_blocks_elem, n_threads>>>(d_k3, d_quad_rhs, d_left_riemann_rhs, d_right_riemann_rhs, 
@@ -498,7 +517,9 @@ void time_integrate(float *c, float dt, int n_quad, int n_quad1d, int n_p, int n
     cudaThreadSynchronize();
 
     eval_quad<<<n_blocks_elem, n_threads>>>
-                    (d_kstar, d_quad_rhs, d_r1, d_r2, d_w, d_J, n_quad, n_p, num_elem);
+                    (d_c, d_quad_rhs, d_r1, d_r2, d_w, 
+                     d_V1x, d_V1y, d_V2x, d_V2y, d_V3x, d_V3y,
+                     d_J, n_quad, n_p, num_elem);
     cudaThreadSynchronize();
 
     eval_rhs<<<n_blocks_elem, n_threads>>>(d_k4, d_quad_rhs, d_left_riemann_rhs, d_right_riemann_rhs, 
@@ -585,6 +606,7 @@ void init_gpu(int num_elem, int num_sides, int n_p,
 
     // set d_c to 0 not necessary
     //cudaMemset(d_c, 0., num_elem * (n_p + 1) * sizeof(float));
+    cudaMemset(d_quad_rhs, 0., num_elem * (n_p + 1) * sizeof(float));
 
     // copy over data
     cudaMemcpy(d_s_V1x, sides_x1, num_sides * sizeof(float), cudaMemcpyHostToDevice);
@@ -677,6 +699,11 @@ int main() {
     float *sides_x1, *sides_x2;
     float *sides_y1, *sides_y2;
 
+    float *r1, *r2, *w;
+
+    float *s1_r1, *s1_r2, *s2_r1, *s2_r2, *s3_r1, *s3_r2;
+    float *oned_w;
+
     int *left_elem, *right_elem;
     int *elem_s1, *elem_s2, *elem_s3;
     int *left_side_number, *right_side_number;
@@ -687,26 +714,14 @@ int main() {
 
     float *c;
 
-    // allocate integration points
-    float *r1 = (float *) malloc(1 * sizeof(float));
-    float *r2 = (float *) malloc(1 * sizeof(float));
-    float *w =  (float *) malloc(1 * sizeof(float));
-    float *s1_r1 = (float *) malloc(1 * sizeof(float));
-    float *s1_r2 = (float *) malloc(1 * sizeof(float));
-    float *s2_r1 = (float *) malloc(1 * sizeof(float));
-    float *s2_r2 = (float *) malloc(1 * sizeof(float));
-    float *s3_r1 = (float *) malloc(1 * sizeof(float));
-    float *s3_r2 = (float *) malloc(1 * sizeof(float));
-
-    float *oned_w = (float *) malloc(1 * sizeof(float));
-
     // set the order of the approximation & timestep
     n   = 1;
     n_p = (n + 1) * (n + 2) / 2;
+    printf("n_p = %i\n", n_p);
     dt  = 0.001;
 
     // open the mesh to get num_elem for allocations
-    mesh_file = fopen("supersimple.out", "r");
+    mesh_file = fopen("crazysimple.out", "r");
     fgets(line, 100, mesh_file);
     sscanf(line, "%i", &num_elem);
 
@@ -821,19 +836,43 @@ int main() {
     cudaMemcpy(d_Ny, Ny, num_sides * sizeof(float), cudaMemcpyHostToDevice);
 
     // get the correct quadrature rules for this scheme
-    set_quadrature(n_p, r1, r2, w, 
-                   s1_r1, s1_r2, 
-                   s2_r1, s2_r2, 
-                   s3_r1, s3_r2, 
-                   oned_w,
-                   &n_quad, &n_quad1d);
+    set_quadrature(n, &r1, &r2, &w, 
+                   &s1_r1, &s1_r2, 
+                   &s2_r1, &s2_r2, 
+                   &s3_r1, &s3_r2, 
+                   &oned_w, &n_quad, &n_quad1d);
+
+    checkCudaError("error before quadrature copy.");
+
+    printf("n_quad = %i, n_quad1d = %i\n", n_quad, n_quad1d);
+
+    cudaMemcpy(d_r1, r1, n_quad * sizeof(float), cudaMemcpyHostToDevice);
+    cudaMemcpy(d_r2, r2, n_quad * sizeof(float), cudaMemcpyHostToDevice);
+    cudaMemcpy(d_w , w , n_quad * sizeof(float), cudaMemcpyHostToDevice);
+
+    cudaMemcpy(d_s1_r1, s1_r1, n_quad1d * sizeof(float), cudaMemcpyHostToDevice);
+    cudaMemcpy(d_s1_r2, s1_r2, n_quad1d * sizeof(float), cudaMemcpyHostToDevice);
+    cudaMemcpy(d_s2_r1, s2_r1, n_quad1d * sizeof(float), cudaMemcpyHostToDevice);
+    cudaMemcpy(d_s2_r2, s2_r2, n_quad1d * sizeof(float), cudaMemcpyHostToDevice);
+    cudaMemcpy(d_s3_r1, s3_r1, n_quad1d * sizeof(float), cudaMemcpyHostToDevice);
+    cudaMemcpy(d_s3_r2, s3_r2, n_quad1d * sizeof(float), cudaMemcpyHostToDevice);
+
+    cudaMemcpy(d_oned_w, oned_w, n_quad1d * sizeof(float), cudaMemcpyHostToDevice);
 
     // initial conditions
     printf("num_elem  = %i\n", num_elem);
     printf("num_sides = %i\n", num_sides);
     init_conditions<<<n_blocks_elem, n_threads>>>(d_c, d_V1x, d_V1y, d_V2x, d_V2y, d_V3x, d_V3y,
-                    d_r1, d_r2, d_w, n_p, num_elem);
+                    d_r1, d_r2, d_w, n_quad, n_p, num_elem);
     checkCudaError("error after initial conditions.");
+
+    c = (float *) malloc(num_elem * (n_p + 1) * sizeof(float));
+    cudaMemcpy(c, d_c, num_elem * (n_p + 1) * sizeof(float), cudaMemcpyDeviceToHost);
+
+    printf("---------\n", c[i]);
+    for (i = 0; i < (n_p + 1) * num_elem; i++) {
+        printf("%f \n", c[i]);
+    }
 
     // no longer need vertices stored on the GPU
     //cudaFree(d_V1x);
@@ -847,31 +886,7 @@ int main() {
     //cudaFree(d_s_V2x);
     //cudaFree(d_s_V2y);
 
-    checkCudaError("error before quadrature copy.");
-
-    cudaMemcpy(d_r1, r1, 1 * sizeof(float), cudaMemcpyHostToDevice);
-    cudaMemcpy(d_r2, r2, 1 * sizeof(float), cudaMemcpyHostToDevice);
-    cudaMemcpy(d_w , w , 1 * sizeof(float), cudaMemcpyHostToDevice);
-
-    cudaMemcpy(d_s1_r1, s1_r1, 1 * sizeof(float), cudaMemcpyHostToDevice);
-    cudaMemcpy(d_s1_r2, s1_r2, 1 * sizeof(float), cudaMemcpyHostToDevice);
-    cudaMemcpy(d_s2_r1, s2_r1, 1 * sizeof(float), cudaMemcpyHostToDevice);
-    cudaMemcpy(d_s2_r2, s2_r2, 1 * sizeof(float), cudaMemcpyHostToDevice);
-    cudaMemcpy(d_s3_r1, s3_r1, 1 * sizeof(float), cudaMemcpyHostToDevice);
-    cudaMemcpy(d_s3_r2, s3_r2, 1 * sizeof(float), cudaMemcpyHostToDevice);
-
-    cudaMemcpy(d_oned_w, oned_w, 1 * sizeof(float), cudaMemcpyHostToDevice);
-
     checkCudaError("error before time integration.");
-
-    c = (float *) malloc(num_elem * (n_p + 1) * sizeof(float));
-    cudaMemcpy(c, d_c, num_elem * (n_p + 1) * sizeof(float), cudaMemcpyDeviceToHost);
-
-    printf("---------\n", c[i]);
-    for (i = 0; i < num_elem; i++) {
-        printf("%f \n", c[i]);
-    }
-
     // time integration
     for (t = 0; t < 1; t++) {
         time_integrate(c, dt, n_quad, n_quad1d, n_p, num_elem, num_sides);
