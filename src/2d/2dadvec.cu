@@ -391,9 +391,9 @@ void time_integrate(float *c, float dt, int n_quad, int n_quad1d, int n_p, int n
     int n_blocks_elem    = (num_elem  / n_threads) + ((num_elem  % n_threads) ? 1 : 0);
     int n_blocks_sides   = (num_sides / n_threads) + ((num_sides % n_threads) ? 1 : 0);
 
-    //int num_rhs = (n_p + 1) * num_elem;
+    //int num_rhs = n_p * num_elem;
 
-    float *rhs = (float *) malloc(num_elem * (n_p + 1) * sizeof(float));
+    float *rhs = (float *) malloc(num_sides * n_p * sizeof(float));
 
     // stage 1
     checkCudaError("error before stage 1: eval_riemann");
@@ -410,6 +410,13 @@ void time_integrate(float *c, float dt, int n_quad, int n_quad1d, int n_p, int n
                      n_quad1d, n_p, num_sides, num_elem);
     cudaThreadSynchronize();
 
+    cudaMemcpy(rhs, d_right_riemann_rhs, num_sides * n_p * sizeof(float), cudaMemcpyDeviceToHost);
+    for (int i = 0; i < num_sides * n_p; i++) {
+        printf(" > %f \n", rhs[i]);
+    }
+    free(rhs);
+
+
     checkCudaError("error after stage 1: eval_riemann");
 
     eval_quad<<<n_blocks_elem, n_threads>>>
@@ -417,21 +424,6 @@ void time_integrate(float *c, float dt, int n_quad, int n_quad1d, int n_p, int n
                      d_V1x, d_V1y, d_V2x, d_V2y, d_V3x, d_V3y,
                      d_J, n_quad, n_p, num_elem);
     cudaThreadSynchronize();
-    cudaMemcpy(rhs, d_c, num_elem * (n_p + 1) * sizeof(float), cudaMemcpyDeviceToHost);
-    for (int i = 0; i < num_elem; i++) {
-        printf(" > %f \n", rhs[i]);
-    }
-    free(rhs);
-
-    /////////////////////
-    // GOOD: the quadrature is giving us zeros for n_p = 0;
-    //float *rhs = (float *) malloc(num_elem * (n_p + 1) * sizeof(float));
-    //cudaMemcpy(rhs, d_rhs, num_elem * (n_p + 1) * sizeof(float), cudaMemcpyDeviceToHost);
-    //for (int i = 0; i < num_elem * (n_p + 1); i++) {
-    //    printf(" > %f \n", rhs[i]);
-    //}
-    /////////////////////
-
     eval_rhs<<<n_blocks_elem, n_threads>>>(d_k1, d_quad_rhs, d_left_riemann_rhs, d_right_riemann_rhs, 
                                           d_elem_s1, d_elem_s2, d_elem_s3, 
                                           d_left_elem, dt, n_p, num_sides, num_elem);
@@ -533,7 +525,7 @@ void time_integrate(float *c, float dt, int n_quad, int n_quad1d, int n_p, int n
     rk4<<<n_blocks_elem, n_threads>>>(d_c, d_k1, d_k2, d_k3, d_k4, n_p, num_elem);
     cudaThreadSynchronize();
 
-    cudaMemcpy(c, d_c, num_elem * (n_p + 1) * sizeof(float), cudaMemcpyDeviceToHost);
+    cudaMemcpy(c, d_c, num_elem * n_p * sizeof(float), cudaMemcpyDeviceToHost);
 
     checkCudaError("error after final stage.");
 }
@@ -552,22 +544,22 @@ void init_gpu(int num_elem, int num_sides, int n_p,
 
     // allocate allllllllllll the memory.
     // TODO: this takes a really really long time on valor.
-    cudaMalloc((void **) &d_c,        num_elem * (n_p + 1) * sizeof(float));
-    cudaMalloc((void **) &d_quad_rhs, num_elem * (n_p + 1) * sizeof(float));
-    cudaMalloc((void **) &d_left_riemann_rhs,  num_sides * (n_p + 1) * sizeof(float));
-    cudaMalloc((void **) &d_right_riemann_rhs, num_sides * (n_p + 1) * sizeof(float));
+    cudaMalloc((void **) &d_c,        num_elem * n_p * sizeof(float));
+    cudaMalloc((void **) &d_quad_rhs, num_elem * n_p * sizeof(float));
+    cudaMalloc((void **) &d_left_riemann_rhs,  num_sides * n_p * sizeof(float));
+    cudaMalloc((void **) &d_right_riemann_rhs, num_sides * n_p * sizeof(float));
 
-    cudaMalloc((void **) &d_kstar, num_elem * (n_p + 1) * sizeof(float));
-    cudaMalloc((void **) &d_k1, num_elem * (n_p + 1) * sizeof(float));
-    cudaMalloc((void **) &d_k2, num_elem * (n_p + 1) * sizeof(float));
-    cudaMalloc((void **) &d_k3, num_elem * (n_p + 1) * sizeof(float));
-    cudaMalloc((void **) &d_k4, num_elem * (n_p + 1) * sizeof(float));
+    cudaMalloc((void **) &d_kstar, num_elem * n_p * sizeof(float));
+    cudaMalloc((void **) &d_k1, num_elem * n_p * sizeof(float));
+    cudaMalloc((void **) &d_k2, num_elem * n_p * sizeof(float));
+    cudaMalloc((void **) &d_k3, num_elem * n_p * sizeof(float));
+    cudaMalloc((void **) &d_k4, num_elem * n_p * sizeof(float));
 
-    cudaMalloc((void **) &d_r1, (n_p + 1) * sizeof(float));
-    cudaMalloc((void **) &d_r2, (n_p + 1) * sizeof(float));
-    cudaMalloc((void **) &d_w , (n_p + 1) * sizeof(float));
+    cudaMalloc((void **) &d_r1, n_p * sizeof(float));
+    cudaMalloc((void **) &d_r2, n_p * sizeof(float));
+    cudaMalloc((void **) &d_w , n_p * sizeof(float));
 
-    cudaMalloc((void **) &d_oned_w, (n_p + 1) * sizeof(float));
+    cudaMalloc((void **) &d_oned_w, n_p * sizeof(float));
 
     cudaMalloc((void **) &d_J, num_elem * sizeof(float));
     cudaMalloc((void **) &d_s_length, num_sides * sizeof(float));
@@ -588,12 +580,12 @@ void init_gpu(int num_elem, int num_sides, int n_p,
     cudaMalloc((void **) &d_V3x, num_elem * sizeof(float));
     cudaMalloc((void **) &d_V3y, num_elem * sizeof(float));
 
-    cudaMalloc((void **) &d_s1_r1, (n_p + 1) * sizeof(float));
-    cudaMalloc((void **) &d_s1_r2, (n_p + 1) * sizeof(float));
-    cudaMalloc((void **) &d_s2_r1, (n_p + 1) * sizeof(float));
-    cudaMalloc((void **) &d_s2_r2, (n_p + 1) * sizeof(float));
-    cudaMalloc((void **) &d_s3_r1, (n_p + 1) * sizeof(float));
-    cudaMalloc((void **) &d_s3_r2, (n_p + 1) * sizeof(float));
+    cudaMalloc((void **) &d_s1_r1, n_p * sizeof(float));
+    cudaMalloc((void **) &d_s1_r2, n_p * sizeof(float));
+    cudaMalloc((void **) &d_s2_r1, n_p * sizeof(float));
+    cudaMalloc((void **) &d_s2_r2, n_p * sizeof(float));
+    cudaMalloc((void **) &d_s3_r1, n_p * sizeof(float));
+    cudaMalloc((void **) &d_s3_r2, n_p * sizeof(float));
     
     cudaMalloc((void **) &d_left_side_number , num_sides * sizeof(int));
     cudaMalloc((void **) &d_right_side_number, num_sides * sizeof(int));
@@ -605,8 +597,8 @@ void init_gpu(int num_elem, int num_sides, int n_p,
     cudaMalloc((void **) &d_left_elem , num_sides * sizeof(int));
 
     // set d_c to 0 not necessary
-    //cudaMemset(d_c, 0., num_elem * (n_p + 1) * sizeof(float));
-    cudaMemset(d_quad_rhs, 0., num_elem * (n_p + 1) * sizeof(float));
+    //cudaMemset(d_c, 0., num_elem * n_p * sizeof(float));
+    cudaMemset(d_quad_rhs, 0., num_elem * n_p * sizeof(float));
 
     // copy over data
     cudaMemcpy(d_s_V1x, sides_x1, num_sides * sizeof(float), cudaMemcpyHostToDevice);
@@ -721,7 +713,7 @@ int main() {
     dt  = 0.001;
 
     // open the mesh to get num_elem for allocations
-    mesh_file = fopen("crazysimple.out", "r");
+    mesh_file = fopen("supersimple.out", "r");
     fgets(line, 100, mesh_file);
     sscanf(line, "%i", &num_elem);
 
@@ -866,11 +858,11 @@ int main() {
                     d_r1, d_r2, d_w, n_quad, n_p, num_elem);
     checkCudaError("error after initial conditions.");
 
-    c = (float *) malloc(num_elem * (n_p + 1) * sizeof(float));
-    cudaMemcpy(c, d_c, num_elem * (n_p + 1) * sizeof(float), cudaMemcpyDeviceToHost);
+    c = (float *) malloc(num_elem * n_p * sizeof(float));
+    cudaMemcpy(c, d_c, num_elem * n_p * sizeof(float), cudaMemcpyDeviceToHost);
 
     printf("---------\n", c[i]);
-    for (i = 0; i < (n_p + 1) * num_elem; i++) {
+    for (i = 0; i < n_p * num_elem; i++) {
         printf("%f \n", c[i]);
     }
 
@@ -891,7 +883,7 @@ int main() {
     for (t = 0; t < 1; t++) {
         time_integrate(c, dt, n_quad, n_quad1d, n_p, num_elem, num_sides);
         printf("---------\n", c[i]);
-        for (i = 0; i < num_elem * (n_p + 1); i++) {
+        for (i = 0; i < num_elem * n_p; i++) {
             printf("%f \n", c[i]);
         }
     }

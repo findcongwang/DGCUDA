@@ -98,7 +98,7 @@ __device__ float flux_y(float u) {
 __device__ float basis(float x, float y, int i) {
 switch (i) {
         case 0: return 1.414213562373095;
-        case 1: return 1.414213562373095 + 6*x;
+        case 1: return -1.999999999999999 + 5.999999999999999*x;
         case 2: return -3.464101615137754 + 3.464101615137750*x + 6.928203230275512*y;
         case 3: return  2.449489742783153E+00 + -1.959591794226528E+01*x + 1.648597081617952E-14*y + 2.449489742783160E+01*x*x;
     }
@@ -111,7 +111,7 @@ switch (i) {
 __device__ float grad_basis_x(float x, float y, int i) {
     switch (i) {
         case 0: return 0;
-        case 1: return 6;
+        case 1: return 5.999999999999999;
         case 2: return 3.464101615137750;
     }
     return 0;
@@ -141,12 +141,12 @@ __device__ float quad(float *c, float *r1, float *r2, float *w,
     for (i = 0; i < n_quad; i++) {
         // Evaluate u at the integration point.
         u = 0;
-        for (j = 0; j < n_p + 1; j++) {
+        for (j = 0; j < n_p; j++) {
             u += c[j] * basis(r1[i], r2[i], j);
         }
         // Add to the sum
-        sum += w[i] * (  flux_x(u) * grad_basis_x(r1[i], r2[i], k) * (x_r + x_s) 
-                       + flux_y(u) * grad_basis_y(r1[i], r2[i], k) * (y_r + y_s));
+        sum += w[i] * (  flux_x(u) * (grad_basis_x(r1[i], r2[i], k) * x_r + grad_basis_y(r1[i], r2[i], k) * y_r)
+                       + flux_y(u) * (grad_basis_x(r1[i], r2[i], k) * x_s + grad_basis_y(r1[i], r2[i], k) * y_s));
     }
 
     // Multiply in the Jacobian
@@ -201,7 +201,7 @@ __global__ void init_conditions(float *c,
     float x, y, u;
 
     if (idx < num_elem) {
-        for (i = 0; i < (n_p + 1); i++) {
+        for (i = 0; i < n_p; i++) {
             u = 0;
             // perform quadrature
             for (j = 0; j < n_quad; j++) {
@@ -365,7 +365,7 @@ __global__ void eval_riemann(float *c, float *left_riemann_rhs, float *right_rie
     int idx = blockDim.x * blockIdx.x + threadIdx.x;
 
     if (idx < num_sides) {
-        int left_idx, right_idx, right_side, left_side, i, j;
+        int left_idx, right_idx, right_side, left_side, i, j, k;
         float c_left[10], c_right[10];
         float left_r1[10], right_r1[10];
         float left_r2[10], right_r2[10];
@@ -387,13 +387,13 @@ __global__ void eval_riemann(float *c, float *left_riemann_rhs, float *right_rie
         // grab the coefficients for the left & right elements
         if (right_idx != -1) {
             // not a boundary side
-            for (i = 0; i < (n_p + 1); i++) {
+            for (i = 0; i < n_p; i++) {
                 c_left[i]  = c[i*num_elem + left_idx];
                 c_right[i] = c[i*num_elem + right_idx];
             }
         } else {
             // this is a boundary side
-            for (i = 0; i < (n_p + 1); i++) {
+            for (i = 0; i < n_p; i++) {
                 c_left[i]  = c[i*num_elem + left_idx];
                 c_right[i] = c[i*num_elem + left_idx];
             }
@@ -462,27 +462,29 @@ __global__ void eval_riemann(float *c, float *left_riemann_rhs, float *right_rie
         // TODO: does this speed it up?
         __syncthreads();
          
-        // evaluate the polynomial over that side for both elements and add the result to rhs
-        left_sum  = 0;
-        right_sum = 0;
-        for (i = 0; i < (n_p + 1); i++) {
-            u_left  = 0;
-            u_right = 0;
-            // compute u evaluated over the integration point
-            for (j = 0; j < (n_p + 1); j++) {
-                u_left  += c_left[i]  * basis(left_r1[i], left_r2[i], j);
-                u_right += c_right[i] * basis(right_r1[i], right_r2[i], j);
-            }
-
-            // solve the Riemann problem at this integration point
-            s = riemann(u_left, u_right);
-
-            // calculate the quadrature over [-1,1] for these sides
+        // multiply across by the i'th basis function
+        for (i = 0; i < n_p; i++) {
+            left_sum  = 0;
+            right_sum = 0;
+            // we're at the j'th integration point
             for (j = 0; j < n_quad1d; j++) {
+                // compute u evaluated over the j'th integration point
+                // using the k basis functions
+                u_left  = 0;
+                u_right = 0;
+                for (k = 0; k < n_p; k++) {
+                    u_left  += c_left[k]  * basis(left_r1[j], left_r2[j], k);
+                    u_right += c_right[k] * basis(right_r1[j], right_r2[j], k);
+                }
+
+                // solve the Riemann problem at this integration point
+                s = riemann(u_left, u_right);
+
+                // calculate the quadrature over [-1,1] for these sides
                 left_sum  += (nx * flux_x(s) + ny * flux_y(s)) * 
-                              oned_w[i] * basis(left_r1[i],  left_r2[i],  j);
+                              oned_w[j] * basis(left_r1[j],  left_r2[j],  i);
                 right_sum += (nx * flux_x(s) + ny * flux_y(s)) * 
-                              oned_w[i] * basis(right_r1[i], right_r2[i], j);
+                              oned_w[j] * basis(right_r1[j], right_r2[j], i);
             }
 
             // store this side's contribution in the riemann rhs vector
@@ -521,7 +523,7 @@ __global__ void eval_riemann(float *c, float *left_riemann_rhs, float *right_rie
         y_s = V2y[idx] - V3y[idx];
 
         // get the coefficients for this element
-        for (i = 0; i < (n_p + 1); i++) {
+        for (i = 0; i < n_p; i++) {
             register_c[i] = c[i*num_elem + idx];
         }
          
@@ -533,7 +535,7 @@ __global__ void eval_riemann(float *c, float *left_riemann_rhs, float *right_rie
             quad_u = quad(register_c, r1, r2, w, 
                           x_r, y_r, x_s, y_s,
                           register_J, i, n_quad, n_p);
-            quad_rhs[i * num_elem + idx] += -quad_u / register_J;
+            quad_rhs[i * num_elem + idx] += -quad_u * register_J;
         }
     }
 }
@@ -599,7 +601,7 @@ __global__ void eval_rhs(float *c, float *quad_rhs, float *left_riemann_rhs, flo
 __global__ void rk4_tempstorage(float *c, float *kstar, float*k, float alpha, int n_p, int num_elem) {
     int idx = blockDim.x * blockIdx.x + threadIdx.x;
 
-    if (idx < (n_p + 1) * num_elem) {
+    if (idx < n_p * num_elem) {
         kstar[idx] = c[idx] + alpha * k[idx];
     }
 }
@@ -612,7 +614,7 @@ __global__ void rk4_tempstorage(float *c, float *kstar, float*k, float alpha, in
 __global__ void rk4(float *c, float *k1, float *k2, float *k3, float *k4, int n_p, int num_elem) {
     int idx = blockDim.x * blockIdx.x + threadIdx.x;
 
-    if (idx < (n_p + 1) * num_elem) {
+    if (idx < n_p * num_elem) {
         c[idx] += k1[idx]/6. + k2[idx]/3. + k3[idx]/3. + k4[idx]/6.;
     }
 }
