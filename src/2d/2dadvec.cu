@@ -41,7 +41,6 @@ void set_quadrature(int p,
                 *n_quad1d = 2;
                 break;
     }
-    printf("%i: %i, %i\n", p, *n_quad, *n_quad1d);
     // allocate integration points
     *r1 = (float *) malloc(*n_quad * sizeof(float));
     *r2 = (float *) malloc(*n_quad * sizeof(float));
@@ -385,7 +384,7 @@ void read_mesh(FILE *mesh_file,
     *num_sides = numsides;
 }
 
-void time_integrate(float *c, float dt, int n_quad, int n_quad1d, int n_p, int num_elem, int num_sides) {
+void time_integrate(float dt, int n_quad, int n_quad1d, int n_p, int num_elem, int num_sides) {
     int n_threads = 256;
 
     int n_blocks_elem    = (num_elem  / n_threads) + ((num_elem  % n_threads) ? 1 : 0);
@@ -410,11 +409,11 @@ void time_integrate(float *c, float dt, int n_quad, int n_quad1d, int n_p, int n
                      n_quad1d, n_p, num_sides, num_elem);
     cudaThreadSynchronize();
 
-    cudaMemcpy(rhs, d_right_riemann_rhs, num_sides * n_p * sizeof(float), cudaMemcpyDeviceToHost);
-    for (int i = 0; i < num_sides * n_p; i++) {
-        printf(" > %f \n", rhs[i]);
-    }
-    free(rhs);
+    //cudaMemcpy(rhs, d_right_riemann_rhs, num_sides * n_p * sizeof(float), cudaMemcpyDeviceToHost);
+    //for (int i = 0; i < num_sides * n_p; i++) {
+        //printf(" > %f \n", rhs[i]);
+    //}
+    //free(rhs);
 
 
     checkCudaError("error after stage 1: eval_riemann");
@@ -525,8 +524,6 @@ void time_integrate(float *c, float dt, int n_quad, int n_quad1d, int n_p, int n
     rk4<<<n_blocks_elem, n_threads>>>(d_c, d_k1, d_k2, d_k3, d_k4, n_p, num_elem);
     cudaThreadSynchronize();
 
-    cudaMemcpy(c, d_c, num_elem * n_p * sizeof(float), cudaMemcpyDeviceToHost);
-
     checkCudaError("error after final stage.");
 }
 
@@ -572,6 +569,10 @@ void init_gpu(int num_elem, int num_sides, int n_p,
     cudaMalloc((void **) &d_elem_s1, num_elem * sizeof(int));
     cudaMalloc((void **) &d_elem_s2, num_elem * sizeof(int));
     cudaMalloc((void **) &d_elem_s3, num_elem * sizeof(int));
+
+    cudaMalloc((void **) &d_Uv1, num_elem * sizeof(float));
+    cudaMalloc((void **) &d_Uv2, num_elem * sizeof(float));
+    cudaMalloc((void **) &d_Uv3, num_elem * sizeof(float));
 
     cudaMalloc((void **) &d_V1x, num_elem * sizeof(float));
     cudaMalloc((void **) &d_V1y, num_elem * sizeof(float));
@@ -654,6 +655,10 @@ void free_gpu() {
     cudaFree(d_elem_s2);
     cudaFree(d_elem_s3);
 
+    cudaFree(d_Uv1);
+    cudaFree(d_Uv2);
+    cudaFree(d_Uv3);
+
     cudaFree(d_V1x);
     cudaFree(d_V1y);
     cudaFree(d_V2x);
@@ -678,7 +683,12 @@ void free_gpu() {
     cudaFree(d_left_elem);
 }
 
-int main() {
+void usage_error() {
+    printf("\nUsage: dgcuda [OPTIONS] [MESH] [OUTFILE]\n");
+    printf(" Options: [-n] Order of polynomial approximation.\n");
+}
+
+int main(int argc, char *argv[]) {
     checkCudaError("error before start.");
     int num_elem, num_sides;
     int n_threads, n_blocks_elem, n_blocks_sides;
@@ -700,20 +710,50 @@ int main() {
     int *elem_s1, *elem_s2, *elem_s3;
     int *left_side_number, *right_side_number;
 
-    FILE *mesh_file;
+    FILE *mesh_file, *out_file;
 
     char line[100];
+    char *mesh_filename;
+    char *out_filename;
 
-    float *c;
+    float *Uv1, *Uv2, *Uv3;
+    // read command line input
+    if (argc < 5) {
+        usage_error();
+        return 1;
+    }
+    for (i = 0; i < argc; i++) {
+        // order of polynomial
+        if (strcmp(argv[i], "-n") == 0) {
+            if (i + 1 < argc) {
+                n = atoi(argv[i+1]);
+                if (n < 0 || n > 1) {
+                    usage_error();
+                    return 1;
+                }
+            } else {
+                usage_error();
+                return 1;
+            }
+        }
+    } 
+
+    // second last argument is filename
+    mesh_filename = argv[argc - 2];
+    // last argument is outfilename
+    out_filename  = argv[argc - 1];
 
     // set the order of the approximation & timestep
-    n   = 1;
     n_p = (n + 1) * (n + 2) / 2;
-    printf("n_p = %i\n", n_p);
     dt  = 0.001;
 
     // open the mesh to get num_elem for allocations
-    mesh_file = fopen("supersimple.out", "r");
+    mesh_file = fopen(mesh_filename, "r");
+    out_file  = fopen(out_filename , "w");
+    if (!mesh_file) {
+        printf("\nERROR: mesh file not found.\n");
+        return 1;
+    }
     fgets(line, 100, mesh_file);
     sscanf(line, "%i", &num_elem);
 
@@ -836,8 +876,6 @@ int main() {
 
     checkCudaError("error before quadrature copy.");
 
-    printf("n_quad = %i, n_quad1d = %i\n", n_quad, n_quad1d);
-
     cudaMemcpy(d_r1, r1, n_quad * sizeof(float), cudaMemcpyHostToDevice);
     cudaMemcpy(d_r2, r2, n_quad * sizeof(float), cudaMemcpyHostToDevice);
     cudaMemcpy(d_w , w , n_quad * sizeof(float), cudaMemcpyHostToDevice);
@@ -852,46 +890,50 @@ int main() {
     cudaMemcpy(d_oned_w, oned_w, n_quad1d * sizeof(float), cudaMemcpyHostToDevice);
 
     // initial conditions
-    printf("num_elem  = %i\n", num_elem);
-    printf("num_sides = %i\n", num_sides);
     init_conditions<<<n_blocks_elem, n_threads>>>(d_c, d_V1x, d_V1y, d_V2x, d_V2y, d_V3x, d_V3y,
                     d_r1, d_r2, d_w, n_quad, n_p, num_elem);
     checkCudaError("error after initial conditions.");
 
-    c = (float *) malloc(num_elem * n_p * sizeof(float));
-    cudaMemcpy(c, d_c, num_elem * n_p * sizeof(float), cudaMemcpyDeviceToHost);
+    Uv1 = (float *) malloc(num_elem * sizeof(float));
+    Uv2 = (float *) malloc(num_elem * sizeof(float));
+    Uv3 = (float *) malloc(num_elem * sizeof(float));
 
-    printf("---------\n", c[i]);
-    for (i = 0; i < n_p * num_elem; i++) {
-        printf("%f \n", c[i]);
-    }
-
-    // no longer need vertices stored on the GPU
-    //cudaFree(d_V1x);
-    //cudaFree(d_V1y);
-    //cudaFree(d_V2x);
-    //cudaFree(d_V2y);
-    //cudaFree(d_V3x);
-    //cudaFree(d_V3y);
-    //cudaFree(d_s_V1x);
-    //cudaFree(d_s_V1y);
-    //cudaFree(d_s_V2x);
-    //cudaFree(d_s_V2y);
+    printf("Computing...\n");
+    printf(" > %i degree polynomial interpolation\n", n);
+    printf(" > %i elements\n", num_elem);
+    printf(" > %i sides\n", num_sides);
 
     checkCudaError("error before time integration.");
-    // time integration
+    fprintf(out_file, "View \"Exported field \" {\n");
     for (t = 0; t < 1; t++) {
-        time_integrate(c, dt, n_quad, n_quad1d, n_p, num_elem, num_sides);
-        printf("---------\n", c[i]);
-        for (i = 0; i < num_elem * n_p; i++) {
-            printf("%f \n", c[i]);
+        // time integration
+        time_integrate(dt, n_quad, n_quad1d, n_p, num_elem, num_sides);
+
+        // evaluate at the vertex points and copy over data
+        eval_u<<<n_blocks_elem, n_threads>>>(d_c, d_V1x, d_V1y, d_V2x, d_V2y, d_V3x, d_V3y, d_Uv1, d_Uv2, d_Uv3, num_elem, n_p);
+        cudaMemcpy(Uv1, d_Uv1, num_elem * sizeof(float), cudaMemcpyDeviceToHost);
+        cudaMemcpy(Uv2, d_Uv1, num_elem * sizeof(float), cudaMemcpyDeviceToHost);
+        cudaMemcpy(Uv3, d_Uv1, num_elem * sizeof(float), cudaMemcpyDeviceToHost);
+
+        // write data to file
+        // TODO: this will output multiple vertices values. does gmsh care? i dunno...
+        for (i = 0; i < num_elem; i++) {
+            fprintf(out_file, "ST (%f,%f,0,%f,%f,0,%f,%f,0) {%f,%f,%f};\n", 
+                                   V1x[i], V1y[i], V2x[i], V2y[i], V3x[i], V3y[i],
+                                   Uv1[i], Uv2[i], Uv3[i]);
         }
     }
+    fprintf(out_file,"};");
+
+    // close the output file
+    fclose(out_file);
 
     // free variables
     free_gpu();
     
-    free(c);
+    free(Uv1);
+    free(Uv2);
+    free(Uv3);
 
     free(V1x);
     free(V1y);

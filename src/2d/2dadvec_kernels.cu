@@ -66,6 +66,11 @@ float *d_V2y;
 float *d_V3x;
 float *d_V3y;
 
+// stores computed values at three vertices
+float *d_Uv1;
+float *d_Uv2;
+float *d_Uv3;
+
 // normal vectors for the sides
 float *d_Nx;
 float *d_Ny;
@@ -540,6 +545,46 @@ __global__ void eval_riemann(float *c, float *left_riemann_rhs, float *right_rie
     }
 }
 
+/* evaluate u
+ * 
+ * evaluates u at the three vertex points for output
+ * THREADS: num_elem
+ */
+__global__ void eval_u(float *c, 
+                       float *V1x, float *V1y,
+                       float *V2x, float *V2y,
+                       float *V3x, float *V3y,
+                       float *Uv1, float *Uv2, float *Uv3,
+                       int num_elem, int n_p) {
+    int idx = blockDim.x * blockIdx.x + threadIdx.x;
+    
+    if (idx < num_elem) {
+        int i;
+        float register_c[10];
+        float uv1, uv2, uv3;
+
+        // read coefficient values
+        for (i = 0; i < n_p; i++) {
+            register_c[i] = c[i * num_elem + idx];
+        }
+
+        uv1 = 0;
+        uv2 = 0;
+        uv3 = 0;
+
+        // calculate values at three vertex points
+        for (i = 0; i < n_p; i++) {
+            uv1 += register_c[i] * basis(V1x[idx], V1y[idx], i);
+            uv2 += register_c[i] * basis(V2x[idx], V2y[idx], i);
+            uv3 += register_c[i] * basis(V3x[idx], V3y[idx], i);
+        }
+
+        // store result
+        Uv1[idx] = uv1;
+        Uv2[idx] = uv2;
+        Uv3[idx] = uv3;
+    }
+}
 /* right hand side
  *
  * computes the sum of the quadrature and the riemann flux for the 
