@@ -516,9 +516,9 @@ __global__ void eval_riemann(float *c, float *left_riemann_rhs, float *right_rie
         float register_c[10];
         float x_r, x_s, y_r, y_s;
 
+        // evaulate the jacobians of the mappings for the chain rule
         x_r = V1x[idx] - V3x[idx];
         y_r = V1y[idx] - V3y[idx];
-
         x_s = V2x[idx] - V3x[idx];
         y_s = V2y[idx] - V3y[idx];
 
