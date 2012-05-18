@@ -5,6 +5,8 @@
  * and    H = number of sides
  */
 
+#define PI 3.14159
+
 /***********************
  *
  * DEVICE VARIABLES
@@ -40,7 +42,7 @@ float *d_s3_r2;
 int *d_left_side_number;
 int *d_right_side_number;
 
-float *d_J;     // jacobian determinant 
+float *d_J;        // jacobian determinant 
 float *d_s_length; // length of sides
 
 // the num_elem values of the x and y coordinates for the two vertices defining a side
@@ -105,7 +107,7 @@ switch (i) {
         case 0: return 1.414213562373095;
         case 1: return -1.999999999999999 + 5.999999999999999*x;
         case 2: return -3.464101615137754 + 3.464101615137750*x + 6.928203230275512*y;
-        case 3: return  2.449489742783153E+00 + -1.959591794226528E+01*x + 1.648597081617952E-14*y + 2.449489742783160E+01*x*x;
+        case 3: return  2.449489742783153 + -1.959591794226528E+01*x + 1.648597081617952E-14*y + 2.449489742783160E+01*x*x;
     }
     return -1;
 }
@@ -186,6 +188,7 @@ __device__ float riemann(float u_left, float u_right) {
  * returns the value of the intial condition at point x
  */
 __device__ float u0(float x, float y) {
+    //return sin(2*PI*x) + sin(2*PI*y);
     return 1.;
 }
 
@@ -400,7 +403,7 @@ __global__ void eval_riemann(float *c, float *left_riemann_rhs, float *right_rie
             // this is a boundary side
             for (i = 0; i < n_p; i++) {
                 c_left[i]  = c[i*num_elem + left_idx];
-                c_right[i] = c[i*num_elem + left_idx];
+                c_right[i] = c[i*num_elem + left_idx]; // this makes a ghost cell
             }
         }
 
