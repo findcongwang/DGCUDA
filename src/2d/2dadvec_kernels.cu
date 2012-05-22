@@ -152,20 +152,21 @@ __device__ float quad(float *c, float *r1, float *r2, float *w,
             u += c[j] * basis(r1[i], r2[i], j);
         }
         // Add to the sum
-        sum += w[i] * (  flux_x(u) * (grad_basis_x(r1[i], r2[i], k) * x_r + grad_basis_y(r1[i], r2[i], k) * y_r)
-                       + flux_y(u) * (grad_basis_x(r1[i], r2[i], k) * x_s + grad_basis_y(r1[i], r2[i], k) * y_s));
+        // TODO: these should be either / or *...
+        // figure out these mappings...
+        sum += w[i] * (  flux_x(u) * (grad_basis_x(r1[i], r2[i], k) / x_r + grad_basis_y(r1[i], r2[i], k) / y_r)
+                       + flux_y(u) * (grad_basis_x(r1[i], r2[i], k) / x_s + grad_basis_y(r1[i], r2[i], k) / y_s));
     }
 
-    // Multiply in the Jacobian
     return sum;
 }
 
-/* boundary elements
+/* boundary exact
  *
- * does something to handle the boundary elements.
+ * returns the exact boundary conditions
  */
-__device__ float boundary(float *c, int k, int N) {
-    return 0;
+__device__ float boundary_exact(float x, float y) {
+    return 1.;
 }
 
 /* riemann solver
@@ -188,7 +189,6 @@ __device__ float riemann(float u_left, float u_right) {
  * returns the value of the intial condition at point x
  */
 __device__ float u0(float x, float y) {
-    //return sin(2*PI*x) + sin(2*PI*y);
     return 1.;
 }
 
@@ -216,6 +216,8 @@ __global__ void init_conditions(float *c,
                 // map from the canonical element to the actual point on the mesh
                 x = (1 - r1[j] - r2[j]) * V1x[idx] + r1[j] * V2x[idx] + r2[j]*V3x[idx];
                 y = (1 - r1[j] - r2[j]) * V1y[idx] + r1[j] * V2y[idx] + r2[j]*V3y[idx];
+                //x = r1[j] * V1x[idx] + r2[j] * V2x[idx] + (1 - r1[j] - r2[j]) * V3x[idx];
+                //y = r1[j] * V1y[idx] + r2[j] * V2y[idx] + (1 - r1[j] - r2[j]) * V3y[idx];
                 // evaluate u there
                 u += w[j] * u0(x, y) * basis(r1[j], r2[j], i);
             }
@@ -270,6 +272,7 @@ __global__ void preval_jacobian(float *J,
         x3 = V3x[idx];
         y3 = V3y[idx];
 
+        // x = x1 * r + x2 * s + x3 * (1 - r - s)
         // calculate jacobian determinant
         J[idx] = (-x1 + x2) * (-y1 + y3) - (-x1 + x3) * (-y1 + y2);
     }
@@ -365,6 +368,9 @@ __global__ void eval_riemann(float *c, float *left_riemann_rhs, float *right_rie
                         float *s1_r1, float *s1_r2,
                         float *s2_r1, float *s2_r2,
                         float *s3_r1, float *s3_r2,
+                        float *V1x, float *V1y,
+                        float *V2x, float *V2y,
+                        float *V3x, float *V3y,
                         float *oned_w,
                         int *left_idx_list, int *right_idx_list,
                         int *left_side_number, int *right_side_number, 
@@ -378,6 +384,7 @@ __global__ void eval_riemann(float *c, float *left_riemann_rhs, float *right_rie
         float left_r1[10], right_r1[10];
         float left_r2[10], right_r2[10];
         float nx, ny, s;
+        float x, y;
         float u_left, u_right;
         float len, left_sum, right_sum;
 
@@ -403,7 +410,7 @@ __global__ void eval_riemann(float *c, float *left_riemann_rhs, float *right_rie
             // this is a boundary side
             for (i = 0; i < n_p; i++) {
                 c_left[i]  = c[i*num_elem + left_idx];
-                c_right[i] = c[i*num_elem + left_idx]; // this makes a ghost cell
+                //c_right[i] = c[i*num_elem + left_idx]; // this makes a ghost cell (?)
             }
         }
 
@@ -441,12 +448,6 @@ __global__ void eval_riemann(float *c, float *left_riemann_rhs, float *right_rie
          
         // get the integration points for the right element's side
         switch (right_side) {
-            case 0:
-                for (i = 0; i < n_quad1d; i++) {
-                    right_r1[i] = left_r1[i];
-                    right_r2[i] = left_r2[i];
-                }
-                break;
             case 1: 
                 for (i = 0; i < n_quad1d; i++) {
                     right_r1[i] = s1_r1[i];
@@ -482,17 +483,27 @@ __global__ void eval_riemann(float *c, float *left_riemann_rhs, float *right_rie
                 u_right = 0;
                 for (k = 0; k < n_p; k++) {
                     u_left  += c_left[k]  * basis(left_r1[j], left_r2[j], k);
-                    u_right += c_right[k] * basis(right_r1[j], right_r2[j], k);
+                    // if it's not a boundary element, compute it
+                    if (right_idx != -1) {
+                        u_right += c_right[k] * basis(right_r1[j], right_r2[j], k);
+                    }
+                }
+
+                // if it's a boundary element, use the boundary function to deal with it
+                if (right_idx == -1) {
+                    // x = x1 * r + x2 * s + x3 * (1 - r - s)
+                    x = V1x[left_idx] * left_r1[j] + V2x[left_idx] * left_r2[j] + V3x[left_idx] * (1 - left_r1[j] - left_r2[j]);
+                    y = V1y[left_idx] * left_r1[j] + V2y[left_idx] * left_r2[j] + V3y[left_idx] * (1 - left_r1[j] - left_r2[j]);
+                        
+                    u_right = boundary_exact(x, y);
                 }
 
                 // solve the Riemann problem at this integration point
                 s = riemann(u_left, u_right);
 
                 // calculate the quadrature over [-1,1] for these sides
-                left_sum  += (nx * flux_x(s) + ny * flux_y(s)) * 
-                              oned_w[j] * basis(left_r1[j],  left_r2[j],  i);
-                right_sum += (nx * flux_x(s) + ny * flux_y(s)) * 
-                              oned_w[j] * basis(right_r1[j], right_r2[j], i);
+                left_sum  += (nx * flux_x(s) + ny * flux_y(s)) * oned_w[j] * basis(left_r1[j],  left_r2[j],  i);
+                right_sum += (nx * flux_x(s) + ny * flux_y(s)) * oned_w[j] * basis(right_r1[j], right_r2[j], i);
             }
 
             // store this side's contribution in the riemann rhs vector
@@ -511,10 +522,10 @@ __global__ void eval_riemann(float *c, float *left_riemann_rhs, float *right_rie
  * THREADS: num_elem
  */
  __global__ void eval_quad(float *c, float *quad_rhs, 
+                     float *r1, float *r2, float *w, float *J, 
                      float *V1x, float *V1y,
                      float *V2x, float *V2y,
                      float *V3x, float *V3y,
-                     float *r1, float *r2, float *w, float *J, 
                      int n_quad, int n_p, int num_elem) {
     int idx = blockDim.x * blockIdx.x + threadIdx.x;
 
@@ -525,6 +536,7 @@ __global__ void eval_riemann(float *c, float *left_riemann_rhs, float *right_rie
         float x_r, x_s, y_r, y_s;
 
         // evaulate the jacobians of the mappings for the chain rule
+        // x = x1 * r + x2 * s + x3 * (1 - r - s)
         x_r = V1x[idx] - V3x[idx];
         y_r = V1y[idx] - V3y[idx];
         x_s = V2x[idx] - V3x[idx];

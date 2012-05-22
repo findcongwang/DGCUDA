@@ -168,6 +168,6 @@ float quad_1d_degree8[] = {-0.18343464, 0.36268378,
                            -0.96028986, 0.10122854,
                            0.96028986, 0.10122854};
 
-float *quad_1d[] = {quad_1d_degree1, quad_1d_degree2, quad_1d_degree3};
-                    quad_1d_degree4, quad_1d_degree5, quad_1d_degree6
+float *quad_1d[] = {quad_1d_degree1, quad_1d_degree2, quad_1d_degree3,
+                    quad_1d_degree4, quad_1d_degree5, quad_1d_degree6,
                     quad_1d_degree7, quad_1d_degree8};
