@@ -132,35 +132,6 @@ __device__ float grad_basis_y(float x, float y, int i) {
     return 0;
 }
 
-/* quadrature 
- *
- * uses gaussian quadrature to evaluate the integral over the 
- * element k. takes the coefficients for u_k in c, the integration 
- * points and weights r1, r2 and w, and the jacobian J.
- */
-__device__ float quad(float *c, float *r1, float *r2, float *w, 
-                      float x_r, float y_r, float x_s, float y_s,
-                      float J, int k, int n_quad, int n_p) {
-    int i, j;
-    float sum, u;
-
-    sum = 0.0;
-    for (i = 0; i < n_quad; i++) {
-        // Evaluate u at the integration point.
-        u = 0;
-        for (j = 0; j < n_p; j++) {
-            u += c[j] * basis(r1[i], r2[i], j);
-        }
-        // Add to the sum
-        // TODO: these should be either / or *...
-        // figure out these mappings...
-        sum += w[i] * (  flux_x(u) * (grad_basis_x(r1[i], r2[i], k) / x_r + grad_basis_y(r1[i], r2[i], k) / y_r)
-                       + flux_y(u) * (grad_basis_x(r1[i], r2[i], k) / x_s + grad_basis_y(r1[i], r2[i], k) / y_s));
-    }
-
-    return sum;
-}
-
 /* boundary exact
  *
  * returns the exact boundary conditions
@@ -214,10 +185,11 @@ __global__ void init_conditions(float *c,
             // perform quadrature
             for (j = 0; j < n_quad; j++) {
                 // map from the canonical element to the actual point on the mesh
-                x = (1 - r1[j] - r2[j]) * V1x[idx] + r1[j] * V2x[idx] + r2[j]*V3x[idx];
-                y = (1 - r1[j] - r2[j]) * V1y[idx] + r1[j] * V2y[idx] + r2[j]*V3y[idx];
-                //x = r1[j] * V1x[idx] + r2[j] * V2x[idx] + (1 - r1[j] - r2[j]) * V3x[idx];
-                //y = r1[j] * V1y[idx] + r2[j] * V2y[idx] + (1 - r1[j] - r2[j]) * V3y[idx];
+                // x = x1 * r + x2 * s + x3 * (1 - r - s)
+                //x = (1 - r1[j] - r2[j]) * V1x[idx] + r1[j] * V2x[idx] + r2[j]*V3x[idx];
+                //y = (1 - r1[j] - r2[j]) * V1y[idx] + r1[j] * V2y[idx] + r2[j]*V3y[idx];
+                x = r1[j] * V1x[idx] + r2[j] * V2x[idx] + (1 - r1[j] - r2[j]) * V3x[idx];
+                y = r1[j] * V1y[idx] + r2[j] * V2y[idx] + (1 - r1[j] - r2[j]) * V3y[idx];
                 // evaluate u there
                 u += w[j] * u0(x, y) * basis(r1[j], r2[j], i);
             }
@@ -400,6 +372,8 @@ __global__ void eval_riemann(float *c, float *left_riemann_rhs, float *right_rie
         ny = Ny[idx];
 
         // grab the coefficients for the left & right elements
+        // TODO: group all the boundary sides together so they are in the same warp;
+        //       means no warp divergence
         if (right_idx != -1) {
             // not a boundary side
             for (i = 0; i < n_p; i++) {
@@ -473,29 +447,30 @@ __global__ void eval_riemann(float *c, float *left_riemann_rhs, float *right_rie
          
         // multiply across by the i'th basis function
         for (i = 0; i < n_p; i++) {
-            left_sum  = 0;
-            right_sum = 0;
+            left_sum  = 0.;
+            right_sum = 0.;
             // we're at the j'th integration point
             for (j = 0; j < n_quad1d; j++) {
                 // compute u evaluated over the j'th integration point
                 // using the k basis functions
-                u_left  = 0;
-                u_right = 0;
+                u_left  = 0.;
+                u_right = 0.;
                 for (k = 0; k < n_p; k++) {
                     u_left  += c_left[k]  * basis(left_r1[j], left_r2[j], k);
-                    // if it's not a boundary element, compute it
-                    if (right_idx != -1) {
-                        u_right += c_right[k] * basis(right_r1[j], right_r2[j], k);
-                    }
                 }
 
                 // if it's a boundary element, use the boundary function to deal with it
                 if (right_idx == -1) {
-                    // x = x1 * r + x2 * s + x3 * (1 - r - s)
-                    x = V1x[left_idx] * left_r1[j] + V2x[left_idx] * left_r2[j] + V3x[left_idx] * (1 - left_r1[j] - left_r2[j]);
-                    y = V1y[left_idx] * left_r1[j] + V2y[left_idx] * left_r2[j] + V3y[left_idx] * (1 - left_r1[j] - left_r2[j]);
+                    // x = x1 2 r + x3 * s + x1 * (1 - r - s)
+                    x = V2x[left_idx] * left_r1[j] + V3x[left_idx] * left_r2[j] + V1x[left_idx] * (1 - left_r1[j] - left_r2[j]);
+                    y = V2y[left_idx] * left_r1[j] + V3y[left_idx] * left_r2[j] + V1y[left_idx] * (1 - left_r1[j] - left_r2[j]);
                         
                     u_right = boundary_exact(x, y);
+                } else {
+                    for (k = 0; k < n_p; k++) {
+                        // if it's not a boundary element, compute it
+                        u_right += c_right[k] * basis(right_r1[j], right_r2[j], k);
+                    }
                 }
 
                 // solve the Riemann problem at this integration point
@@ -506,11 +481,10 @@ __global__ void eval_riemann(float *c, float *left_riemann_rhs, float *right_rie
                 right_sum += (nx * flux_x(s) + ny * flux_y(s)) * oned_w[j] * basis(right_r1[j], right_r2[j], i);
             }
 
-            // store this side's contribution in the riemann rhs vector
             __syncthreads();
-            //c[i * num_elem + left_idx]  += len / 2. * left_sum;
-            //c[i * num_elem + right_idx] -= len / 2. * right_sum;
-            left_riemann_rhs [i * num_sides + idx] =  len / 2. * left_sum;
+
+            // store this side's contribution in the riemann rhs vector
+            left_riemann_rhs [i * num_sides + idx] = len / 2. * left_sum;
             right_riemann_rhs[i * num_sides + idx] = -len / 2. * right_sum;
         }
     }
@@ -530,32 +504,44 @@ __global__ void eval_riemann(float *c, float *left_riemann_rhs, float *right_rie
     int idx = blockDim.x * blockIdx.x + threadIdx.x;
 
     if (idx < num_elem) {
-        int i;
-        float quad_u, register_J;
+        int i, j, k;
+        float sum, u;
         float register_c[10];
         float x_r, x_s, y_r, y_s;
 
         // evaulate the jacobians of the mappings for the chain rule
-        // x = x1 * r + x2 * s + x3 * (1 - r - s)
-        x_r = V1x[idx] - V3x[idx];
-        y_r = V1y[idx] - V3y[idx];
-        x_s = V2x[idx] - V3x[idx];
-        y_s = V2y[idx] - V3y[idx];
+        // x = x2 * r + x3 * s + x1 * (1 - r - s)
+        x_r = V2x[idx] - V1x[idx];
+        y_r = V2y[idx] - V1y[idx];
+        x_s = V3x[idx] - V1x[idx];
+        y_s = V3y[idx] - V1y[idx];
 
         // get the coefficients for this element
         for (i = 0; i < n_p; i++) {
             register_c[i] = c[i*num_elem + idx];
         }
          
-        // the jacobian
-        register_J = J[idx];
-
         // evaluate the volume integral for each coefficient
         for (i = 0; i < n_p; i++) {
-            quad_u = quad(register_c, r1, r2, w, 
-                          x_r, y_r, x_s, y_s,
-                          register_J, i, n_quad, n_p);
-            quad_rhs[i * num_elem + idx] += -quad_u * register_J;
+            sum = 0.;
+            for (j = 0; j < n_quad; j++) {
+                // Evaluate u at the integration point.
+                u = 0;
+                for (k = 0; k < n_p; k++) {
+                    u += register_c[k] * basis(r1[j], r2[j], k);
+                }
+
+                // Add to the sum
+                // chain rule:
+                //  [fx fy] * [y_s, -y_r; -x_r, x_s]
+                sum += w[j] * (  flux_x(u) * (grad_basis_x(r1[j], r2[j], i) *  y_s +
+                                              grad_basis_y(r1[j], r2[j], i) * -y_r
+                               + flux_y(u) * (grad_basis_x(r1[j], r2[j], i) * -x_r +
+                                              grad_basis_y(r1[j], r2[j], i) *  x_s)));
+            }
+
+            // store the result
+            quad_rhs[i * num_elem + idx] = -sum * J[idx];
         }
     }
 }
@@ -589,9 +575,9 @@ __global__ void eval_u(float *c,
 
         // calculate values at three vertex points
         for (i = 0; i < n_p; i++) {
-            uv1 += register_c[i] * basis(V1x[idx], V1y[idx], i);
-            uv2 += register_c[i] * basis(V2x[idx], V2y[idx], i);
-            uv3 += register_c[i] * basis(V3x[idx], V3y[idx], i);
+            uv1 += register_c[i] * basis(0, 0, i);
+            uv2 += register_c[i] * basis(1, 0, i);
+            uv3 += register_c[i] * basis(0, 1, i);
         }
 
         // store result
@@ -643,7 +629,6 @@ __global__ void eval_rhs(float *c, float *quad_rhs, float *left_riemann_rhs, flo
 
             // calculate the coefficient c
             c[i * num_elem + idx] = dt * (quad_rhs[i * num_elem + idx] + s1 + s2 + s3);
-            quad_rhs[i * num_elem + idx] = 0;
         }
     }
 }
