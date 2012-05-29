@@ -244,9 +244,9 @@ __global__ void preval_jacobian(float *J,
         x3 = V3x[idx];
         y3 = V3y[idx];
 
-        // x = x1 * r + x2 * s + x3 * (1 - r - s)
+        // x = x2 * r + x3 * s + x1 * (1 - r - s)
         // calculate jacobian determinant
-        J[idx] = (-x1 + x2) * (-y1 + y3) - (-x1 + x3) * (-y1 + y2);
+        J[idx] = (x2 - x1) * (y3 - y1) - (x3 - x1) * (y2 - y1);
     }
 }
 
@@ -422,6 +422,12 @@ __global__ void eval_riemann(float *c, float *left_riemann_rhs, float *right_rie
          
         // get the integration points for the right element's side
         switch (right_side) {
+            case 0:
+                for (i = 0; i < n_quad1d; i++) {
+                    right_r1[i] = left_r1[i];
+                    right_r2[i] = left_r2[i];
+                }
+                break;
             case 1: 
                 for (i = 0; i < n_quad1d; i++) {
                     right_r1[i] = s1_r1[i];
@@ -461,7 +467,7 @@ __global__ void eval_riemann(float *c, float *left_riemann_rhs, float *right_rie
 
                 // if it's a boundary element, use the boundary function to deal with it
                 if (right_idx == -1) {
-                    // x = x1 2 r + x3 * s + x1 * (1 - r - s)
+                    // x = x2 * r + x3 * s + x1 * (1 - r - s)
                     x = V2x[left_idx] * left_r1[j] + V3x[left_idx] * left_r2[j] + V1x[left_idx] * (1 - left_r1[j] - left_r2[j]);
                     y = V2y[left_idx] * left_r1[j] + V3y[left_idx] * left_r2[j] + V1y[left_idx] * (1 - left_r1[j] - left_r2[j]);
                         
@@ -477,15 +483,17 @@ __global__ void eval_riemann(float *c, float *left_riemann_rhs, float *right_rie
                 s = riemann(u_left, u_right);
 
                 // calculate the quadrature over [-1,1] for these sides
-                left_sum  += (nx * flux_x(s) + ny * flux_y(s)) * oned_w[j] * basis(left_r1[j],  left_r2[j],  i);
-                right_sum += (nx * flux_x(s) + ny * flux_y(s)) * oned_w[j] * basis(right_r1[j], right_r2[j], i);
+                left_sum  += (nx * flux_x(s) + ny * flux_y(s)) 
+                             * oned_w[j] * basis(left_r1[j],  left_r2[j],  i);
+                right_sum += (nx * flux_x(s) + ny * flux_y(s)) 
+                             * oned_w[j] * basis(right_r1[j], right_r2[j], i);
             }
 
             __syncthreads();
 
             // store this side's contribution in the riemann rhs vector
-            left_riemann_rhs [i * num_sides + idx] = len / 2. * left_sum;
-            right_riemann_rhs[i * num_sides + idx] = -len / 2. * right_sum;
+            left_riemann_rhs [i * num_sides + idx] = -len / 2. * left_sum;
+            right_riemann_rhs[i * num_sides + idx] =  len / 2. * right_sum;
         }
     }
 }
@@ -518,7 +526,7 @@ __global__ void eval_riemann(float *c, float *left_riemann_rhs, float *right_rie
 
         // get the coefficients for this element
         for (i = 0; i < n_p; i++) {
-            register_c[i] = c[i*num_elem + idx];
+            register_c[i] = c[i * num_elem + idx];
         }
          
         // evaluate the volume integral for each coefficient
@@ -533,15 +541,16 @@ __global__ void eval_riemann(float *c, float *left_riemann_rhs, float *right_rie
 
                 // Add to the sum
                 // chain rule:
-                //  [fx fy] * [y_s, -y_r; -x_r, x_s]
-                sum += w[j] * (  flux_x(u) * (grad_basis_x(r1[j], r2[j], i) *  y_s +
-                                              grad_basis_y(r1[j], r2[j], i) * -y_r
-                               + flux_y(u) * (grad_basis_x(r1[j], r2[j], i) * -x_r +
-                                              grad_basis_y(r1[j], r2[j], i) *  x_s)));
+                // Noel: [fx fy] * [y_s, -y_r; -x_r, x_s]
+                //       [fx fy] * [y_s, -x_s; -y_r, x_r]
+                sum += w[j] * (flux_x(u) * (grad_basis_x(r1[j], r2[j], i) *  y_s +
+                                            grad_basis_y(r1[j], r2[j], i) * -x_s)
+                             + flux_y(u) * (grad_basis_x(r1[j], r2[j], i) * -y_r +
+                                            grad_basis_y(r1[j], r2[j], i) *  x_r)) / 2.; //TODO: here, too
             }
 
             // store the result
-            quad_rhs[i * num_elem + idx] = -sum * J[idx];
+            quad_rhs[i * num_elem + idx] = sum * J[idx];
         }
     }
 }
@@ -586,6 +595,7 @@ __global__ void eval_u(float *c,
         Uv3[idx] = uv3;
     }
 }
+
 /* right hand side
  *
  * computes the sum of the quadrature and the riemann flux for the 
@@ -594,12 +604,15 @@ __global__ void eval_u(float *c,
  */
 __global__ void eval_rhs(float *c, float *quad_rhs, float *left_riemann_rhs, float *right_riemann_rhs, 
                          int *elem_s1, int *elem_s2, int *elem_s3,
-                         int *left_elem, float dt, int n_p, int num_sides, int num_elem) {
+                         int *left_elem, float *J, 
+                         float dt, int n_p, int num_sides, int num_elem) {
     int idx = blockDim.x * blockIdx.x + threadIdx.x;
-    float s1, s2, s3;
+    float s1, s2, s3, register_J;
     int i, s1_idx, s2_idx, s3_idx;
 
     if (idx < num_elem) {
+
+        register_J = J[idx];
 
         // get the indicies for the riemann contributions for this element
         s1_idx = elem_s1[idx];
@@ -628,7 +641,7 @@ __global__ void eval_rhs(float *c, float *quad_rhs, float *left_riemann_rhs, flo
             }
 
             // calculate the coefficient c
-            c[i * num_elem + idx] = dt * (quad_rhs[i * num_elem + idx] + s1 + s2 + s3);
+            c[i * num_elem + idx] = 1. / abs(register_J) * dt * (quad_rhs[i * num_elem + idx] + s1 + s2 + s3);
         }
     }
 }

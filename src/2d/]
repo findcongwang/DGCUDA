@@ -89,7 +89,7 @@ void set_quadrature(int p,
     for (i = 0; i < *n_quad; i++) {
         (*r1)[i] = quad_2d[p][3*i];
         (*r2)[i] = quad_2d[p][3*i+1];
-        (*w) [i] = quad_2d[p][3*i+2]; //TODO: this should be /2
+        (*w) [i] = quad_2d[p][3*i+2];
     }
 
     // set 1D quadrature rules
@@ -99,8 +99,8 @@ void set_quadrature(int p,
         (*s1_r1)[i] = 0.5 * quad_1d[p][2*i] + 0.5;
         (*s1_r2)[i] = 0;
 
-        (*s2_r1)[i] = (1. - quad_1d[p][2*i]) / 2.;
-        (*s2_r2)[i] = (1. + quad_1d[p][2*i]) / 2.;
+        (*s2_r1)[i] = 0.5 * quad_1d[p][2*i] - 0.5;
+        (*s2_r2)[i] = 0.5 * quad_1d[p][2*i] + 0.5;
 
         (*s3_r1)[i] = 0;
         (*s3_r2)[i] = 0.5 * quad_1d[p][2*i] + 0.5;

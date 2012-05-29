@@ -130,9 +130,9 @@ float *quad_2d[] = {quad_2d_degree1, quad_2d_degree2, quad_2d_degree3,
 ////////////////////////////////////////
 
 // order goes (r1, w1, r2, w2, ...)
-float quad_1d_degree1[] = {0.5,2.0};
+float quad_1d_degree1[] = {0.0,2.0};
 float quad_1d_degree2[] = {-1./sqrt(3),1.,
-                           1./sqrt(3),1.};
+                            1./sqrt(3),1.};
 float quad_1d_degree3[] = {0., 8./9,
                            -sqrt(3./5), 5./9,
                            sqrt(3./5), 5./9};
