@@ -497,7 +497,7 @@ __global__ void eval_riemann(float *c, float *left_riemann_rhs, float *right_rie
             //left_riemann_rhs [i * num_sides + idx] = -len / 2. * left_sum;
             //right_riemann_rhs[i * num_sides + idx] =  len / 2. * right_sum;
             left_riemann_rhs [i * num_sides + idx] = -len / 2. * left_sum;
-            right_riemann_rhs[i * num_sides + idx] =  len / 2. * right_sum; 
+            right_riemann_rhs[i * num_sides + idx] =  len / 2. * left_sum; 
         }
     }
 }
@@ -552,11 +552,11 @@ __global__ void eval_riemann(float *c, float *left_riemann_rhs, float *right_rie
 
                 // Add to the sum
                 // chain rule:
-                //       [fx fy] * [y_s, -y_r; -x_s, x_r]
+                //       [fx fy] * [y_s, -x_s; -y_r, x_r]
                 //sum += w[j] * (phi_x[i] * y_s - phi_y[i] * x_s - phi_x[i] * y_r + phi_y[i] * x_r) / 2;
                 // what? why does THIS work? 
                 //TODO: need flux here
-                sum += w[j] * (phi_x[i] * y_s - phi_y[i] * y_r - phi_x[i] * x_s + phi_y[i] * x_r);
+                sum += w[j] * (-x_s*phi_y[i] + y_s*phi_x[i] - y_r*phi_x[i] + phi_y[i]*x_r);
                 // when THIS doesn't? this doesn't make any sense at all....
                 //sum += w[j] * (flux_x(u) * ( grad_basis_x(r1[j], r2[j], i) * y_s 
                                             //-grad_basis_y(r1[j], r2[j], i) * x_s)
@@ -565,9 +565,6 @@ __global__ void eval_riemann(float *c, float *left_riemann_rhs, float *right_rie
             }
 
             // store the result
-            if (J[idx] < 0) {
-                sum *= -1.;
-            }
             quad_rhs[i * num_elem + idx] = sum / 2.; // the over 2 thing is for the weights
             //quad_rhs[i * num_elem + idx] = - w[0] * grad_basis_y(r1[0], r2[0], 2)/2
                                            //- w[1] * grad_basis_y(r1[1], r2[1], 2)/2 
@@ -665,7 +662,7 @@ __global__ void eval_rhs(float *c, float *quad_rhs, float *left_riemann_rhs, flo
             }
 
             // calculate the coefficient c
-            c[i * num_elem + idx] = 1. / register_J * dt * (quad_rhs[i * num_elem + idx] + s1 + s2 + s3);
+            c[i * num_elem + idx] = 1. / abs(register_J) * dt * (quad_rhs[i * num_elem + idx] + s1 + s2 + s3);
         }
     }
 }

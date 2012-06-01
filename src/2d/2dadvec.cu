@@ -96,13 +96,16 @@ void set_quadrature(int p,
     // TODO: there's an obvious more efficient way of doing this:
     //       just store 0.5 * quad_1d[p][i] and reuse it depending on the side
     for (i = 0; i < *n_quad1d; i++) {
+        // side 1
         (*s1_r1)[i] = 0.5 * quad_1d[p][2*i] + 0.5;
-        (*s1_r2)[i] = 0;
+        (*s1_r2)[i] = 0.;
 
+        // side 2
         (*s2_r1)[i] = (1. - quad_1d[p][2*i]) / 2.;
         (*s2_r2)[i] = (1. + quad_1d[p][2*i]) / 2.;
 
-        (*s3_r1)[i] = 0;
+        // side 3
+        (*s3_r1)[i] = 0.;
         (*s3_r2)[i] = 0.5 * quad_1d[p][2*i] + 0.5;
 
         (*oned_w)[i] = quad_1d[p][2*i+1];
@@ -282,8 +285,12 @@ void time_integrate(float dt, int n_quad, int n_quad1d, int n_p, int num_elem, i
         float *right_rhs = (float *) malloc(num_sides * n_p * sizeof(float));
         cudaMemcpy(left_rhs, d_left_riemann_rhs, num_sides * n_p * sizeof(float), cudaMemcpyDeviceToHost);
         cudaMemcpy(right_rhs, d_right_riemann_rhs, num_sides * n_p * sizeof(float), cudaMemcpyDeviceToHost);
-        printf(" ~ riemann\n");
+        printf(" riemann\n");
+        printf(" ~~~\n");
         for (int i = 0; i < num_sides * n_p; i++) {
+            if (i != 0 && i % num_sides == 0) {
+                printf("   --- \n");
+            }
             printf(" > (%f, %f) \n", left_rhs[i], right_rhs[i]);
         }
         free(left_rhs);
@@ -301,8 +308,12 @@ void time_integrate(float dt, int n_quad, int n_quad1d, int n_p, int num_elem, i
     if (debug) {
         float *quad_rhs = (float *) malloc(num_elem * n_p * sizeof(float));
         cudaMemcpy(quad_rhs, d_quad_rhs, num_elem * n_p * sizeof(float), cudaMemcpyDeviceToHost);
-        printf(" ~ quad_rhs\n");
+        printf(" quad_rhs\n");
+        printf(" ~~~\n");
         for (int i = 0; i < num_elem * n_p; i++) {
+            if (i != 0 && i % num_elem == 0) {
+                printf("   --- \n");
+            }
             printf(" > %f \n", quad_rhs[i]);
             }
         free(quad_rhs);
@@ -312,6 +323,21 @@ void time_integrate(float dt, int n_quad, int n_quad1d, int n_p, int num_elem, i
                                           d_elem_s1, d_elem_s2, d_elem_s3, 
                                           d_left_elem, d_J, dt, n_p, num_sides, num_elem);
     cudaThreadSynchronize();
+
+    if (debug) {
+        float *rhs = (float *) malloc(num_elem * n_p * sizeof(float));
+        cudaMemcpy(rhs, d_k1, num_elem * n_p * sizeof(float), cudaMemcpyDeviceToHost);
+        printf(" eval_rhs\n");
+        printf(" ~~~\n");
+        for (int i = 0; i < num_elem * n_p; i++) {
+            if (i != 0 && i % num_elem == 0) {
+                printf("   --- \n");
+            }
+            printf(" > %f \n", rhs[i]);
+            }
+        free(rhs);
+    }
+
 
     rk4_tempstorage<<<n_blocks_elem, n_threads>>>(d_c, d_kstar, d_k1, 0.5, n_p, num_elem);
     cudaThreadSynchronize();
@@ -836,8 +862,12 @@ int main(int argc, char *argv[]) {
     if (debug) {
         float *c = (float *) malloc(num_elem * n_p * sizeof(float));
         cudaMemcpy(c, d_c, num_elem * n_p * sizeof(float), cudaMemcpyDeviceToHost);
-        printf(" ~ c\n");
+        printf(" c\n");
+        printf(" ~~~\n");
         for (i = 0; i < num_elem * n_p; i++) {
+            if (i != 0 && i % num_elem == 0) {
+                printf("   --- \n");
+            }
             printf(" > %f\n", c[i]);
         }
         free(c);
