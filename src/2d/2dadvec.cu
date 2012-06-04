@@ -16,10 +16,8 @@
  */
 void set_quadrature(int p,
                     float **r1, float **r2, float **w,
-                    float **s1_r1, float **s1_r2,
-                    float **s2_r1, float **s2_r2,
-                    float **s3_r1, float **s3_r2,
-                    float **oned_w, int *n_quad, int *n_quad1d) {
+                    float **s_r, float **oned_w, 
+                    int *n_quad, int *n_quad1d) {
     int i;
     /*
      * The sides are mapped to the canonical element, so we want the integration points
@@ -77,19 +75,14 @@ void set_quadrature(int p,
     *r2 = (float *) malloc(*n_quad * sizeof(float));
     *w  =  (float *) malloc(*n_quad * sizeof(float));
 
-    *s1_r1 = (float *) malloc(*n_quad1d * sizeof(float));
-    *s1_r2 = (float *) malloc(*n_quad1d * sizeof(float));
-    *s2_r1 = (float *) malloc(*n_quad1d * sizeof(float));
-    *s2_r2 = (float *) malloc(*n_quad1d * sizeof(float));
-    *s3_r1 = (float *) malloc(*n_quad1d * sizeof(float));
-    *s3_r2 = (float *) malloc(*n_quad1d * sizeof(float));
+    *s_r = (float *) malloc(*n_quad1d * sizeof(float));
     *oned_w = (float *) malloc(*n_quad1d * sizeof(float));
 
     // set 2D quadrature rules
     for (i = 0; i < *n_quad; i++) {
         (*r1)[i] = quad_2d[p][3*i];
         (*r2)[i] = quad_2d[p][3*i+1];
-        (*w) [i] = quad_2d[p][3*i+2]; //TODO: this should be /2
+        (*w) [i] = quad_2d[p][3*i+2] / 2.; //weights are 2 times too big for some reason
     }
 
     // set 1D quadrature rules
@@ -97,16 +90,16 @@ void set_quadrature(int p,
     //       just store 0.5 * quad_1d[p][i] and reuse it depending on the side
     for (i = 0; i < *n_quad1d; i++) {
         // side 1
-        (*s1_r1)[i] = 0.5 * quad_1d[p][2*i] + 0.5;
-        (*s1_r2)[i] = 0.;
+        (*s_r)[i] = quad_1d[p][2*i];
+        //(*s1_r2)[i] = 0.;
 
         // side 2
-        (*s2_r1)[i] = (1. - quad_1d[p][2*i]) / 2.;
-        (*s2_r2)[i] = (1. + quad_1d[p][2*i]) / 2.;
+        //(*s2_r1)[i] = (1. - quad_1d[p][2*i]) / 2.;
+        //(*s2_r2)[i] = (1. + quad_1d[p][2*i]) / 2.;
 
         // side 3
-        (*s3_r1)[i] = 0.;
-        (*s3_r2)[i] = 0.5 * quad_1d[p][2*i] + 0.5;
+        //(*s3_r1)[i] = 0.;
+        //(*s3_r2)[i] = 0.5 * quad_1d[p][2*i] + 0.5;
 
         (*oned_w)[i] = quad_1d[p][2*i+1];
     }
@@ -265,9 +258,7 @@ void time_integrate(float dt, int n_quad, int n_quad1d, int n_p, int num_elem, i
     eval_riemann<<<n_blocks_sides, n_threads>>>
                     (d_c, d_left_riemann_rhs, d_right_riemann_rhs, d_J, 
                      d_s_length,
-                     d_s1_r1, d_s1_r2,
-                     d_s2_r1, d_s2_r2,
-                     d_s3_r1, d_s3_r2,
+                     d_s_r,
                      d_V1x, d_V1y,
                      d_V2x, d_V2y,
                      d_V3x, d_V3y,
@@ -348,9 +339,7 @@ void time_integrate(float dt, int n_quad, int n_quad1d, int n_p, int num_elem, i
     eval_riemann<<<n_blocks_sides, n_threads>>>
                     (d_kstar, d_left_riemann_rhs, d_right_riemann_rhs, d_J, 
                      d_s_length,
-                     d_s1_r1, d_s1_r2,
-                     d_s2_r1, d_s2_r2,
-                     d_s3_r1, d_s3_r2,
+                     d_s_r,
                      d_V1x, d_V1y,
                      d_V2x, d_V2y,
                      d_V3x, d_V3y,
@@ -381,9 +370,7 @@ void time_integrate(float dt, int n_quad, int n_quad1d, int n_p, int num_elem, i
     eval_riemann<<<n_blocks_sides, n_threads>>>
                     (d_kstar, d_left_riemann_rhs, d_right_riemann_rhs, d_J, 
                      d_s_length,
-                     d_s1_r1, d_s1_r2,
-                     d_s2_r1, d_s2_r2,
-                     d_s3_r1, d_s3_r2,
+                     d_s_r,
                      d_V1x, d_V1y,
                      d_V2x, d_V2y,
                      d_V3x, d_V3y,
@@ -414,9 +401,7 @@ void time_integrate(float dt, int n_quad, int n_quad1d, int n_p, int num_elem, i
     eval_riemann<<<n_blocks_sides, n_threads>>>
                     (d_kstar, d_left_riemann_rhs, d_right_riemann_rhs, d_J, 
                      d_s_length,
-                     d_s1_r1, d_s1_r2,
-                     d_s2_r1, d_s2_r2,
-                     d_s3_r1, d_s3_r2,
+                     d_s_r,
                      d_V1x, d_V1y,
                      d_V2x, d_V2y,
                      d_V3x, d_V3y,
@@ -501,12 +486,7 @@ void init_gpu(int num_elem, int num_sides, int n_p,
     cudaMalloc((void **) &d_V3x, num_elem * sizeof(float));
     cudaMalloc((void **) &d_V3y, num_elem * sizeof(float));
 
-    cudaMalloc((void **) &d_s1_r1, n_p * sizeof(float));
-    cudaMalloc((void **) &d_s1_r2, n_p * sizeof(float));
-    cudaMalloc((void **) &d_s2_r1, n_p * sizeof(float));
-    cudaMalloc((void **) &d_s2_r2, n_p * sizeof(float));
-    cudaMalloc((void **) &d_s3_r1, n_p * sizeof(float));
-    cudaMalloc((void **) &d_s3_r2, n_p * sizeof(float));
+    cudaMalloc((void **) &d_s_r, n_p * sizeof(float));
     
     cudaMalloc((void **) &d_left_side_number , num_sides * sizeof(int));
     cudaMalloc((void **) &d_right_side_number, num_sides * sizeof(int));
@@ -586,12 +566,7 @@ void free_gpu() {
     cudaFree(d_V3x);
     cudaFree(d_V3y);
 
-    cudaFree(d_s1_r1);
-    cudaFree(d_s1_r2);
-    cudaFree(d_s2_r1);
-    cudaFree(d_s2_r2);
-    cudaFree(d_s3_r1);
-    cudaFree(d_s3_r2);
+    cudaFree(d_s_r);
     
     cudaFree(d_left_side_number);
     cudaFree(d_right_side_number);
@@ -617,17 +592,14 @@ int main(int argc, char *argv[]) {
     int i, n, n_p, t, timesteps, n_quad, n_quad1d;
     int debug;
 
-    float dot, x, y, third_x, third_y, left_x, left_y, length;
     float dt; 
-    float *Nx, *Ny;
     float *V1x, *V1y, *V2x, *V2y, *V3x, *V3y;
     float *sides_x1, *sides_x2;
     float *sides_y1, *sides_y2;
 
     float *r1, *r2, *w;
 
-    float *s1_r1, *s1_r2, *s2_r1, *s2_r2, *s3_r1, *s3_r2;
-    float *oned_w;
+    float *s_r, *oned_w;
 
     int *left_elem, *right_elem;
     int *elem_s1, *elem_s2, *elem_s3;
@@ -735,50 +707,6 @@ int main(int argc, char *argv[]) {
     // close the file
     fclose(mesh_file);
 
-    Nx = (float *) malloc(num_sides * sizeof(float));
-    Ny = (float *) malloc(num_sides * sizeof(float));
-
-    // ugh, this is so dumb. the stupid gpu (on gale) won't 
-    // reverse the normal vectors all the time. it'll sometimes do it,
-    // sometimes not. fucking ridiculous. so here it's done on the cpu.
-    for (i = 0; i < num_sides; i++) {
-       
-        x = sides_x2[i] - sides_x1[i];
-        y = sides_y2[i] - sides_y1[i];
-
-        switch(left_side_number[i]) {
-            case 1: 
-                left_x = V3x[left_elem[i]];
-                left_y = V3y[left_elem[i]];
-
-                break;
-            case 2:
-                left_x = V1x[left_elem[i]];
-                left_y = V1y[left_elem[i]];
-
-                break;
-            case 3:
-                left_x = V2x[left_elem[i]];
-                left_y = V2y[left_elem[i]];
-
-                break;
-        }
-        third_x = left_x - (sides_x1[i] + sides_x2[i]) / 2.;
-        third_y = left_y - (sides_y1[i] + sides_y2[i]) / 2.;
-    
-        // find the dot product between the normal vector and the third vetrex point
-        length = sqrtf(powf(x,2) + powf(y,2));
-        dot = -y*third_x + x*third_y;
-
-        // if the dot product is negative, reverse direction
-        if (dot > 0) {
-            length *= -1;
-        }
-
-        Nx[i] = -y / length;
-        Ny[i] =  x / length;
-    }
-
     // initialize the gpu
     init_gpu(num_elem, num_sides, n_p,
              V1x, V1y, V2x, V2y, V3x, V3y,
@@ -796,23 +724,17 @@ int main(int argc, char *argv[]) {
     preval_side_length<<<n_blocks_sides, n_threads>>>(d_s_length, d_s_V1x, d_s_V1y, d_s_V2x, d_s_V2y, 
                                                       num_sides); 
     preval_jacobian<<<n_blocks_elem, n_threads>>>(d_J, d_V1x, d_V1y, d_V2x, d_V2y, d_V3x, d_V3y, num_elem); 
-    //preval_normals<<<n_blocks_sides, n_threads>>>(d_Nx, d_Ny, 
-                                                  //d_s_V1x, d_s_V1y, d_s_V2x, d_s_V2y,
-                                                  //d_V1x, d_V1y, 
-                                                  //d_V2x, d_V2y, 
-                                                  //d_V3x, d_V3y, 
-                                                  //d_left_elem, d_left_side_number, num_sides); 
+    preval_normals<<<n_blocks_sides, n_threads>>>(d_Nx, d_Ny, 
+                                                  d_s_V1x, d_s_V1y, d_s_V2x, d_s_V2y,
+                                                  d_V1x, d_V1y, 
+                                                  d_V2x, d_V2y, 
+                                                  d_V3x, d_V3y, 
+                                                  d_left_elem, d_left_side_number, num_sides); 
     checkCudaError("error after prevals.");
-
-    cudaMemcpy(d_Nx, Nx, num_sides * sizeof(float), cudaMemcpyHostToDevice);
-    cudaMemcpy(d_Ny, Ny, num_sides * sizeof(float), cudaMemcpyHostToDevice);
 
     // get the correct quadrature rules for this scheme
     set_quadrature(n, &r1, &r2, &w, 
-                   &s1_r1, &s1_r2, 
-                   &s2_r1, &s2_r2, 
-                   &s3_r1, &s3_r2, 
-                   &oned_w, &n_quad, &n_quad1d);
+                   &s_r, &oned_w, &n_quad, &n_quad1d);
 
     checkCudaError("error before quadrature copy.");
 
@@ -820,12 +742,7 @@ int main(int argc, char *argv[]) {
     cudaMemcpy(d_r2, r2, n_quad * sizeof(float), cudaMemcpyHostToDevice);
     cudaMemcpy(d_w , w , n_quad * sizeof(float), cudaMemcpyHostToDevice);
 
-    cudaMemcpy(d_s1_r1, s1_r1, n_quad1d * sizeof(float), cudaMemcpyHostToDevice);
-    cudaMemcpy(d_s1_r2, s1_r2, n_quad1d * sizeof(float), cudaMemcpyHostToDevice);
-    cudaMemcpy(d_s2_r1, s2_r1, n_quad1d * sizeof(float), cudaMemcpyHostToDevice);
-    cudaMemcpy(d_s2_r2, s2_r2, n_quad1d * sizeof(float), cudaMemcpyHostToDevice);
-    cudaMemcpy(d_s3_r1, s3_r1, n_quad1d * sizeof(float), cudaMemcpyHostToDevice);
-    cudaMemcpy(d_s3_r2, s3_r2, n_quad1d * sizeof(float), cudaMemcpyHostToDevice);
+    cudaMemcpy(d_s_r, s_r, n_quad1d * sizeof(float), cudaMemcpyHostToDevice);
 
     cudaMemcpy(d_oned_w, oned_w, n_quad1d * sizeof(float), cudaMemcpyHostToDevice);
 
@@ -923,16 +840,8 @@ int main(int argc, char *argv[]) {
     free(r1);
     free(r2);
     free(w);
-    free(s1_r1);
-    free(s1_r2);
-    free(s2_r1);
-    free(s2_r2);
-    free(s3_r1);
-    free(s3_r2);
+    free(s_r);
     free(oned_w);
-
-    free(Nx);
-    free(Ny);
 
     return 0;
 }
