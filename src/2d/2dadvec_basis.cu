@@ -3,6 +3,8 @@
 #include <stdlib.h>
 #include "2dadvec_kernels.cu"
 #include "quadrature.h"
+#include "basis.h"
+
 /* 2dadvec.cu
  * 
  * This file calls the kernels in 2dadvec_kernels.cu for the 2D advection
@@ -114,7 +116,6 @@ void read_mesh(FILE *mesh_file,
               int *left_elem, int *right_elem) {
 
     int i, j, s1, s2, s3, numsides;
-    float J, tmpx, tmpy;
     char line[100];
     numsides = 0;
     // stores the number of sides this element has.
@@ -132,16 +133,6 @@ void read_mesh(FILE *mesh_file,
         s1 = 1;
         s2 = 1;
         s3 = 1;
-
-        J = (V2x[i] - V1x[i]) * (V3y[i] - V1y[i]) - (V3x[i] - V1x[i]) * (V2y[i] - V1y[i]);
-        if (J < 0) {
-            tmpx = V1x[i];
-            tmpy = V1y[i];
-            V1x[i] = V2x[i];
-            V1y[i] = V2y[i];
-            V2x[i] = tmpx;
-            V2y[i] = tmpy;
-        }
 
         // scan through the existing sides to see if we already added it
         // TODO: yeah, there's a better way to do this.
@@ -428,6 +419,47 @@ void time_integrate(float dt, int n_quad, int n_quad1d, int n_p, int num_elem, i
 
     checkCudaError("error after final stage.");
 }
+void preval_basis(float *r1, float *r2, float *s_r, int n_quad, int n_quad1d, int n_p) {
+    float *basis_eval        = (float *) malloc(n_quad * n_p * sizeof(float));
+    float *basis_grad_x_eval = (float *) malloc(n_quad * n_p * sizeof(float)); 
+    float *basis_grad_y_eval = (float *) malloc(n_quad * n_p * sizeof(float)); 
+    float *basis_side_eval   = (float *) malloc(3 * n_quad1d * n_p * sizeof(float));
+
+    int i, j;
+
+    for (i = 0; i < n_quad; i++) {
+        printf("%f\n", phi_y(r1[i], r2[i], 2));
+    }
+
+    printf("n_quad1d = %i\n n_quad = %i\n n_p = %i\n", n_quad1d, n_quad, n_p);
+
+    for (i = 0; i < n_p; i++) {
+        //precompute the quadrature nodes on the elements for the basis & gradients
+        for (j = 0; j < n_quad; j++) {
+            basis_eval[i * n_quad + j] = phi(r1[j], r2[j], i);
+            basis_grad_x_eval[i * n_quad + j] = phi_x(r1[j], r2[j], i);
+            basis_grad_y_eval[i * n_quad + j] = phi_y(r1[j], r2[j], i);
+        }
+
+        // precompute the quadrature nodes at the sides going in the clockwise direction
+        for (j = 0; j < n_quad1d; j++) {
+            basis_side_eval[0 * (n_quad1d * n_p) + i * n_quad1d + j] = phi(0.5 + 0.5 * s_r[j], 0, i);
+            basis_side_eval[1 * (n_quad1d * n_p) + i * n_quad1d + j] = phi((1 - s_r[j])/2, (1 + s_r[j])/2, i);
+            basis_side_eval[2 * (n_quad1d * n_p) + i * n_quad1d + j] = phi(0, 0.5 + 0.5 * s_r[n_quad1d - 1 - j], i);
+        }
+    }
+
+    // set the constants on the GPU to the evaluations
+    //set_basis(basis_eval, n_quad * n_p * sizeof(float));
+    //set_basis_grad_x(basis_grad_x_eval, n_quad * n_p * sizeof(float));
+    //set_basis_grad_y(basis_grad_x_eval, n_quad * n_p * sizeof(float));
+    //set_basis_side(basis_side_eval, 3 * n_quad1d * n_p * sizeof(float));
+
+    free(basis_eval);
+    free(basis_grad_x_eval);
+    free(basis_grad_y_eval);
+    free(basis_side_eval);
+}
 
 void init_gpu(int num_elem, int num_sides, int n_p,
               float *V1x, float *V1y, 
@@ -713,53 +745,85 @@ int main(int argc, char *argv[]) {
              elem_s1, elem_s2, elem_s3,
              left_elem, right_elem);
 
+    float *Nx, *Ny;
+    Nx = (float *) malloc(num_sides * sizeof(float));
+    Ny = (float *) malloc(num_sides * sizeof(float));
+
+    float left_x, left_y, x, y, dot, length, third_x, third_y;
+
+    // pre evaluate the basis function quadrature evaluations
+    //preval_basis(r1, r2, s_r, n_quad, n_quad1d, n_p);
+
     n_threads        = 128;
     n_blocks_elem    = (num_elem  / n_threads) + ((num_elem  % n_threads) ? 1 : 0);
     n_blocks_sides   = (num_sides / n_threads) + ((num_sides % n_threads) ? 1 : 0);
 
     // pre computations
-    preval_jacobian<<<n_blocks_elem, n_threads>>>(d_J, d_V1x, d_V1y, d_V2x, d_V2y, d_V3x, d_V3y, num_elem); 
-    cudaThreadSynchronize();
-    //preval_jacobian_sign<<<n_blocks_elem, n_threads>>>(d_J, d_V1x, d_V1y, d_V2x, d_V2y, num_elem); 
-    //cudaThreadSynchronize();
     preval_side_length<<<n_blocks_sides, n_threads>>>(d_s_length, d_s_V1x, d_s_V1y, d_s_V2x, d_s_V2y, 
                                                       num_sides); 
-    cudaThreadSynchronize();
-    preval_normals<<<n_blocks_sides, n_threads>>>(d_Nx, d_Ny, 
-                                                  d_s_V1x, d_s_V1y, d_s_V2x, d_s_V2y,
-                                                  d_V1x, d_V1y, 
-                                                  d_V2x, d_V2y, 
-                                                  d_V3x, d_V3y, 
-                                                  d_left_elem, d_left_side_number, num_sides); 
-    cudaThreadSynchronize();
-    preval_normals_direction<<<n_blocks_sides, n_threads>>>(d_Nx, d_Ny, 
-                                                  d_V1x, d_V1y, 
-                                                  d_V2x, d_V2y, 
-                                                  d_V3x, d_V3y, 
-                                                  d_left_elem, d_left_side_number, num_sides); 
-    cudaThreadSynchronize();
+    preval_jacobian<<<n_blocks_elem, n_threads>>>(d_J, d_V1x, d_V1y, d_V2x, d_V2y, d_V3x, d_V3y, num_elem); 
+    //preval_normals<<<n_blocks_sides, n_threads>>>(d_Nx, d_Ny, 
+                                                  //d_s_V1x, d_s_V1y, d_s_V2x, d_s_V2y,
+                                                  //d_V1x, d_V1y, 
+                                                  //d_V2x, d_V2y, 
+                                                  //d_V3x, d_V3y, 
+                                                  //d_left_elem, d_left_side_number, num_sides); 
+    preval_jacobian_sign<<<n_blocks_elem, n_threads>>>(d_J, d_V1x, d_V1y, d_V2x, d_V2y, num_elem); 
     checkCudaError("error after prevals.");
 
-    if (debug) {
-        float *Nx = (float *) malloc(num_sides * sizeof(float));
-        float *Ny = (float *) malloc(num_sides * sizeof(float));
+    cudaMemcpy(V1x, d_V1x, num_elem * sizeof(float), cudaMemcpyDeviceToHost);
+    cudaMemcpy(V1y, d_V1y, num_elem * sizeof(float), cudaMemcpyDeviceToHost);
+    cudaMemcpy(V2x, d_V2x, num_elem * sizeof(float), cudaMemcpyDeviceToHost);
+    cudaMemcpy(V2y, d_V1y, num_elem * sizeof(float), cudaMemcpyDeviceToHost);
 
-        cudaMemcpy(Nx, d_Nx, num_sides *sizeof(float), cudaMemcpyDeviceToHost);
-        cudaMemcpy(Ny, d_Ny, num_sides *sizeof(float), cudaMemcpyDeviceToHost);
+    // ugh, this is so dumb. the stupid gpu (on gale) won't 
+    // reverse the normal vectors all the time. it'll sometimes do it,
+    // sometimes not. fucking ridiculous. so here it's done on the cpu.
+    for (i = 0; i < num_sides; i++) {
+       
+        x = sides_x2[i] - sides_x1[i];
+        y = sides_y2[i] - sides_y1[i];
 
-        printf("normals\n");
-        for (i = 0; i < num_sides; i++) {
-            printf("(%f, %f) \n", Nx[i], Ny[i]);
+        switch(left_side_number[i]) {
+            case 1: 
+                left_x = V3x[left_elem[i]];
+                left_y = V3y[left_elem[i]];
+
+                break;
+            case 2:
+                left_x = V1x[left_elem[i]];
+                left_y = V1y[left_elem[i]];
+
+                break;
+            case 3:
+                left_x = V2x[left_elem[i]];
+                left_y = V2y[left_elem[i]];
+
+                break;
         }
-        free(Nx);
-        free(Ny);
+        third_x = left_x - (sides_x1[i] + sides_x2[i]) / 2.;
+        third_y = left_y - (sides_y1[i] + sides_y2[i]) / 2.;
+    
+        // find the dot product between the normal vector and the third vetrex point
+        length = sqrtf(powf(x,2) + powf(y,2));
+        dot = -y*third_x + x*third_y;
+
+        // if the dot product is negative, reverse direction
+        if (dot < 0) {
+            length *= -1;
+        }
+
+        Nx[i] = -y / length;
+        Ny[i] =  x / length;
     }
+
+    cudaMemcpy(d_Nx, Nx, num_sides * sizeof(float), cudaMemcpyHostToDevice);
+    cudaMemcpy(d_Ny, Ny, num_sides * sizeof(float), cudaMemcpyHostToDevice);
 
     // get the correct quadrature rules for this scheme
     set_quadrature(n, &r1, &r2, &w, 
                    &s_r, &oned_w, &n_quad, &n_quad1d);
 
-    checkCudaError("error before quadrature copy.");
 
     cudaMemcpy(d_r1, r1, n_quad * sizeof(float), cudaMemcpyHostToDevice);
     cudaMemcpy(d_r2, r2, n_quad * sizeof(float), cudaMemcpyHostToDevice);

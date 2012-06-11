@@ -25,6 +25,25 @@ float *d_k2;
 float *d_k3;
 float *d_k4;
 
+// precomputed basis functions
+__constant__ float basis[128];
+__constant__ float basis_grad_x[128];
+__constant__ float basis_grad_y[128];
+__constant__ float basis_side[128];
+
+void set_basis(float *value, int size) {
+    cudaMemcpyToSymbol("basis", value, size, 0, cudaMemcpyHostToDevice);
+}
+void set_basis_grad_x(float *value, int size) {
+    cudaMemcpyToSymbol("basis_grad_x", value, size, 0, cudaMemcpyHostToDevice);
+}
+void set_basis_grad_y(float *value, int size) {
+    cudaMemcpyToSymbol("basis_grad_y", value, size, 0, cudaMemcpyHostToDevice);
+}
+void set_basis_side(float *value, int size) {
+    cudaMemcpyToSymbol("basis_side", value, size, 0, cudaMemcpyHostToDevice);
+}
+
 float *d_r1;     // integration points (x) for 2d integration
 float *d_r2;     // integration points (y) for 2d integration
 float *d_w;      // weights for 2d integration
@@ -96,9 +115,9 @@ __device__ float flux_y(float u) {
 /* basis functions
  *
  * using the multidimensional normalized lagrange polynomials
- */
-__device__ float basis(float x, float y, int i) {
-switch (i) {
+*/
+__device__ float basis_eval(float x, float y, int i) {
+    switch (i) {
         case 0: return 1.414213562373095;
         case 1: return -1.999999999999999 + 5.999999999999999*x;
         case 2: return -3.464101615137754 + 3.464101615137750*x + 6.928203230275512*y;
@@ -193,7 +212,8 @@ __global__ void init_conditions(float *c,
                 y = r1[j] * V2y[idx] + r2[j] * V3y[idx] + (1 - r1[j] - r2[j]) * V1y[idx];
 
                 // evaluate u there
-                u += w[j] * u0(x, y) * basis(r1[j], r2[j], i);
+                //u += w[j] * u0(x, y) * basis(r1[j], r2[j], i);
+                u += w[j] * u0(x, y) * basis[i * n_quad + j];
             }
             c[i*num_elem + idx] = u; 
         } 
@@ -296,7 +316,14 @@ __global__ void preval_normals(float *Nx, float *Ny,
     if (idx < num_sides) {
         float x, y, length;
         float sv1x, sv1y, sv2x, sv2y;
+        float dot, left_x, left_y;
+        float third_x, third_y;
+        int left_idx, side;
     
+        // get left side's vertices
+        left_idx = left_elem[idx];
+        side     = left_side_number[idx];
+
         sv1x = s_V1x[idx];
         sv1y = s_V1y[idx];
         sv2x = s_V2x[idx];
@@ -308,69 +335,41 @@ __global__ void preval_normals(float *Nx, float *Ny,
     
         // normalize
         length = sqrtf(powf(x, 2) + powf(y, 2));
-
-        // store the result
-        Nx[idx] = -y / length;
-        Ny[idx] =  x / length;
-    }
-}
-
-__global__ void preval_normals_direction(float *Nx, float *Ny, 
-                          float *V1x, float *V1y, 
-                          float *V2x, float *V2y, 
-                          float *V3x, float *V3y,
-                          int *left_elem, int *left_side_number, int num_sides) {
-
-    int idx = blockDim.x * blockIdx.x + threadIdx.x;
-
-    if (idx < num_sides) {
-        float new_x, new_y, dot;
-        float initial_x, initial_y, target_x, target_y;
-        float x, y;
-        int left_idx, side;
-
-        // get left side's vertices
-        left_idx = left_elem[idx];
-        side     = left_side_number[idx];
-
-        // get the normal vector
-        x = Nx[idx];
-        y = Ny[idx];
     
         // make it point the correct direction by learning the third vertex point
         switch (side) {
-            case 0: 
-                target_x = V3x[left_idx];
-                target_y = V3y[left_idx];
-                initial_x = (V1x[left_idx] + V2x[left_idx]) / 2.;
-                initial_y = (V1y[left_idx] + V2y[left_idx]) / 2.;
-                break;
-            case 1:
-                target_x = V1x[left_idx];
-                target_y = V1y[left_idx];
-                initial_x = (V2x[left_idx] + V3x[left_idx]) / 2.;
-                initial_y = (V2y[left_idx] + V3y[left_idx]) / 2.;
+            case 1: 
+                left_x = V3x[left_idx];
+                left_y = V3y[left_idx];
+
                 break;
             case 2:
-                target_x = V2x[left_idx];
-                target_y = V2y[left_idx];
-                initial_x = (V1x[left_idx] + V3x[left_idx]) / 2.;
-                initial_y = (V1y[left_idx] + V3y[left_idx]) / 2.;
+                left_x = V1x[left_idx];
+                left_y = V1y[left_idx];
+
+                break;
+            case 3:
+                left_x = V2x[left_idx];
+                left_y = V2y[left_idx];
+
                 break;
         }
 
         // create the vector pointing towards the third vertex point
-        new_x = target_x - initial_x;
-        new_y = target_y - initial_y;
-
-        // find the dot product between the normal and new vectors
-        dot = x * new_x + y * new_y;
-        
-        //Nx[idx] = side;
-        //Ny[idx] = target_y;
-        if (dot > 0) {
-            Nx[idx] *= -1;
-            Ny[idx] *= -1;
+        third_x = left_x - (sv1x + sv2x) / 2.;
+        third_y = left_y - (sv1y + sv2y) / 2.;
+    
+        // find the dot product between the normal vector and the third vetrex point
+        dot = -y*third_x + x*third_y;
+    
+        // if the dot product is negative, reverse direction to point left to right
+        length = (dot < 0) ? -length : length;
+        if (dot < 0) {
+            Nx[idx] = -y / length;
+            Ny[idx] =  x / length;
+        } else {
+            Nx[idx] =  y / length;
+            Ny[idx] = -x / length;
         }
     }
 }
@@ -443,7 +442,6 @@ __global__ void eval_riemann(float *c, float *left_riemann_rhs, float *right_rie
         left_side  = left_side_number [idx];
         right_side = right_side_number[idx];
 
-        // get the integration points for the left element's side
         switch (left_side) {
             case 0: 
                 for (i = 0; i < n_quad1d; i++) {
@@ -493,6 +491,7 @@ __global__ void eval_riemann(float *c, float *left_riemann_rhs, float *right_rie
         // TODO: does this speed it up?
         __syncthreads();
          
+        float xl, yl, xr, yr;
         // multiply across by the i'th basis function
         for (i = 0; i < n_p; i++) {
             left_sum  = 0.;
@@ -503,42 +502,58 @@ __global__ void eval_riemann(float *c, float *left_riemann_rhs, float *right_rie
                 u_left  = 0.;
                 u_right = 0.;
                 for (k = 0; k < n_p; k++) {
-                    u_left  += c_left[k]  * basis(left_r1[j], left_r2[j], k);
+                    u_left  += c_left[k]  * basis_eval(left_r1[j], left_r2[j], k);
+                    //u_left  += c_left[k] * basis_side[left_side * (n_quad1d * n_p) + n_quad1d * k + j];
                 }
 
                 // if it's a boundary element, use the boundary function to deal with it
-                if (right_idx == -1) {
+                //if (right_idx == -1) {
                     // x = x2 * r + x3 * s + x1 * (1 - r - s)
-                    x = V2x[left_idx] * left_r1[j] 
-                      + V3x[left_idx] * left_r2[j] 
-                      + V1x[left_idx] * (1 - left_r1[j] - left_r2[j]);
-                    y = V2y[left_idx] * left_r1[j] 
-                      + V3y[left_idx] * left_r2[j] 
-                      + V1y[left_idx] * (1 - left_r1[j] - left_r2[j]);
+                    xl = V2x[left_idx] * left_r1[j] 
+                       + V3x[left_idx] * left_r2[j] 
+                       + V1x[left_idx] * (1 - left_r1[j] - left_r2[j]);
+                    yl = V2y[left_idx] * left_r1[j] 
+                       + V3y[left_idx] * left_r2[j] 
+                       + V1y[left_idx] * (1 - left_r1[j] - left_r2[j]);
+
+                    xr = V2x[right_idx] * right_r1[j] 
+                       + V3x[right_idx] * right_r2[j] 
+                       + V1x[right_idx] * (1 - right_r1[j] - right_r2[j]);
+                    yr = V2y[right_idx] * right_r1[j] 
+                       + V3y[right_idx] * right_r2[j] 
+                       + V1y[right_idx] * (1 - right_r1[j] - right_r2[j]);
                         
-                    u_right = boundary_exact(x, y);
-                } else {
-                    for (k = 0; k < n_p; k++) {
+                         
+                    u_right = boundary_exact(xl, yl);
+                //} else {
+                    //for (k = 0; k < n_p; k++) {
                         // if it's not a boundary element, compute it
-                        u_right += c_right[k] * basis(right_r1[j], right_r2[j], k);
-                    }
-                }
+                        //u_right += c_right[k] * basis_eval(right_r1[j], right_r2[j], k);
+                        //u_right  += c_right[k]  * basis_side[right_side * (n_quad1d * n_p) + n_quad1d * k + + n_quad1d - 1 - j];
+                    //}
+                //}
  
                 // solve the Riemann problem at this integration point
                 s = riemann(u_left, u_right);
 
                 // calculate the quadrature over [-1,1] for these sides
                 left_sum  += (nx * flux_x(s) + ny * flux_y(s)) 
-                             * oned_w[j] * basis(left_r1[j],  left_r2[j],  i);
+                             * oned_w[j] * basis_eval(left_r1[j],  left_r2[j],  i);
                 right_sum += (nx * flux_x(s) + ny * flux_y(s)) 
-                             * oned_w[j] * basis(right_r1[j], right_r2[j], i);
+                             * oned_w[j] * basis_eval(right_r1[j], right_r2[j], i);
+                //left_sum  += (nx * flux_x(s) + ny * flux_y(s)) 
+                             //* oned_w[j] * basis_side[left_side * (n_quad1d * n_p) + n_quad1d * i + j];
+                //right_sum += (nx * flux_x(s) + ny * flux_y(s)) 
+                             //* oned_w[j] * basis_side[right_side * (n_quad1d * n_p) + n_quad1d * i + n_quad1d - 1 - j];
             }
 
             __syncthreads();
 
             // store this side's contribution in the riemann rhs vectors
-            left_riemann_rhs[i * num_sides + idx]  = -len/2 * left_sum;
-            right_riemann_rhs[i * num_sides + idx] =  len/2 * right_sum;
+            left_riemann_rhs[i * num_sides + idx]  = left_r1[0];//-len / 2. * left_sum;
+            right_riemann_rhs[i * num_sides + idx] = right_r1[0];// len / 2. * right_sum;
+            //left_riemann_rhs[i * num_sides + idx]  = nx;
+            //right_riemann_rhs[i * num_sides + idx] = ny;
         }
     }
 }
@@ -581,20 +596,20 @@ __global__ void eval_riemann(float *c, float *left_riemann_rhs, float *right_rie
                 // Evaluate u at the integration point.
                 u = 0;
                 for (k = 0; k < n_p; k++) {
-                    u += register_c[k] * basis(r1[j], r2[j], k);
+                    u += register_c[k] * basis_eval(r1[j], r2[j], k);
+                    //u += register_c[k] * basis[k * n_quad + j];
                 }
 
                 // Add to the sum
                 // [fx fy] * [y_s, -y_r; -x_s, x_r] * [phi_x phi_y]
+                //sum += w[j] * (  flux_x(u) * ( grad_basis_eval_x[i * n_quad + j] * y_s 
+                                             //- grad_basis_eval_y[i * n_quad + j] * y_r)
+                               //+ flux_y(u) * (-grad_basis_eval_x[i * n_quad + j] * x_s 
+                                             //+ grad_basis_eval_y[i * n_quad + j] * x_r));
                 sum += w[j] * (  flux_x(u) * ( grad_basis_x(r1[j], r2[j], i) * y_s 
                                              - grad_basis_y(r1[j], r2[j], i) * y_r)
                                + flux_y(u) * (-grad_basis_x(r1[j], r2[j], i) * x_s 
                                              + grad_basis_y(r1[j], r2[j], i) * x_r));
-            }
-
-            // the jacobian cancels, but the sign doesn't
-            if (J[idx] < 0) {
-                sum *= -1.;
             }
 
             // store the result
@@ -632,9 +647,9 @@ __global__ void eval_error(float *c,
 
         // calculate values at three vertex points
         for (i = 0; i < n_p; i++) {
-            uv1 += register_c[i] * basis(0, 0, i);
-            uv2 += register_c[i] * basis(1, 0, i);
-            uv3 += register_c[i] * basis(0, 1, i);
+            uv1 += register_c[i] * basis_eval(0, 0, i);
+            uv2 += register_c[i] * basis_eval(1, 0, i);
+            uv3 += register_c[i] * basis_eval(0, 1, i);
         }
 
         // store result
@@ -673,9 +688,9 @@ __global__ void eval_u(float *c,
 
         // calculate values at three vertex points
         for (i = 0; i < n_p; i++) {
-            uv1 += register_c[i] * basis(0, 0, i);
-            uv2 += register_c[i] * basis(1, 0, i);
-            uv3 += register_c[i] * basis(0, 1, i);
+            uv1 += register_c[i] * basis_eval(0, 0, i);
+            uv2 += register_c[i] * basis_eval(1, 0, i);
+            uv3 += register_c[i] * basis_eval(0, 1, i);
         }
 
         // store result

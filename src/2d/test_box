@@ -1,0 +1,1 @@
+./dgcuda -d -n 1 -t 1 mesh/box.pmsh output/box.out
