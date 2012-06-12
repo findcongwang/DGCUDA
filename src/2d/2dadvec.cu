@@ -262,7 +262,6 @@ void time_integrate(float dt, int n_quad, int n_quad1d, int n_p, int num_elem, i
                      d_V1x, d_V1y,
                      d_V2x, d_V2y,
                      d_V3x, d_V3y,
-                     d_oned_w,
                      d_left_elem, d_right_elem,
                      d_left_side_number, d_right_side_number,
                      d_Nx, d_Ny, 
@@ -291,8 +290,8 @@ void time_integrate(float dt, int n_quad, int n_quad1d, int n_p, int num_elem, i
     checkCudaError("error after stage 1: eval_riemann");
 
     eval_quad<<<n_blocks_elem, n_threads>>>
-                    (d_c, d_quad_rhs, d_r1, d_r2, d_w, d_J,
-                     d_V1x, d_V1y, d_V2x, d_V2y, d_V3x, d_V3y,
+                    (d_c, d_quad_rhs, d_r1, d_r2, d_J,
+                     d_xr, d_yr, d_xs, d_ys,
                      n_quad, n_p, num_elem);
     cudaThreadSynchronize();
 
@@ -342,7 +341,6 @@ void time_integrate(float dt, int n_quad, int n_quad1d, int n_p, int num_elem, i
                      d_V1x, d_V1y,
                      d_V2x, d_V2y,
                      d_V3x, d_V3y,
-                     d_oned_w, 
                      d_left_elem, d_right_elem,
                      d_left_side_number, d_right_side_number,
                      d_Nx, d_Ny, 
@@ -350,8 +348,8 @@ void time_integrate(float dt, int n_quad, int n_quad1d, int n_p, int num_elem, i
     cudaThreadSynchronize();
 
     eval_quad<<<n_blocks_elem, n_threads>>>
-                    (d_c, d_quad_rhs, d_r1, d_r2, d_w, d_J,
-                     d_V1x, d_V1y, d_V2x, d_V2y, d_V3x, d_V3y,
+                    (d_c, d_quad_rhs, d_r1, d_r2, d_J,
+                     d_xr, d_yr, d_xs, d_ys,
                      n_quad, n_p, num_elem);
     cudaThreadSynchronize();
 
@@ -373,7 +371,6 @@ void time_integrate(float dt, int n_quad, int n_quad1d, int n_p, int num_elem, i
                      d_V1x, d_V1y,
                      d_V2x, d_V2y,
                      d_V3x, d_V3y,
-                     d_oned_w, 
                      d_left_elem, d_right_elem,
                      d_left_side_number, d_right_side_number,
                      d_Nx, d_Ny, 
@@ -381,8 +378,8 @@ void time_integrate(float dt, int n_quad, int n_quad1d, int n_p, int num_elem, i
     cudaThreadSynchronize();
 
     eval_quad<<<n_blocks_elem, n_threads>>>
-                    (d_c, d_quad_rhs, d_r1, d_r2, d_w, d_J,
-                     d_V1x, d_V1y, d_V2x, d_V2y, d_V3x, d_V3y,
+                    (d_c, d_quad_rhs, d_r1, d_r2, d_J,
+                     d_xr, d_yr, d_xs, d_ys,
                      n_quad, n_p, num_elem);
     cudaThreadSynchronize();
 
@@ -404,7 +401,6 @@ void time_integrate(float dt, int n_quad, int n_quad1d, int n_p, int num_elem, i
                      d_V1x, d_V1y,
                      d_V2x, d_V2y,
                      d_V3x, d_V3y,
-                     d_oned_w, 
                      d_left_elem, d_right_elem,
                      d_left_side_number, d_right_side_number,
                      d_Nx, d_Ny, 
@@ -412,8 +408,8 @@ void time_integrate(float dt, int n_quad, int n_quad1d, int n_p, int num_elem, i
     cudaThreadSynchronize();
 
     eval_quad<<<n_blocks_elem, n_threads>>>
-                    (d_c, d_quad_rhs, d_r1, d_r2, d_w, d_J,
-                     d_V1x, d_V1y, d_V2x, d_V2y, d_V3x, d_V3y,
+                    (d_c, d_quad_rhs, d_r1, d_r2, d_J,
+                     d_xr, d_yr, d_xs, d_ys,
                      n_quad, n_p, num_elem);
     cudaThreadSynchronize();
 
@@ -484,6 +480,11 @@ void init_gpu(int num_elem, int num_sides, int n_p,
     cudaMalloc((void **) &d_V2y, num_elem * sizeof(float));
     cudaMalloc((void **) &d_V3x, num_elem * sizeof(float));
     cudaMalloc((void **) &d_V3y, num_elem * sizeof(float));
+
+    cudaMalloc((void **) &d_xr, num_elem * sizeof(float));
+    cudaMalloc((void **) &d_yr, num_elem * sizeof(float));
+    cudaMalloc((void **) &d_xs, num_elem * sizeof(float));
+    cudaMalloc((void **) &d_ys, num_elem * sizeof(float));
 
     cudaMalloc((void **) &d_s_r, n_p * sizeof(float));
     
@@ -739,6 +740,11 @@ int main(int argc, char *argv[]) {
                                                   d_V2x, d_V2y, 
                                                   d_V3x, d_V3y, 
                                                   d_left_elem, d_left_side_number, num_sides); 
+    preval_partials<<<n_blocks_elem, n_threads>>>(d_V1x, d_V1y,
+                                                  d_V2x, d_V2y,
+                                                  d_V3x, d_V3y,
+                                                  d_xr,  d_yr,
+                                                  d_xs,  d_ys, num_elem);
     cudaThreadSynchronize();
     checkCudaError("error after prevals.");
 
@@ -774,7 +780,7 @@ int main(int argc, char *argv[]) {
 
     // initial conditions
     init_conditions<<<n_blocks_elem, n_threads>>>(d_c, d_V1x, d_V1y, d_V2x, d_V2y, d_V3x, d_V3y,
-                    d_r1, d_r2, d_w, n_quad, n_p, num_elem);
+                    d_r1, d_r2, n_quad, n_p, num_elem);
     checkCudaError("error after initial conditions.");
 
     printf("Computing...\n");

@@ -37,6 +37,8 @@ __constant__ float basis_grad_x[128]; // note: these are multiplied by the weigh
 __constant__ float basis_grad_y[128]; // note: these are multiplied by the weights
 __constant__ float basis_side[128];
 __constant__ float basis_vertex[32];
+__constant__ float w[32];
+__constant__ float w_oned[32];
 
 void set_basis(float *value, int size) {
     cudaMemcpyToSymbol("basis", value, size, 0, cudaMemcpyHostToDevice);
@@ -52,6 +54,12 @@ void set_basis_side(float *value, int size) {
 }
 void set_basis_vertex(float *value, int size) {
     cudaMemcpyToSymbol("basis_vertex", value, size, 0, cudaMemcpyHostToDevice);
+}
+void set_w(float *value, int size) {
+    cudaMemcpyToSymbol("w", value, size, 0, cudaMemcpyHostToDevice);
+}
+void set_w_oned(float *value, int size) {
+    cudaMemcpyToSymbol("w_oned", value, size, 0, cudaMemcpyHostToDevice);
 }
 
 // evaluation points for the boundary integrals depending on the side
@@ -71,6 +79,12 @@ float *d_s_V1x;
 float *d_s_V1y;
 float *d_s_V2x;
 float *d_s_V2y;
+
+// the num_elem values of the x and y partials
+float *d_xr;
+float *d_yr;
+float *d_xs;
+float *d_ys;
 
 // the K indices of the sides for each element ranged 0->H-1
 int *d_elem_s1;
@@ -200,7 +214,6 @@ __global__ void init_conditions(float *c,
                                 float *V2x, float *V2y,
                                 float *V3x, float *V3y,
                                 float *r1, float *r2,
-                                float *w,
                                 int n_quad, int n_p, int num_elem) {
     int idx = blockDim.x * blockIdx.x + threadIdx.x;
     int i, j;
@@ -400,6 +413,22 @@ __global__ void preval_normals_direction(float *Nx, float *Ny,
     }
 }
 
+__global__ void preval_partials(float *V1x, float *V1y,
+                                float *V2x, float *V2y,
+                                float *V3x, float *V3y,
+                                float *xr,  float *yr,
+                                float *xs,  float *ys, int num_elem) {
+    int idx = blockDim.x * blockIdx.x + threadIdx.x;
+    if (idx < num_elem) {
+        // evaulate the jacobians of the mappings for the chain rule
+        // x = x2 * r + x3 * s + x1 * (1 - r - s)
+        xr[idx] = V2x[idx] - V1x[idx];
+        yr[idx] = V2y[idx] - V1y[idx];
+        xs[idx] = V3x[idx] - V1x[idx];
+        ys[idx] = V3y[idx] - V1y[idx];
+    }
+}
+
 /***********************
  *
  * MAIN FUNCTIONS
@@ -417,7 +446,6 @@ __global__ void eval_riemann(float *c, float *left_riemann_rhs, float *right_rie
                         float *V1x, float *V1y,
                         float *V2x, float *V2y,
                         float *V3x, float *V3y,
-                        float *oned_w,
                         int *left_idx_list, int *right_idx_list,
                         int *left_side_number, int *right_side_number, 
                         float *Nx, float *Ny, 
@@ -567,9 +595,9 @@ __global__ void eval_riemann(float *c, float *left_riemann_rhs, float *right_rie
                 //right_sum += (nx * flux_x(s) + ny * flux_y(s)) 
                              //* oned_w[j] * basis_eval(right_r1[j], right_r2[j], i);
                 left_sum  += (nx * flux_x(s) + ny * flux_y(s)) 
-                             * oned_w[j] * basis_side[left_side * n_p * n_quad1d + i * n_quad1d + j];
+                             * w_oned[j] * basis_side[left_side * n_p * n_quad1d + i * n_quad1d + j];
                 right_sum += (nx * flux_x(s) + ny * flux_y(s)) 
-                             * oned_w[j] * basis_side[right_side * n_p * n_quad1d + i * n_quad1d + n_quad1d - 1 - j];
+                             * w_oned[j] * basis_side[right_side * n_p * n_quad1d + i * n_quad1d + n_quad1d - 1 - j];
             }
 
             __syncthreads();
@@ -589,10 +617,9 @@ __global__ void eval_riemann(float *c, float *left_riemann_rhs, float *right_rie
  * THREADS: num_elem
  */
  __global__ void eval_quad(float *c, float *quad_rhs, 
-                     float *r1, float *r2, float *w, float *J, 
-                     float *V1x, float *V1y,
-                     float *V2x, float *V2y,
-                     float *V3x, float *V3y,
+                     float *r1, float *r2, float *J, 
+                     float *xr, float *yr,
+                     float *xs, float *ys,
                      int n_quad, int n_p, int num_elem) {
     int idx = blockDim.x * blockIdx.x + threadIdx.x;
 
@@ -604,10 +631,10 @@ __global__ void eval_riemann(float *c, float *left_riemann_rhs, float *right_rie
 
         // evaulate the jacobians of the mappings for the chain rule
         // x = x2 * r + x3 * s + x1 * (1 - r - s)
-        x_r = V2x[idx] - V1x[idx];
-        y_r = V2y[idx] - V1y[idx];
-        x_s = V3x[idx] - V1x[idx];
-        y_s = V3y[idx] - V1y[idx];
+        x_r = xr[idx];
+        y_r = yr[idx];
+        x_s = xs[idx];
+        y_s = ys[idx];
 
         // get the coefficients for this element
         for (i = 0; i < n_p; i++) {
@@ -635,11 +662,6 @@ __global__ void eval_riemann(float *c, float *left_riemann_rhs, float *right_rie
                                       - basis_grad_y[n_quad * i + j] * y_r)
                         + flux_y(u) * (-basis_grad_x[n_quad * i + j] * x_s 
                                       + basis_grad_y[n_quad * i + j] * x_r));
-            }
-
-            // the jacobian cancels, but the sign doesn't
-            if (J[idx] < 0) {
-                sum *= -1.;
             }
 
             // store the result
