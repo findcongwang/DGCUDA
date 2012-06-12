@@ -112,11 +112,13 @@ float phi_y(float r, float s, int n) {
     return sum;
 }
 
-void preval_basis(float *r1, float *r2, float *s_r, int n_quad, int n_quad1d, int n_p) {
+void preval_basis(float *r1, float *r2, float *s_r, float *w, float *w_oned, 
+                  int n_quad, int n_quad1d, int n_p) {
     float *basis_local        = (float *) malloc(n_quad * n_p * sizeof(float));
     float *basis_grad_x_local = (float *) malloc(n_quad * n_p * sizeof(float)); 
     float *basis_grad_y_local = (float *) malloc(n_quad * n_p * sizeof(float)); 
     float *basis_side_local   = (float *) malloc(3 * n_quad1d * n_p * sizeof(float));
+    float *basis_vertex_local = (float *) malloc(3 * n_p * sizeof(float));
 
     int i, j;
 
@@ -127,11 +129,16 @@ void preval_basis(float *r1, float *r2, float *s_r, int n_quad, int n_quad1d, in
     printf("n_quad1d = %i\n n_quad = %i\n n_p = %i\n", n_quad1d, n_quad, n_p);
 
     for (i = 0; i < n_p; i++) {
+        // precompute the values at the vertex points
+        basis_vertex_local[i * n_p + 0] = phi(0, 0, i);
+        basis_vertex_local[i * n_p + 1] = phi(1, 0, i);
+        basis_vertex_local[i * n_p + 2] = phi(0, 1, i);
+
         //precompute the quadrature nodes on the elements for the basis & gradients
         for (j = 0; j < n_quad; j++) {
             basis_local[i * n_quad + j] = phi(r1[j], r2[j], i);
-            basis_grad_x_local[i * n_quad + j] = phi_x(r1[j], r2[j], i);
-            basis_grad_y_local[i * n_quad + j] = phi_y(r1[j], r2[j], i);
+            basis_grad_x_local[i * n_quad + j] = w[j] * phi_x(r1[j], r2[j], i);
+            basis_grad_y_local[i * n_quad + j] = w[j] * phi_y(r1[j], r2[j], i);
         }
 
         // precompute the quadrature nodes at the sides going in the clockwise direction
@@ -145,11 +152,13 @@ void preval_basis(float *r1, float *r2, float *s_r, int n_quad, int n_quad1d, in
     // set the constants on the GPU to the evaluations
     set_basis(basis_local, n_quad * n_p * sizeof(float));
     set_basis_grad_x(basis_grad_x_local, n_quad * n_p * sizeof(float));
-    set_basis_grad_y(basis_grad_x_local, n_quad * n_p * sizeof(float));
+    set_basis_grad_y(basis_grad_y_local, n_quad * n_p * sizeof(float));
     set_basis_side(basis_side_local, 3 * n_quad1d * n_p * sizeof(float));
+    set_basis_vertex(basis_vertex_local, 3 * n_quad1d * n_p * sizeof(float));
 
     free(basis_local);
     free(basis_grad_x_local);
     free(basis_grad_y_local);
     free(basis_side_local);
+    free(basis_vertex_local);
 }

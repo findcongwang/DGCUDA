@@ -3,6 +3,8 @@
 #include <stdlib.h>
 #include "2dadvec_kernels.cu"
 #include "quadrature.h"
+#include "basis.h"
+
 /* 2dadvec.cu
  * 
  * This file calls the kernels in 2dadvec_kernels.cu for the 2D advection
@@ -758,6 +760,9 @@ int main(int argc, char *argv[]) {
     // get the correct quadrature rules for this scheme
     set_quadrature(n, &r1, &r2, &w, 
                    &s_r, &oned_w, &n_quad, &n_quad1d);
+
+    // evaluate the basis functions at those points and store on GPU
+    preval_basis(r1, r2, s_r, w, oned_w, n_quad, n_quad1d, n_p);
 
     checkCudaError("error before quadrature copy.");
 
