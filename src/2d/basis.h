@@ -48,15 +48,17 @@ const static double basis_coeff[size][size] = {
 };
 
 float phi(float r, float s, int n) {
-    int i, j;
+    int i, j, k;
     float sum = 0;
 
     float R[size];
 
     int power = 0;
+    k = 0;
     for (i = 0; i * power < size; i++) {
         for (j = 0; j <= power; j++) {
-            R[power * i + j] = powf(r, power - j) * powf(s, j);
+            R[k] = powf(r, power - j) * powf(s, j);
+            k++;
         }
         power++;
     }
@@ -69,16 +71,18 @@ float phi(float r, float s, int n) {
 }
 
 float phi_x(float r, float s, int n) {
-    int i, j;
+    int i, j, k;
     float sum = 0;
 
     float R[size];
 
     R[0] = 0;
+    k = 1;
     int power = 1;
     for (i = 1; i * power < size; i++) {
         for (j = 0; j <= power; j++) {
-            R[power * i + j] = (power - j) * powf(r, power - j - 1) * powf(s, j);
+            R[k] = (power - j) * powf(r, power - j - 1) * powf(s, j);
+            k++;
         }
         power++;
     }
@@ -91,16 +95,18 @@ float phi_x(float r, float s, int n) {
 }
 
 float phi_y(float r, float s, int n) {
-    int i, j;
+    int i, j, k;
     float sum = 0;
 
     float R[size];
 
     R[0] = 0;
+    k    = 1;
     int power = 1;
     for (i = 1; i * power < size; i++) {
         for (j = 0; j <= power; j++) {
-            R[power * i + j] = powf(r, power - j) * j * powf(s, j - 1);
+            R[k] = powf(r, power - j) * j * powf(s, j - 1);
+            k++;
         }
         power++;
     }
@@ -112,6 +118,19 @@ float phi_y(float r, float s, int n) {
     return sum;
 }
 
+float basis_check(float x, float y, int i) {
+switch (i) {
+        case 0: return 1.414213562373095;
+        case 1: return -1.999999999999999 + 5.999999999999999*x;
+        case 2: return -3.464101615137754 + 3.464101615137750*x + 6.928203230275512*y;
+        case 3: return  2.449489742783153 + -1.959591794226528E+01*x + 1.648597081617952E-14*y + 2.449489742783160E+01*x*x;
+        case 4: return  4.242640687119131E+00 + -2.545584412271482E+01*x + -8.485281374238392E+00*y + 2.121320343559552E+01 * x*x +  4.242640687119219E+01 * x*y;
+        case 5: return  5.477225575051629E+00 + -1.095445115010309E+01*x + -3.286335345030997E+01*y + 5.477225575051381E+00 * x*x + 3.286335345031001E+01 * x*y +  3.286335345030994E+01 * y*y;
+    }
+    return -1;
+}
+
+
 void preval_basis(float *r1, float *r2, float *s_r, float *w_local, float *w_oned_local, 
                   int n_quad, int n_quad1d, int n_p) {
     float *basis_local        = (float *) malloc(n_quad * n_p * sizeof(float));
@@ -122,17 +141,23 @@ void preval_basis(float *r1, float *r2, float *s_r, float *w_local, float *w_one
 
     int i, j;
 
-    for (i = 0; i < n_quad; i++) {
-        printf("%f\n", phi_y(r1[i], r2[i], 2));
+    /*
+    float test;
+    for (i = 0; i < n_p; i++) {
+        test = 0;
+        printf("phi_%i = ", i);
+        for (j = 0; j < n_quad; j++) {
+            test += w_local[j] * phi(r1[j], r2[j], i);
+        }
+        printf("%f\n", test);
     }
-
-    printf("n_quad1d = %i\n n_quad = %i\n n_p = %i\n", n_quad1d, n_quad, n_p);
+    */
 
     for (i = 0; i < n_p; i++) {
         // precompute the values at the vertex points
-        basis_vertex_local[i * n_p + 0] = phi(0, 0, i);
-        basis_vertex_local[i * n_p + 1] = phi(1, 0, i);
-        basis_vertex_local[i * n_p + 2] = phi(0, 1, i);
+        basis_vertex_local[i * 3 + 0] = phi(0., 0., i);
+        basis_vertex_local[i * 3 + 1] = phi(1., 0., i);
+        basis_vertex_local[i * 3 + 2] = phi(0., 1., i);
 
         //precompute the quadrature nodes on the elements for the basis & gradients
         for (j = 0; j < n_quad; j++) {
@@ -143,19 +168,19 @@ void preval_basis(float *r1, float *r2, float *s_r, float *w_local, float *w_one
 
         // precompute the quadrature nodes at the sides going in the clockwise direction
         for (j = 0; j < n_quad1d; j++) {
-            basis_side_local[0 * (n_quad1d * n_p) + i * n_quad1d + j] = phi(0.5 + 0.5 * s_r[j], 0, i);
-            basis_side_local[1 * (n_quad1d * n_p) + i * n_quad1d + j] = phi((1 - s_r[j])/2, (1 + s_r[j])/2, i);
-            basis_side_local[2 * (n_quad1d * n_p) + i * n_quad1d + j] = phi(0, 0.5 + 0.5 * s_r[n_quad1d - 1 - j], i);
+            basis_side_local[0 * (n_quad1d * n_p) + i * n_quad1d + j] = phi(0.5 + 0.5 * s_r[j], 0., i);
+            basis_side_local[1 * (n_quad1d * n_p) + i * n_quad1d + j] = phi((1 - s_r[j])/2., (1 + s_r[j])/2., i);
+            basis_side_local[2 * (n_quad1d * n_p) + i * n_quad1d + j] = phi(0., 0.5 + 0.5 * s_r[n_quad1d - 1 - j], i);
         }
     }
-
+    
     // set the constants on the GPU to the evaluations
-    set_basis(basis_local, n_quad * n_p * sizeof(float));
-    set_basis_grad_x(basis_grad_x_local, n_quad * n_p * sizeof(float));
-    set_basis_grad_y(basis_grad_y_local, n_quad * n_p * sizeof(float));
-    set_basis_side(basis_side_local, 3 * n_quad1d * n_p * sizeof(float));
-    set_basis_vertex(basis_vertex_local, 3 * n_p * sizeof(float));
-    set_w(w_local, n_quad * sizeof(float));
+    set_basis(basis_local, n_quad * n_p);
+    set_basis_grad_x(basis_grad_x_local, n_quad * n_p);
+    set_basis_grad_y(basis_grad_y_local, n_quad * n_p);
+    set_basis_side(basis_side_local, 3 * n_quad1d * n_p);
+    set_basis_vertex(basis_vertex_local, 3 * n_p);
+    set_w(w_local, n_quad);
     set_w_oned(w_oned_local, n_quad1d * sizeof(float));
 
     free(basis_local);

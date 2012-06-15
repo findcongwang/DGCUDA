@@ -32,34 +32,34 @@ float *d_oned_w; // weights for 2d integration
 
 // precomputed basis functions
 // TODO: maybe making these 2^n makes sure the offsets are cached more efficiently? who knows...
-__constant__ float basis[128];
-__constant__ float basis_grad_x[128]; // note: these are multiplied by the weights
-__constant__ float basis_grad_y[128]; // note: these are multiplied by the weights
-__constant__ float basis_side[128];
-__constant__ float basis_vertex[32];
-__constant__ float w[32];
-__constant__ float w_oned[32];
+__device__ __constant__ float basis[256];
+__device__ __constant__ float basis_grad_x[256]; // note: these are multiplied by the weights
+__device__ __constant__ float basis_grad_y[256]; // note: these are multiplied by the weights
+__device__ __constant__ float basis_side[256];
+__device__ __constant__ float basis_vertex[128];
+__device__ __constant__ float w[64];
+__device__ __constant__ float w_oned[64];
 
-void set_basis(float *value, int size) {
-    cudaMemcpyToSymbol("basis", value, size, 0, cudaMemcpyHostToDevice);
+void set_basis(void *value, int size) {
+    cudaMemcpyToSymbol("basis", value, size * sizeof(float));
 }
-void set_basis_grad_x(float *value, int size) {
-    cudaMemcpyToSymbol("basis_grad_x", value, size, 0, cudaMemcpyHostToDevice);
+void set_basis_grad_x(void *value, int size) {
+    cudaMemcpyToSymbol("basis_grad_x", value, size * sizeof(float));
 }
-void set_basis_grad_y(float *value, int size) {
-    cudaMemcpyToSymbol("basis_grad_y", value, size, 0, cudaMemcpyHostToDevice);
+void set_basis_grad_y(void *value, int size) {
+    cudaMemcpyToSymbol("basis_grad_y", value, size * sizeof(float));
 }
-void set_basis_side(float *value, int size) {
-    cudaMemcpyToSymbol("basis_side", value, size, 0, cudaMemcpyHostToDevice);
+void set_basis_side(void *value, int size) {
+    cudaMemcpyToSymbol("basis_side", value, size * sizeof(float));
 }
-void set_basis_vertex(float *value, int size) {
-    cudaMemcpyToSymbol("basis_vertex", value, size, 0, cudaMemcpyHostToDevice);
+void set_basis_vertex(void *value, int size) {
+    cudaMemcpyToSymbol("basis_vertex", value, size * sizeof(float));
 }
-void set_w(float *value, int size) {
-    cudaMemcpyToSymbol("w", value, size, 0, cudaMemcpyHostToDevice);
+void set_w(void *value, int size) {
+    cudaMemcpyToSymbol("w", value, size * sizeof(float));
 }
-void set_w_oned(float *value, int size) {
-    cudaMemcpyToSymbol("w_oned", value, size, 0, cudaMemcpyHostToDevice);
+void set_w_oned(void *value, int size) {
+    cudaMemcpyToSymbol("w_oned", value, size * sizeof(float));
 }
 
 // evaluation points for the boundary integrals depending on the side
@@ -141,6 +141,8 @@ switch (i) {
         case 1: return -1.999999999999999 + 5.999999999999999*x;
         case 2: return -3.464101615137754 + 3.464101615137750*x + 6.928203230275512*y;
         case 3: return  2.449489742783153 + -1.959591794226528E+01*x + 1.648597081617952E-14*y + 2.449489742783160E+01*x*x;
+        case 4: return  4.242640687119131E+00 + -2.545584412271482E+01*x + -8.485281374238392E+00*y + 2.121320343559552E+01 * x*x +  4.242640687119219E+01 * x*y;
+        case 5: return  5.477225575051629E+00 + -1.095445115010309E+01*x + -3.286335345030997E+01*y + 5.477225575051381E+00 * x*x + 3.286335345031001E+01 * x*y +  3.286335345030994E+01 * y*y;
     }
     return -1;
 }
@@ -153,6 +155,9 @@ __device__ float grad_basis_eval_x(float x, float y, int i) {
         case 0: return 0;
         case 1: return 5.999999999999999;
         case 2: return 3.464101615137750;
+        case 3: return -1.959591794226528E+01 + 2 * 2.449489742783160E+01*x;
+        case 4: return  -2.545584412271482E+01 + 2 * 2.121320343559552E+01 * x + 4.242640687119219E+01 * y;
+        case 5: return  -1.095445115010309E+01 + 2 * 5.477225575051381E+00 * x + 3.286335345031001E+01 * y; 
     }
     return 0;
 }
@@ -161,6 +166,9 @@ __device__ float grad_basis_eval_y(float x, float y, int i) {
         case 0: return 0;
         case 1: return 0;
         case 2: return 6.928203230275512;
+        case 3: return 1.648597081617952E-14;
+        case 4: return -8.485281374238392E+00 + 4.242640687119219E+01 * x;
+        case 5: return 3.286335345030997E+01 + 3.286335345031001E+01 * x - 2* 3.286335345030994E+01 * y;
     }
     return 0;
 }
@@ -185,7 +193,7 @@ __device__ float riemann(float u_left, float u_right) {
  * returns the value of the intial condition at point x
  */
 __device__ float u0(float x, float y) {
-    return x - y;
+    return 1.;
 }
 
 /* boundary exact
@@ -221,7 +229,7 @@ __global__ void init_conditions(float *c,
 
     if (idx < num_elem) {
         for (i = 0; i < n_p; i++) {
-            u = 0;
+            u = 0.;
             // perform quadrature
             for (j = 0; j < n_quad; j++) {
                 // map from the canonical element to the actual point on the mesh
@@ -231,9 +239,14 @@ __global__ void init_conditions(float *c,
 
                 // evaluate u there
                 //u += w[j] * u0(x, y) * basis_eval(r1[j], r2[j], i);
-                u += w[j] * u0(x, y) * basis[n_quad * i + j];
+                u += w[j] * u0(x, y) * basis[i * n_quad + j];
             }
-            c[i*num_elem + idx] = u; 
+            //c[i*num_elem + idx] = w[0] * basis_eval(r1[0], r2[0], 5) 
+                                //+ w[1] * basis_eval(r1[1], r2[1], 5) 
+                                //+ w[2] * basis_eval(r1[2], r2[2], 5) 
+                                //+ w[3] * basis_eval(r1[3], r2[3], 5) ;
+            c[i*num_elem + idx] = u;
+            //c[i*num_elem + idx] = w[0] * basis[3 * n_quad + 0];
         } 
     }
 }
@@ -524,8 +537,6 @@ __global__ void eval_riemann(float *c, float *left_riemann_rhs, float *right_rie
         __syncthreads();
 
         // get the integration points for the right element's side
-        /*
-        // ***** DEPRECATED ***** //
         switch (right_side) {
             case 0: 
                 for (i = 0; i < n_quad1d; i++) {
@@ -546,7 +557,6 @@ __global__ void eval_riemann(float *c, float *left_riemann_rhs, float *right_rie
                 }
                 break;
         }
-        */
 
         // TODO: does this speed it up?
         __syncthreads();
@@ -591,13 +601,13 @@ __global__ void eval_riemann(float *c, float *left_riemann_rhs, float *right_rie
 
                 // calculate the quadrature over [-1,1] for these sides
                 //left_sum  += (nx * flux_x(s) + ny * flux_y(s)) 
-                             //* oned_w[j] * basis_eval(left_r1[j],  left_r2[j],  i);
+                             //* w_oned[j] * basis_eval(left_r1[j],  left_r2[j],  i);
                 //right_sum += (nx * flux_x(s) + ny * flux_y(s)) 
-                             //* oned_w[j] * basis_eval(right_r1[j], right_r2[j], i);
-                left_sum  += (nx * flux_x(s) + ny * flux_y(s)) 
-                             * w_oned[j] * basis_side[left_side * n_p * n_quad1d + i * n_quad1d + j];
-                right_sum += (nx * flux_x(s) + ny * flux_y(s)) 
-                             * w_oned[j] * basis_side[right_side * n_p * n_quad1d + i * n_quad1d + n_quad1d - 1 - j];
+                             //* w_oned[j] * basis_eval(right_r1[j], right_r2[j], i);
+                left_sum  += (nx * flux_x(s) + ny * flux_y(s)) *
+                             w_oned[j] * basis_side[left_side * n_p * n_quad1d + i * n_quad1d + j];
+                right_sum += (nx * flux_x(s) + ny * flux_y(s)) *
+                             w_oned[j] * basis_side[right_side * n_p * n_quad1d + i * n_quad1d + n_quad1d - 1 - j];
             }
 
             __syncthreads();
@@ -605,8 +615,6 @@ __global__ void eval_riemann(float *c, float *left_riemann_rhs, float *right_rie
             // store this side's contribution in the riemann rhs vectors
             left_riemann_rhs[i * num_sides + idx]  = -len/2 * left_sum;
             right_riemann_rhs[i * num_sides + idx] =  len/2 * right_sum;
-            //left_riemann_rhs[i * num_sides + idx]  = basis_eval(left_r1[0], left_r2[0], 0); 
-            //right_riemann_rhs[i * num_sides + idx] = basis_side[left_side * n_p * n_quad1d + 0 * n_quad1d + 0];
         }
     }
 }
@@ -699,12 +707,12 @@ __global__ void eval_error(float *c,
 
         // calculate values at three vertex points
         for (i = 0; i < n_p; i++) {
-            //uv1 += register_c[i] * basis_eval(0, 0, i);
-            //uv2 += register_c[i] * basis_eval(1, 0, i);
-            //uv3 += register_c[i] * basis_eval(0, 1, i);
-            uv1 += register_c[i] * basis_vertex[i * n_p + 0];
-            uv2 += register_c[i] * basis_vertex[i * n_p + 1];
-            uv3 += register_c[i] * basis_vertex[i * n_p + 2];
+            uv1 += register_c[i] * basis_eval(0, 0, i);
+            uv2 += register_c[i] * basis_eval(1, 0, i);
+            uv3 += register_c[i] * basis_eval(0, 1, i);
+            //uv1 += register_c[i] * basis_vertex[i * n_p + 0];
+            //uv2 += register_c[i] * basis_vertex[i * n_p + 1];
+            //uv3 += register_c[i] * basis_vertex[i * n_p + 2];
         }
 
         // store result
@@ -743,12 +751,12 @@ __global__ void eval_u(float *c,
 
         // calculate values at three vertex points
         for (i = 0; i < n_p; i++) {
-            //uv1 += register_c[i] * basis_eval(0, 0, i);
-            //uv2 += register_c[i] * basis_eval(1, 0, i);
-            //uv3 += register_c[i] * basis_eval(0, 1, i);
-            uv1 += register_c[i] * basis_vertex[i * n_p + 0];
-            uv2 += register_c[i] * basis_vertex[i * n_p + 1];
-            uv3 += register_c[i] * basis_vertex[i * n_p + 2];
+            uv1 += register_c[i] * basis_eval(0, 0, i);
+            uv2 += register_c[i] * basis_eval(1, 0, i);
+            uv3 += register_c[i] * basis_eval(0, 1, i);
+            //uv1 += register_c[i] * basis_vertex[i * n_p + 0];
+            //uv2 += register_c[i] * basis_vertex[i * n_p + 1];
+            //uv3 += register_c[i] * basis_vertex[i * n_p + 2];
         }
 
         // store result

@@ -566,6 +566,11 @@ void free_gpu() {
     cudaFree(d_V3x);
     cudaFree(d_V3y);
 
+    cudaFree(d_xr);
+    cudaFree(d_yr);
+    cudaFree(d_xs);
+    cudaFree(d_ys);
+
     cudaFree(d_s_r);
     
     cudaFree(d_left_side_number);
@@ -624,7 +629,7 @@ int main(int argc, char *argv[]) {
         if (strcmp(argv[i], "-n") == 0) {
             if (i + 1 < argc) {
                 n = atoi(argv[i+1]);
-                if (n < 0 || n > 1) {
+                if (n < 0 || n > 9) {
                     usage_error();
                     return 1;
                 }
@@ -748,21 +753,6 @@ int main(int argc, char *argv[]) {
     cudaThreadSynchronize();
     checkCudaError("error after prevals.");
 
-    if (debug) {
-        float *Nx = (float *) malloc(num_sides * sizeof(float));
-        float *Ny = (float *) malloc(num_sides * sizeof(float));
-
-        cudaMemcpy(Nx, d_Nx, num_sides *sizeof(float), cudaMemcpyDeviceToHost);
-        cudaMemcpy(Ny, d_Ny, num_sides *sizeof(float), cudaMemcpyDeviceToHost);
-
-        printf("normals\n");
-        for (i = 0; i < num_sides; i++) {
-            printf("(%f, %f) \n", Nx[i], Ny[i]);
-        }
-        free(Nx);
-        free(Ny);
-    }
-
     // get the correct quadrature rules for this scheme
     set_quadrature(n, &r1, &r2, &w, 
                    &s_r, &oned_w, &n_quad, &n_quad1d);
@@ -796,6 +786,22 @@ int main(int argc, char *argv[]) {
     for (i = 0; i < n_quad; i++) {
         printf("     > (%f, %f) - %f \n", r1[i], r2[i], w[i]);
     }
+
+    if (debug) {
+        float *Nx = (float *) malloc(num_sides * sizeof(float));
+        float *Ny = (float *) malloc(num_sides * sizeof(float));
+
+        cudaMemcpy(Nx, d_Nx, num_sides *sizeof(float), cudaMemcpyDeviceToHost);
+        cudaMemcpy(Ny, d_Ny, num_sides *sizeof(float), cudaMemcpyDeviceToHost);
+
+        printf(" ? normals\n");
+        for (i = 0; i < num_sides; i++) {
+            printf("    > (%f, %f) \n", Nx[i], Ny[i]);
+        }
+        free(Nx);
+        free(Ny);
+    }
+
 
     checkCudaError("error before time integration.");
     fprintf(out_file, "View \"Exported field \" {\n");
