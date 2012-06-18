@@ -47,15 +47,15 @@ const static double basis_coeff[size][size] = {
  { 1.663377026142632E+01,-1.013099502537233E+02,-1.229594447993084E+03, 1.542409616069600E+01, 7.759270857771630E+03, 2.172791663953578E+04, 1.678002024064858E+03,-1.647137185405384E+04,-1.232338249617301E+05,-1.601131978131992E+05,-6.743490664336780E+03, 6.914334442429929E+01, 2.682290073763013E+05, 7.707159323182550E+05, 6.022356852229226E+05, 1.268040750884545E+04, 5.768946317734147E+04,-2.347798722994986E+05,-1.434977016717076E+06,-2.338283389673931E+06,-1.255391136034541E+06,-1.295507651996044E+04,-1.005621341104541E+05,-1.503125718442410E+04, 1.204057911192205E+06, 3.358527603428865E+06, 3.670807776119694E+06, 1.467199932394431E+06, 6.937635255807324E+03, 7.227746941112942E+04, 1.495136845984972E+05,-3.663090837778763E+05,-2.043345214069608E+06,-3.562679262752318E+06,-2.866582732162087E+06,-8.996387832132190E+05,-1.528237654843788E+03,-1.953382579177689E+04,-6.649524737084105E+04,-1.457083007741018E+04, 4.132002256406829E+05, 1.125155885234289E+06, 1.400790659119320E+06, 8.800482450519747E+05, 2.252105872285629E+05}
 };
 
-float phi(float r, float s, int n) {
+double phi(double r, double s, int n) {
     int i, j, k;
-    float sum = 0;
+    double sum = 0.;
 
-    float R[size];
+    double R[size];
 
     int power = 0;
     k = 0;
-    for (i = 0; i * power < size; i++) {
+    while (k <= n) {
         for (j = 0; j <= power; j++) {
             R[k] = powf(r, power - j) * powf(s, j);
             k++;
@@ -63,18 +63,18 @@ float phi(float r, float s, int n) {
         power++;
     }
 
-    for (i = 0; i < size; i++) {
+    for (i = 0; i <= n; i++) {
         sum += basis_coeff[n][i] * R[i];
     }
 
     return sum;
 }
 
-float phi_x(float r, float s, int n) {
+double phi_x(double r, double s, int n) {
     int i, j, k;
-    float sum = 0;
+    double sum = 0;
 
-    float R[size];
+    double R[size];
 
     R[0] = 0;
     k = 1;
@@ -94,11 +94,11 @@ float phi_x(float r, float s, int n) {
     return sum;
 }
 
-float phi_y(float r, float s, int n) {
+double phi_y(double r, double s, int n) {
     int i, j, k;
-    float sum = 0;
+    double sum = 0;
 
-    float R[size];
+    double R[size];
 
     R[0] = 0;
     k    = 1;
@@ -118,7 +118,7 @@ float phi_y(float r, float s, int n) {
     return sum;
 }
 
-float basis_check(float x, float y, int i) {
+double basis_check(double x, double y, int i) {
 switch (i) {
         case 0: return 1.414213562373095;
         case 1: return -1.999999999999999 + 5.999999999999999*x;
@@ -126,6 +126,16 @@ switch (i) {
         case 3: return  2.449489742783153 + -1.959591794226528E+01*x + 1.648597081617952E-14*y + 2.449489742783160E+01*x*x;
         case 4: return  4.242640687119131E+00 + -2.545584412271482E+01*x + -8.485281374238392E+00*y + 2.121320343559552E+01 * x*x +  4.242640687119219E+01 * x*y;
         case 5: return  5.477225575051629E+00 + -1.095445115010309E+01*x + -3.286335345030997E+01*y + 5.477225575051381E+00 * x*x + 3.286335345031001E+01 * x*y +  3.286335345030994E+01 * y*y;
+        case 9: return -7.483314773585763E+00 +
+                        2.244994432091432E+01 * powf(x,1) +
+                        8.979977728286150E+01 * powf(y,1) + 
+                       -2.244994432106859E+01 * powf(x,2) +
+                       -1.795995545666577E+02 * powf(x,1) * powf(y,1) +
+                       -2.244994432069088E+02 * powf(y,2) +
+                        7.483314773734342E+00 * powf(x,3) +
+                        8.979977728384534E+01 * powf(x,2) * powf(y,1) +
+                        2.244994432077823E+02 * powf(x,1) * powf(y,2) +
+                        1.496662954711719E+02 * powf(y,3);
     }
     return -1;
 }
@@ -141,8 +151,7 @@ void preval_basis(float *r1, float *r2, float *s_r, float *w_local, float *w_one
 
     int i, j;
 
-    /*
-    float test;
+    double test;
     for (i = 0; i < n_p; i++) {
         test = 0;
         printf("phi_%i = ", i);
@@ -151,7 +160,15 @@ void preval_basis(float *r1, float *r2, float *s_r, float *w_local, float *w_one
         }
         printf("%f\n", test);
     }
-    */
+
+    test = 0;
+    double test_check = 0;
+    for (j = 0; j < n_quad; j++) {
+        printf("(basis, phi) = (%f, %f)\n", basis_check(r1[j], r2[j], 9), phi(r1[j], r2[j], 9));
+        test += w_local[j] * basis_check(r1[j], r2[j], 9);
+        test_check += w_local[j] * phi(r1[j], r2[j], 9);
+    }
+    printf("TOTAL: (basis,phi) = (%f, %f)\n", test, test_check);
 
     for (i = 0; i < n_p; i++) {
         // precompute the values at the vertex points
@@ -181,7 +198,7 @@ void preval_basis(float *r1, float *r2, float *s_r, float *w_local, float *w_one
     set_basis_side(basis_side_local, 3 * n_quad1d * n_p);
     set_basis_vertex(basis_vertex_local, 3 * n_p);
     set_w(w_local, n_quad);
-    set_w_oned(w_oned_local, n_quad1d * sizeof(float));
+    set_w_oned(w_oned_local, n_quad1d);
 
     free(basis_local);
     free(basis_grad_x_local);

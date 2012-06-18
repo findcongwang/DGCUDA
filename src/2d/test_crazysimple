@@ -1,1 +1,1 @@
-./dgcuda -d -n 1 -t 1 mesh/crazysimple.pmsh output/crazysimple.out
+./dgcuda -d -n 4 -t 0 mesh/crazysimple.pmsh output/crazysimple.out
