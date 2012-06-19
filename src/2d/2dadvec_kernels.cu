@@ -30,15 +30,32 @@ float *d_r2;     // integration points (y) for 2d integration
 float *d_w;      // weights for 2d integration
 float *d_oned_w; // weights for 2d integration
 
-// precomputed basis functions
+// precomputed basis functions 
 // TODO: maybe making these 2^n makes sure the offsets are cached more efficiently? who knows...
-__device__ __constant__ float basis[256];
-__device__ __constant__ float basis_grad_x[256]; // note: these are multiplied by the weights
-__device__ __constant__ float basis_grad_y[256]; // note: these are multiplied by the weights
-__device__ __constant__ float basis_side[256];
-__device__ __constant__ float basis_vertex[128];
-__device__ __constant__ float w[64];
-__device__ __constant__ float w_oned[64];
+// precomputed basis functions ordered like so
+//
+// [phi_1(r1, s1), phi_1(r2, s2), ... , phi_1(r_nq, s_nq)   ]
+// [phi_2(r1, s1), phi_2(r2, s2), ... , phi_2(r_nq, s_nq)   ]
+// [   .               .           .            .           ]
+// [   .               .           .            .           ]
+// [   .               .           .            .           ]
+// [phi_np(r1, s1), phi_np(r2, s2), ... , phi_np(r_nq, s_nq)]
+//
+__device__ __constant__ float basis[2048];
+// note: these are multiplied by the weights
+__device__ __constant__ float basis_grad_x[2048]; 
+__device__ __constant__ float basis_grad_y[2048]; 
+
+// precomputed basis functions evaluated along the sides. ordered
+// similarly to basis and basis_grad_{x,y} but with one "matrix" for each side
+// starting with side 0. to get to each side, offset with:
+//      side_number * n_p * num_quad1d.
+__device__ __constant__ float basis_side[2048];
+__device__ __constant__ float basis_vertex[256];
+
+// weights for 2d and 1d quadrature rules
+__device__ __constant__ float w[32];
+__device__ __constant__ float w_oned[16];
 
 void set_basis(void *value, int size) {
     cudaMemcpyToSymbol("basis", value, size * sizeof(float));
@@ -193,7 +210,7 @@ __device__ float riemann(float u_left, float u_right) {
  * returns the value of the intial condition at point x
  */
 __device__ float u0(float x, float y) {
-    return 1.;
+    return x - y;
 }
 
 /* boundary exact
@@ -241,12 +258,7 @@ __global__ void init_conditions(float *c,
                 //u += w[j] * u0(x, y) * basis_eval(r1[j], r2[j], i);
                 u += w[j] * u0(x, y) * basis[i * n_quad + j];
             }
-            //c[i*num_elem + idx] = w[0] * basis_eval(r1[0], r2[0], 5) 
-                                //+ w[1] * basis_eval(r1[1], r2[1], 5) 
-                                //+ w[2] * basis_eval(r1[2], r2[2], 5) 
-                                //+ w[3] * basis_eval(r1[3], r2[3], 5) ;
             c[i*num_elem + idx] = u;
-            //c[i*num_elem + idx] = w[0] * basis[3 * n_quad + 0];
         } 
     }
 }
@@ -417,8 +429,6 @@ __global__ void preval_normals_direction(float *Nx, float *Ny,
         // find the dot product between the normal and new vectors
         dot = x * new_x + y * new_y;
         
-        //Nx[idx] = side;
-        //Ny[idx] = target_y;
         if (dot > 0) {
             Nx[idx] *= -1;
             Ny[idx] *= -1;
@@ -613,8 +623,8 @@ __global__ void eval_riemann(float *c, float *left_riemann_rhs, float *right_rie
             __syncthreads();
 
             // store this side's contribution in the riemann rhs vectors
-            left_riemann_rhs[i * num_sides + idx]  = -len/2 * left_sum;
-            right_riemann_rhs[i * num_sides + idx] =  len/2 * right_sum;
+            left_riemann_rhs[i * num_sides + idx]  = -len / 2 * left_sum;
+            right_riemann_rhs[i * num_sides + idx] =  len / 2 * right_sum;
         }
     }
 }
@@ -654,7 +664,7 @@ __global__ void eval_riemann(float *c, float *left_riemann_rhs, float *right_rie
             sum = 0.;
             for (j = 0; j < n_quad; j++) {
                 // Evaluate u at the integration point.
-                u = 0;
+                u = 0.;
                 for (k = 0; k < n_p; k++) {
                     //u += register_c[k] * basis_eval(r1[j], r2[j], k);
                     u += register_c[k] * basis[n_quad * k + j];

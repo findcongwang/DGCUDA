@@ -17,7 +17,7 @@
  * and the 2d quadrature integration points and weights for the volume intergrals.
  */
 void set_quadrature(int p,
-                    float **r1, float **r2, float **w,
+                    float **r1, float **r2, float **w_local,
                     float **s_r, float **oned_w, 
                     int *n_quad, int *n_quad1d) {
     int i;
@@ -75,7 +75,7 @@ void set_quadrature(int p,
     // allocate integration points
     *r1 = (float *) malloc(*n_quad * sizeof(float));
     *r2 = (float *) malloc(*n_quad * sizeof(float));
-    *w  =  (float *) malloc(*n_quad * sizeof(float));
+    *w_local  =  (float *) malloc(*n_quad * sizeof(float));
 
     *s_r = (float *) malloc(*n_quad1d * sizeof(float));
     *oned_w = (float *) malloc(*n_quad1d * sizeof(float));
@@ -84,7 +84,7 @@ void set_quadrature(int p,
     for (i = 0; i < *n_quad; i++) {
         (*r1)[i] = quad_2d[p][3*i];
         (*r2)[i] = quad_2d[p][3*i+1];
-        (*w) [i] = quad_2d[p][3*i+2] / 2.; //weights are 2 times too big for some reason
+        (*w_local) [i] = quad_2d[p][3*i+2] / 2.; //weights are 2 times too big for some reason
     }
 
     // set 1D quadrature rules
@@ -590,6 +590,58 @@ void usage_error() {
     printf("          [-d] Debug.\n");
 }
 
+int get_input(int argc, char *argv[],
+               int *n, int *debug, int *timesteps,
+               char **mesh_filename, char **out_filename) {
+
+    int i;
+
+    *timesteps = 1;
+    *debug     = 0;
+    // read command line input
+    if (argc < 5) {
+        usage_error();
+        return 1;
+    }
+    for (i = 0; i < argc; i++) {
+        // order of polynomial
+        if (strcmp(argv[i], "-n") == 0) {
+            if (i + 1 < argc) {
+                *n = atoi(argv[i+1]);
+                if (*n < 0 || *n > 8) {
+                    usage_error();
+                    return 1;
+                }
+            } else {
+                usage_error();
+                return 1;
+            }
+        }
+        if (strcmp(argv[i], "-t") == 0) {
+            if (i + 1 < argc) {
+                *timesteps = atoi(argv[i+1]);
+                if (*timesteps < 0) {
+                    usage_error();
+                    return 1;
+                }
+            } else {
+                usage_error();
+                return 1;
+            }
+        }
+        if (strcmp(argv[i], "-d") == 0) {
+            *debug = 1;
+        }
+    } 
+
+    // second last argument is filename
+    *mesh_filename = argv[argc - 2];
+    // last argument is outfilename
+    *out_filename  = argv[argc - 1];
+
+    return 0;
+}
+
 int main(int argc, char *argv[]) {
     checkCudaError("error before start.");
     int num_elem, num_sides;
@@ -602,7 +654,7 @@ int main(int argc, char *argv[]) {
     float *sides_x1, *sides_x2;
     float *sides_y1, *sides_y2;
 
-    float *r1, *r2, *w;
+    float *r1, *r2, *w_local;
 
     float *s_r, *oned_w;
 
@@ -617,48 +669,11 @@ int main(int argc, char *argv[]) {
     char *out_filename;
 
     float *Uv1, *Uv2, *Uv3;
-    timesteps = 1;
-    debug     = 0;
-    // read command line input
-    if (argc < 5) {
-        usage_error();
+
+    // get input 
+    if (get_input(argc, argv, &n, &debug, &timesteps, &mesh_filename, &out_filename)) {
         return 1;
     }
-    for (i = 0; i < argc; i++) {
-        // order of polynomial
-        if (strcmp(argv[i], "-n") == 0) {
-            if (i + 1 < argc) {
-                n = atoi(argv[i+1]);
-                if (n < 0 || n > 9) {
-                    usage_error();
-                    return 1;
-                }
-            } else {
-                usage_error();
-                return 1;
-            }
-        }
-        if (strcmp(argv[i], "-t") == 0) {
-            if (i + 1 < argc) {
-                timesteps = atoi(argv[i+1]);
-                if (t < 0) {
-                    usage_error();
-                    return 1;
-                }
-            } else {
-                usage_error();
-                return 1;
-            }
-        }
-        if (strcmp(argv[i], "-d") == 0) {
-            debug = 1;
-        }
-    } 
-
-    // second last argument is filename
-    mesh_filename = argv[argc - 2];
-    // last argument is outfilename
-    out_filename  = argv[argc - 1];
 
     // set the order of the approximation & timestep
     n_p = (n + 1) * (n + 2) / 2;
@@ -700,6 +715,7 @@ int main(int argc, char *argv[]) {
     for (i = 0; i < 3*num_elem; i++) {
         right_elem[i] = -1;
     }
+
     // read in the mesh and make all the mappings
     read_mesh(mesh_file, &num_sides, num_elem,
                          V1x, V1y, V2x, V2y, V3x, V3y,
@@ -728,8 +744,6 @@ int main(int argc, char *argv[]) {
     // pre computations
     preval_jacobian<<<n_blocks_elem, n_threads>>>(d_J, d_V1x, d_V1y, d_V2x, d_V2y, d_V3x, d_V3y, num_elem); 
     cudaThreadSynchronize();
-    //preval_jacobian_sign<<<n_blocks_elem, n_threads>>>(d_J, d_V1x, d_V1y, d_V2x, d_V2y, num_elem); 
-    //cudaThreadSynchronize();
     preval_side_length<<<n_blocks_sides, n_threads>>>(d_s_length, d_s_V1x, d_s_V1y, d_s_V2x, d_s_V2y, 
                                                       num_sides); 
     cudaThreadSynchronize();
@@ -754,19 +768,16 @@ int main(int argc, char *argv[]) {
     checkCudaError("error after prevals.");
 
     // get the correct quadrature rules for this scheme
-    set_quadrature(n, &r1, &r2, &w, 
+    set_quadrature(n, &r1, &r2, &w_local, 
                    &s_r, &oned_w, &n_quad, &n_quad1d);
 
     // evaluate the basis functions at those points and store on GPU
-    preval_basis(r1, r2, s_r, w, oned_w, n_quad, n_quad1d, n_p);
-
-    checkCudaError("error before quadrature copy.");
+    preval_basis(r1, r2, s_r, w_local, oned_w, n_quad, n_quad1d, n_p);
 
     cudaMemcpy(d_r1, r1, n_quad * sizeof(float), cudaMemcpyHostToDevice);
     cudaMemcpy(d_r2, r2, n_quad * sizeof(float), cudaMemcpyHostToDevice);
-    cudaMemcpy(d_w , w , n_quad * sizeof(float), cudaMemcpyHostToDevice);
+    cudaMemcpy(d_w, w_local, n_quad * sizeof(float), cudaMemcpyHostToDevice);
     cudaMemcpy(d_s_r, s_r, n_quad1d * sizeof(float), cudaMemcpyHostToDevice);
-    cudaMemcpy(d_oned_w, oned_w, n_quad1d * sizeof(float), cudaMemcpyHostToDevice);
 
     // initial conditions
     init_conditions<<<n_blocks_elem, n_threads>>>(d_c, d_V1x, d_V1y, d_V2x, d_V2y, d_V3x, d_V3y,
@@ -774,7 +785,8 @@ int main(int argc, char *argv[]) {
     checkCudaError("error after initial conditions.");
 
     printf("Computing...\n");
-    printf(" ? %i degree polynomial interpolation\n", n);
+    printf(" ? %i degree polynomial interpolation (n_p = %i)\n", n, n_p);
+    printf(" ? %i precomputed basis elements\n", n_quad * n_p);
     printf(" ? %i elements\n", num_elem);
     printf(" ? %i sides\n", num_sides);
     printf(" ? %i timesteps\n", timesteps);
@@ -784,7 +796,7 @@ int main(int argc, char *argv[]) {
     }
     printf(" ? 2d quadrature rules:\n");
     for (i = 0; i < n_quad; i++) {
-        printf("     > (%f, %f) - %f \n", r1[i], r2[i], w[i]);
+        printf("     > (%f, %f) - %f \n", r1[i], r2[i], w_local[i]);
     }
 
     if (debug) {
@@ -877,7 +889,7 @@ int main(int argc, char *argv[]) {
 
     free(r1);
     free(r2);
-    free(w);
+    free(w_local);
     free(s_r);
     free(oned_w);
 

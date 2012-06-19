@@ -121,9 +121,9 @@ double quad_2d_degree10[] = {0.333333333333333,0.333333333333333,0.0908179903827
                            0.009540815400299,0.923655933587500,0.009421666963733};
 // put them together 
 double *quad_2d[] = {quad_2d_degree1, quad_2d_degree2, quad_2d_degree3,
-                    quad_2d_degree4, quad_2d_degree5, quad_2d_degree6,
-                    quad_2d_degree7, quad_2d_degree8, quad_2d_degree9,
-                    quad_2d_degree10}; 
+                     quad_2d_degree4, quad_2d_degree5, quad_2d_degree6,
+                     quad_2d_degree7, quad_2d_degree8, quad_2d_degree9,
+                     quad_2d_degree10}; 
 
 ////////////////////////////////////////
 // 1D Quadrature Rules
@@ -132,7 +132,7 @@ double *quad_2d[] = {quad_2d_degree1, quad_2d_degree2, quad_2d_degree3,
 // order goes (r1, w1, r2, w2, ...)
 double quad_1d_degree1[] = {0.0,2.0};
 double quad_1d_degree2[] = {-1./sqrt(3),1.,
-                            1./sqrt(3),1.};
+                             1./sqrt(3),1.};
 double quad_1d_degree3[] = {-sqrt(3./5), 5./9, 
                            0., 8./9,
                            sqrt(3./5), 5./9};
