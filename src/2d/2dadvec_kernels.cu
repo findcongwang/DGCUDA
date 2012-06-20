@@ -25,11 +25,6 @@ float *d_k2;
 float *d_k3;
 float *d_k4;
 
-float *d_r1;     // integration points (x) for 2d integration
-float *d_r2;     // integration points (y) for 2d integration
-float *d_w;      // weights for 2d integration
-float *d_oned_w; // weights for 2d integration
-
 // precomputed basis functions 
 // TODO: maybe making these 2^n makes sure the offsets are cached more efficiently? who knows...
 // precomputed basis functions ordered like so
@@ -57,6 +52,9 @@ __device__ __constant__ float basis_vertex[256];
 __device__ __constant__ float w[32];
 __device__ __constant__ float w_oned[16];
 
+__device__ __constant__ float r1[32];
+__device__ __constant__ float r2[32];
+
 void set_basis(void *value, int size) {
     cudaMemcpyToSymbol("basis", value, size * sizeof(float));
 }
@@ -77,6 +75,12 @@ void set_w(void *value, int size) {
 }
 void set_w_oned(void *value, int size) {
     cudaMemcpyToSymbol("w_oned", value, size * sizeof(float));
+}
+void set_r1(void *value, int size) {
+    cudaMemcpyToSymbol("r1", value, size * sizeof(float));
+}
+void set_r2(void *value, int size) {
+    cudaMemcpyToSymbol("r2", value, size * sizeof(float));
 }
 
 // evaluation points for the boundary integrals depending on the side
@@ -238,7 +242,6 @@ __global__ void init_conditions(float *c,
                                 float *V1x, float *V1y,
                                 float *V2x, float *V2y,
                                 float *V3x, float *V3y,
-                                float *r1, float *r2,
                                 int n_quad, int n_p, int num_elem) {
     int idx = blockDim.x * blockIdx.x + threadIdx.x;
     int i, j;
@@ -635,7 +638,7 @@ __global__ void eval_riemann(float *c, float *left_riemann_rhs, float *right_rie
  * THREADS: num_elem
  */
  __global__ void eval_quad(float *c, float *quad_rhs, 
-                     float *r1, float *r2, float *J, 
+                     float *J, 
                      float *xr, float *yr,
                      float *xs, float *ys,
                      int n_quad, int n_p, int num_elem) {

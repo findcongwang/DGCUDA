@@ -17,8 +17,8 @@
  * and the 2d quadrature integration points and weights for the volume intergrals.
  */
 void set_quadrature(int p,
-                    float **r1, float **r2, float **w_local,
-                    float **s_r, float **oned_w, 
+                    float **r1_local, float **r2_local, float **w_local,
+                    float **s_r, float **oned_w_local, 
                     int *n_quad, int *n_quad1d) {
     int i;
     /*
@@ -73,24 +73,24 @@ void set_quadrature(int p,
                 break;
     }
     // allocate integration points
-    *r1 = (float *) malloc(*n_quad * sizeof(float));
-    *r2 = (float *) malloc(*n_quad * sizeof(float));
+    *r1_local = (float *) malloc(*n_quad * sizeof(float));
+    *r2_local = (float *) malloc(*n_quad * sizeof(float));
     *w_local  =  (float *) malloc(*n_quad * sizeof(float));
 
     *s_r = (float *) malloc(*n_quad1d * sizeof(float));
-    *oned_w = (float *) malloc(*n_quad1d * sizeof(float));
+    *oned_w_local = (float *) malloc(*n_quad1d * sizeof(float));
 
     // set 2D quadrature rules
     for (i = 0; i < *n_quad; i++) {
-        (*r1)[i] = quad_2d[p][3*i];
-        (*r2)[i] = quad_2d[p][3*i+1];
+        (*r1_local)[i] = quad_2d[p][3*i];
+        (*r2_local)[i] = quad_2d[p][3*i+1];
         (*w_local) [i] = quad_2d[p][3*i+2] / 2.; //weights are 2 times too big for some reason
     }
 
     // set 1D quadrature rules
     for (i = 0; i < *n_quad1d; i++) {
         (*s_r)[i] = quad_1d[p][2*i];
-        (*oned_w)[i] = quad_1d[p][2*i+1];
+        (*oned_w_local)[i] = quad_1d[p][2*i+1];
     }
 }
 
@@ -290,7 +290,7 @@ void time_integrate(float dt, int n_quad, int n_quad1d, int n_p, int num_elem, i
     checkCudaError("error after stage 1: eval_riemann");
 
     eval_quad<<<n_blocks_elem, n_threads>>>
-                    (d_c, d_quad_rhs, d_r1, d_r2, d_J,
+                    (d_c, d_quad_rhs, d_J,
                      d_xr, d_yr, d_xs, d_ys,
                      n_quad, n_p, num_elem);
     cudaThreadSynchronize();
@@ -348,7 +348,7 @@ void time_integrate(float dt, int n_quad, int n_quad1d, int n_p, int num_elem, i
     cudaThreadSynchronize();
 
     eval_quad<<<n_blocks_elem, n_threads>>>
-                    (d_c, d_quad_rhs, d_r1, d_r2, d_J,
+                    (d_c, d_quad_rhs, d_J,
                      d_xr, d_yr, d_xs, d_ys,
                      n_quad, n_p, num_elem);
     cudaThreadSynchronize();
@@ -378,7 +378,7 @@ void time_integrate(float dt, int n_quad, int n_quad1d, int n_p, int num_elem, i
     cudaThreadSynchronize();
 
     eval_quad<<<n_blocks_elem, n_threads>>>
-                    (d_c, d_quad_rhs, d_r1, d_r2, d_J,
+                    (d_c, d_quad_rhs, d_J,
                      d_xr, d_yr, d_xs, d_ys,
                      n_quad, n_p, num_elem);
     cudaThreadSynchronize();
@@ -408,7 +408,7 @@ void time_integrate(float dt, int n_quad, int n_quad1d, int n_p, int num_elem, i
     cudaThreadSynchronize();
 
     eval_quad<<<n_blocks_elem, n_threads>>>
-                    (d_c, d_quad_rhs, d_r1, d_r2, d_J,
+                    (d_c, d_quad_rhs, d_J,
                      d_xr, d_yr, d_xs, d_ys,
                      n_quad, n_p, num_elem);
     cudaThreadSynchronize();
@@ -451,12 +451,6 @@ void init_gpu(int num_elem, int num_sides, int n_p,
     cudaMalloc((void **) &d_k2, num_elem * n_p * sizeof(float));
     cudaMalloc((void **) &d_k3, num_elem * n_p * sizeof(float));
     cudaMalloc((void **) &d_k4, num_elem * n_p * sizeof(float));
-
-    cudaMalloc((void **) &d_r1, n_p * sizeof(float));
-    cudaMalloc((void **) &d_r2, n_p * sizeof(float));
-    cudaMalloc((void **) &d_w , n_p * sizeof(float));
-
-    cudaMalloc((void **) &d_oned_w, n_p * sizeof(float));
 
     cudaMalloc((void **) &d_J, num_elem * sizeof(float));
     cudaMalloc((void **) &d_s_length, num_sides * sizeof(float));
@@ -536,12 +530,6 @@ void free_gpu() {
     cudaFree(d_k2);
     cudaFree(d_k3);
     cudaFree(d_k4);
-
-    cudaFree(d_r1);
-    cudaFree(d_r2);
-    cudaFree(d_w);
-
-    cudaFree(d_oned_w);
 
     cudaFree(d_J);
     cudaFree(d_s_length);
@@ -654,9 +642,9 @@ int main(int argc, char *argv[]) {
     float *sides_x1, *sides_x2;
     float *sides_y1, *sides_y2;
 
-    float *r1, *r2, *w_local;
+    float *r1_local, *r2_local, *w_local;
 
-    float *s_r, *oned_w;
+    float *s_r, *oned_w_local;
 
     int *left_elem, *right_elem;
     int *elem_s1, *elem_s2, *elem_s3;
@@ -768,35 +756,30 @@ int main(int argc, char *argv[]) {
     checkCudaError("error after prevals.");
 
     // get the correct quadrature rules for this scheme
-    set_quadrature(n, &r1, &r2, &w_local, 
-                   &s_r, &oned_w, &n_quad, &n_quad1d);
+    set_quadrature(n, &r1_local, &r2_local, &w_local, 
+                   &s_r, &oned_w_local, &n_quad, &n_quad1d);
 
     // evaluate the basis functions at those points and store on GPU
-    preval_basis(r1, r2, s_r, w_local, oned_w, n_quad, n_quad1d, n_p);
-
-    cudaMemcpy(d_r1, r1, n_quad * sizeof(float), cudaMemcpyHostToDevice);
-    cudaMemcpy(d_r2, r2, n_quad * sizeof(float), cudaMemcpyHostToDevice);
-    cudaMemcpy(d_w, w_local, n_quad * sizeof(float), cudaMemcpyHostToDevice);
-    cudaMemcpy(d_s_r, s_r, n_quad1d * sizeof(float), cudaMemcpyHostToDevice);
+    preval_basis(r1_local, r2_local, s_r, w_local, oned_w_local, n_quad, n_quad1d, n_p);
 
     // initial conditions
     init_conditions<<<n_blocks_elem, n_threads>>>(d_c, d_V1x, d_V1y, d_V2x, d_V2y, d_V3x, d_V3y,
-                    d_r1, d_r2, n_quad, n_p, num_elem);
+                    n_quad, n_p, num_elem);
     checkCudaError("error after initial conditions.");
 
     printf("Computing...\n");
     printf(" ? %i degree polynomial interpolation (n_p = %i)\n", n, n_p);
-    printf(" ? %i precomputed basis elements\n", n_quad * n_p);
+    printf(" ? %i precomputed basis points\n", n_quad * n_p);
     printf(" ? %i elements\n", num_elem);
     printf(" ? %i sides\n", num_sides);
     printf(" ? %i timesteps\n", timesteps);
     printf(" ? 1d quadrature rules:\n");
     for (i = 0; i < n_quad1d; i++) {
-        printf("     > %f - %f \n", s_r[i], oned_w[i]);
+        printf("     > %f - %f \n", s_r[i], oned_w_local[i]);
     }
     printf(" ? 2d quadrature rules:\n");
     for (i = 0; i < n_quad; i++) {
-        printf("     > (%f, %f) - %f \n", r1[i], r2[i], w_local[i]);
+        printf("     > (%f, %f) - %f \n", r1_local[i], r2_local[i], w_local[i]);
     }
 
     if (debug) {
@@ -887,11 +870,11 @@ int main(int argc, char *argv[]) {
     free(left_side_number);
     free(right_side_number);
 
-    free(r1);
-    free(r2);
+    free(r1_local);
+    free(r2_local);
     free(w_local);
     free(s_r);
-    free(oned_w);
+    free(oned_w_local);
 
     return 0;
 }

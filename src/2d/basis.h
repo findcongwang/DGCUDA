@@ -141,7 +141,7 @@ switch (i) {
 }
 
 
-void preval_basis(float *r1, float *r2, float *s_r, float *w_local, float *w_oned_local, 
+void preval_basis(float *r1_local, float *r2_local, float *s_r, float *w_local, float *w_oned_local, 
                   int n_quad, int n_quad1d, int n_p) {
     float *basis_local        = (float *) malloc(n_quad * n_p * sizeof(float));
     float *basis_grad_x_local = (float *) malloc(n_quad * n_p * sizeof(float)); 
@@ -171,9 +171,9 @@ void preval_basis(float *r1, float *r2, float *s_r, float *w_local, float *w_one
 
         //precompute the quadrature nodes on the elements for the basis & gradients
         for (j = 0; j < n_quad; j++) {
-            basis_local[i * n_quad + j] = phi(r1[j], r2[j], i);
-            basis_grad_x_local[i * n_quad + j] = w_local[j] * phi_x(r1[j], r2[j], i);
-            basis_grad_y_local[i * n_quad + j] = w_local[j] * phi_y(r1[j], r2[j], i);
+            basis_local[i * n_quad + j] = phi(r1_local[j], r2_local[j], i);
+            basis_grad_x_local[i * n_quad + j] = w_local[j] * phi_x(r1_local[j], r2_local[j], i);
+            basis_grad_y_local[i * n_quad + j] = w_local[j] * phi_y(r1_local[j], r2_local[j], i);
         }
 
         // precompute the quadrature nodes at the sides going in the clockwise direction
@@ -184,14 +184,6 @@ void preval_basis(float *r1, float *r2, float *s_r, float *w_local, float *w_one
         }
     }
 
-    printf("basis side\n");
-    for (i = 0; i < n_p; i++) {
-        for (j = 0; j < n_quad1d; j++) {
-            printf("(%f, %f, %f)\n", basis_side_local[0 * (n_quad1d * n_p) + i * n_quad1d + j], basis_side_local[1 * (n_quad1d * n_p) + i * n_quad1d + j], basis_side_local[2 * (n_quad1d * n_p) + i * n_quad1d + j]);
-            printf("(%f, %f, %f)\n", basis_check(0.5 + 0.5*s_r[j], 0., i), basis_check((1 - s_r[j])/2, (1 + s_r[j])/2,i), basis_check(0 , 0.5 + 0.5 * s_r[n_quad1d - 1 - j],i));
-        }
-    }
-
     // set the constants on the GPU to the evaluations
     set_basis(basis_local, n_quad * n_p);
     set_basis_grad_x(basis_grad_x_local, n_quad * n_p);
@@ -199,6 +191,8 @@ void preval_basis(float *r1, float *r2, float *s_r, float *w_local, float *w_one
     set_basis_side(basis_side_local, 3 * n_quad1d * n_p);
     set_basis_vertex(basis_vertex_local, 3 * n_p);
     set_w(w_local, n_quad);
+    set_r1(r1_local, n_quad);
+    set_r2(r2_local, n_quad);
     set_w_oned(w_oned_local, n_quad1d);
 
     free(basis_local);
