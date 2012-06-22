@@ -481,8 +481,8 @@ __global__ void eval_riemann(float *c, float *left_riemann_rhs, float *right_rie
         int left_idx, right_idx, right_side, left_side, i, j, k;
         // TODO: these need to be smaller for the smaller eval_riemanns
         float c_left[36], c_right[36];
-        float left_r1[10], right_r1[10];
-        float left_r2[10], right_r2[10];
+        // and these are too large and we only need them for border cases...
+        float left_r1[25], left_r2[25];
         float nx, ny, s;
         float x, y;
         float u_left, u_right;
@@ -549,31 +549,6 @@ __global__ void eval_riemann(float *c, float *left_riemann_rhs, float *right_rie
         // TODO: does this speed it up?
         __syncthreads();
 
-        // get the integration points for the right element's side
-        switch (right_side) {
-            case 0: 
-                for (i = 0; i < n_quad1d; i++) {
-                    right_r1[i] = 0.5 + 0.5 * s_r[n_quad1d - 1 - i];
-                    right_r2[i] = 0.;
-                }
-                break;
-            case 1: 
-                for (i = 0; i < n_quad1d; i++) {
-                    right_r1[i] = (1. + s_r[i]) / 2.;
-                    right_r2[i] = (1. - s_r[i]) / 2.;
-                }
-                break;
-            case 2: 
-                for (i = 0; i < n_quad1d; i++) {
-                    right_r1[i] = 0.;
-                    right_r2[i] = 0.5 + 0.5 * s_r[i];
-                }
-                break;
-        }
-
-        // TODO: does this speed it up?
-        __syncthreads();
-         
         // multiply across by the i'th basis function
         for (i = 0; i < n_p; i++) {
             left_sum  = 0.;
