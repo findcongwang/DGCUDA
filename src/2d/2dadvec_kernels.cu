@@ -54,33 +54,47 @@ __device__ __constant__ float w_oned[16];
 
 __device__ __constant__ float r1[32];
 __device__ __constant__ float r2[32];
+__device__ __constant__ float r_oned[32];
 
 void set_basis(void *value, int size) {
+    printf("basis[%i]\n", size);
     cudaMemcpyToSymbol("basis", value, size * sizeof(float));
 }
 void set_basis_grad_x(void *value, int size) {
+    printf("basis_grad_x[%i]\n", size);
     cudaMemcpyToSymbol("basis_grad_x", value, size * sizeof(float));
 }
 void set_basis_grad_y(void *value, int size) {
+    printf("basis_grad_y[%i]\n", size);
     cudaMemcpyToSymbol("basis_grad_y", value, size * sizeof(float));
 }
 void set_basis_side(void *value, int size) {
+    printf("basis_side[%i]\n", size);
     cudaMemcpyToSymbol("basis_side", value, size * sizeof(float));
 }
 void set_basis_vertex(void *value, int size) {
+    printf("basis_vertex[%i]\n", size);
     cudaMemcpyToSymbol("basis_vertex", value, size * sizeof(float));
 }
 void set_w(void *value, int size) {
+    printf("w[%i]\n", size);
     cudaMemcpyToSymbol("w", value, size * sizeof(float));
 }
 void set_w_oned(void *value, int size) {
+    printf("w_oned[%i]\n", size);
     cudaMemcpyToSymbol("w_oned", value, size * sizeof(float));
 }
 void set_r1(void *value, int size) {
+    printf("r1[%i]\n", size);
     cudaMemcpyToSymbol("r1", value, size * sizeof(float));
 }
 void set_r2(void *value, int size) {
+    printf("r2[%i]\n", size);
     cudaMemcpyToSymbol("r2", value, size * sizeof(float));
+}
+void set_r_oned(void *value, int size) {
+    printf("r_oned[%i]\n", size);
+    cudaMemcpyToSymbol("r_oned", value, size * sizeof(float));
 }
 
 // evaluation points for the boundary integrals depending on the side
@@ -214,7 +228,7 @@ __device__ float riemann(float u_left, float u_right) {
  * returns the value of the intial condition at point x
  */
 __device__ float u0(float x, float y) {
-    return 1.;
+    return x - y;
 }
 
 /* boundary exact
@@ -528,20 +542,20 @@ __global__ void eval_riemann(float *c, float *left_riemann_rhs, float *right_rie
         switch (left_side) {
             case 0: 
                 for (i = 0; i < n_quad1d; i++) {
-                    left_r1[i] = 0.5 + 0.5 * s_r[i];
+                    left_r1[i] = 0.5 + 0.5 * r_oned[i];
                     left_r2[i] = 0.;
                 }
                 break;
             case 1: 
                 for (i = 0; i < n_quad1d; i++) {
-                    left_r1[i] = (1. - s_r[i]) / 2.;
-                    left_r2[i] = (1. + s_r[i]) / 2.;
+                    left_r1[i] = (1. - r_oned[i]) / 2.;
+                    left_r2[i] = (1. + r_oned[i]) / 2.;
                 }
                 break;
             case 2: 
                 for (i = 0; i < n_quad1d; i++) {
                     left_r1[i] = 0.;
-                    left_r2[i] = 0.5 + 0.5 * s_r[n_quad1d - 1 - i];
+                    left_r2[i] = 0.5 + 0.5 * r_oned[n_quad1d - 1 - i];
                 }
                 break;
         }
@@ -558,7 +572,7 @@ __global__ void eval_riemann(float *c, float *left_riemann_rhs, float *right_rie
                 // compute u evaluated over the j'th integration point
                 u_left  = 0.;
                 for (k = 0; k < n_p; k++) {
-                    u_left  += c_left[k]  * basis_side[left_side * n_p * n_quad1d + k * n_quad1d + j];
+                    u_left  += c_left[k] * basis_side[left_side * n_p * n_quad1d + k * n_quad1d + j];
                 }
 
                 // if it's a boundary element, use the boundary function to deal with it
@@ -576,7 +590,6 @@ __global__ void eval_riemann(float *c, float *left_riemann_rhs, float *right_rie
                     u_right = 0.;
                     for (k = 0; k < n_p; k++) {
                         // if it's not a boundary element, compute it
-                        // TODO: these are all WRONG
                         u_right += c_right[k] * basis_side[right_side * n_p * n_quad1d + k * n_quad1d + n_quad1d - 1 - j];
                     }
                 }
@@ -645,13 +658,13 @@ __global__ void eval_riemann(float *c, float *left_riemann_rhs, float *right_rie
                 // Add to the sum
                 // [fx fy] * [y_s, -y_r; -x_s, x_r] * [phi_x phi_y]
                 sum += (  flux_x(u) * ( basis_grad_x[n_quad * i + j] * y_s
-                                      - basis_grad_y[n_quad * i + j] * y_r)
+                                       -basis_grad_y[n_quad * i + j] * y_r)
                         + flux_y(u) * (-basis_grad_x[n_quad * i + j] * x_s 
                                       + basis_grad_y[n_quad * i + j] * x_r));
             }
 
             // store the result
-            quad_rhs[i * num_elem + idx] = sum; 
+            quad_rhs[i * num_elem + idx] = sum;
         }
     }
 }

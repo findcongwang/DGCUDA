@@ -1,1 +1,1 @@
-./dgcuda -d -n 0 -t 1 mesh/canonical.pmsh output/canonical.out
+./dgcuda -d -n 1 -t 1 mesh/canonical.pmsh output/canonical.out

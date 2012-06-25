@@ -72,22 +72,25 @@ float phi(float r, float s, int n) {
 
 float phi_x(float r, float s, int n) {
     int i, j, k;
-    float sum = 0;
+    float sum = 0.;
 
     float R[size];
 
     R[0] = 0;
     k = 1;
     int power = 1;
-    for (i = 1; i * power < size; i++) {
+    while (k <= n) {
         for (j = 0; j <= power; j++) {
             R[k] = (power - j) * powf(r, power - j - 1) * powf(s, j);
+            if (j == power) {
+                R[k] = 0;
+            }
             k++;
         }
         power++;
     }
 
-    for (i = 0; i < size; i++) {
+    for (i = 0; i <= n; i++) {
         sum += basis_coeff[n][i] * R[i];
     }
 
@@ -96,22 +99,25 @@ float phi_x(float r, float s, int n) {
 
 float phi_y(float r, float s, int n) {
     int i, j, k;
-    float sum = 0;
+    float sum = 0.;
 
     float R[size];
 
     R[0] = 0;
     k    = 1;
     int power = 1;
-    for (i = 1; i * power < size; i++) {
+    while (k <= n) {
         for (j = 0; j <= power; j++) {
             R[k] = powf(r, power - j) * j * powf(s, j - 1);
+            if (j == 0) {
+                R[k] = 0;
+            }
             k++;
         }
         power++;
     }
 
-    for (i = 0; i < size; i++) {
+    for (i = 0; i <= n; i++) {
         sum += basis_coeff[n][i] * R[i];
     }
 
@@ -152,6 +158,15 @@ void preval_basis(float *r1_local, float *r2_local, float *s_r, float *w_local, 
     int i, j;
 
     /*
+    printf("x partial\n");
+    for (i = 0; i < n_p; i++) {
+        printf("phi_%i = %f\n", i, phi_x(0, 0, i) );
+    }
+
+    printf("y partial\n");
+    for (i = 0; i < n_p; i++) {
+        printf("phi_%i = %f\n", i, phi_y(0, 0, i) );
+    }
     float test;
     for (i = 0; i < n_p; i++) {
         test = 0.;
@@ -179,10 +194,21 @@ void preval_basis(float *r1_local, float *r2_local, float *s_r, float *w_local, 
         // precompute the quadrature nodes at the sides going in the clockwise direction
         for (j = 0; j < n_quad1d; j++) {
             basis_side_local[0 * (n_quad1d * n_p) + i * n_quad1d + j] = phi(0.5 + 0.5 * s_r[j], 0., i);
-            basis_side_local[1 * (n_quad1d * n_p) + i * n_quad1d + j] = phi((1 - s_r[j])/2., (1 + s_r[j])/2., i);
+            basis_side_local[1 * (n_quad1d * n_p) + i * n_quad1d + j] = phi((1. - s_r[j])/2., (1. + s_r[j])/2., i);
             basis_side_local[2 * (n_quad1d * n_p) + i * n_quad1d + j] = phi(0., 0.5 + 0.5 * s_r[n_quad1d - 1 - j], i);
         }
     }
+
+    /*
+    for (i = 0; i < n_p; i++) {
+        printf("phi_%i\n", i);
+        for (j = 0; j < n_quad1d; j++) {
+            printf(" (%f, %f, %f)\n", basis_side_local[0*n_quad1d*n_p + i*n_quad1d + j],basis_side_local[1*n_quad1d*n_p + i*n_quad1d + j],  basis_side_local[2*n_quad1d*n_p + i*n_quad1d + j]);
+            printf(" check side 0: %f, %f \n", basis_side_local[0*n_quad1d*n_p + i*n_quad1d + j], basis_check(0.5 + 0.5 * s_r[j], 0., i));
+            printf(" %f\n", s_r[j]);
+        }
+    }
+    */
 
     // set the constants on the GPU to the evaluations
     set_basis(basis_local, n_quad * n_p);
@@ -193,6 +219,7 @@ void preval_basis(float *r1_local, float *r2_local, float *s_r, float *w_local, 
     set_w(w_local, n_quad);
     set_r1(r1_local, n_quad);
     set_r2(r2_local, n_quad);
+    set_r_oned(s_r, n_quad1d);
     set_w_oned(w_oned_local, n_quad1d);
 
     free(basis_local);
