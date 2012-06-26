@@ -692,15 +692,18 @@ __global__ void eval_error(float *c,
             register_c[i] = c[i * num_elem + idx];
         }
 
-        uv1 = 0;
-        uv2 = 0;
-        uv3 = 0;
+        uv1 = 0.;
+        uv2 = 0.;
+        uv3 = 0.;
 
         // calculate values at three vertex points
         for (i = 0; i < n_p; i++) {
-            uv1 += register_c[i] * basis_vertex[i * n_p + 0];
-            uv2 += register_c[i] * basis_vertex[i * n_p + 1];
-            uv3 += register_c[i] * basis_vertex[i * n_p + 2];
+            uv1 += register_c[i] * basis_vertex[i * 3 + 0];
+            uv2 += register_c[i] * basis_vertex[i * 3 + 1];
+            uv3 += register_c[i] * basis_vertex[i * 3 + 2];
+            //uv1 += register_c[i] * basis_eval(0, 0, i);
+            //uv2 += register_c[i] * basis_eval(1, 0, i);
+            //uv3 += register_c[i] * basis_eval(0, 1, i);
         }
 
         // store result
