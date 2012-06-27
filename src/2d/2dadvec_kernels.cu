@@ -701,9 +701,6 @@ __global__ void eval_error(float *c,
             uv1 += register_c[i] * basis_vertex[i * 3 + 0];
             uv2 += register_c[i] * basis_vertex[i * 3 + 1];
             uv3 += register_c[i] * basis_vertex[i * 3 + 2];
-            //uv1 += register_c[i] * basis_eval(0, 0, i);
-            //uv2 += register_c[i] * basis_eval(1, 0, i);
-            //uv3 += register_c[i] * basis_eval(0, 1, i);
         }
 
         // store result

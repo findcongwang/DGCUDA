@@ -200,7 +200,9 @@ void preval_basis(float *r1_local, float *r2_local, float *s_r, float *w_local, 
     }
 
     for (i = 0; i < n_p; i++) {
-        printf("%f, %f, %f\n", basis_vertex_local[i * 3 + 0], basis_vertex_local[i * 3 + 1], basis_vertex_local[i * 3 + 2]);
+        printf("%f, %f\n", basis_vertex_local[i * 3 + 0], basis_check(0., 0., i));
+        printf("%f, %f\n", basis_vertex_local[i * 3 + 1], basis_check(1., 0., i));
+        printf("%f, %f\n", basis_vertex_local[i * 3 + 2], basis_check(0., 1., i));
     }
 
     /*
