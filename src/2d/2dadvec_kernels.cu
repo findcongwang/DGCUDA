@@ -57,43 +57,33 @@ __device__ __constant__ float r2[32];
 __device__ __constant__ float r_oned[32];
 
 void set_basis(void *value, int size) {
-    printf("basis[%i]\n", size);
     cudaMemcpyToSymbol("basis", value, size * sizeof(float));
 }
 void set_basis_grad_x(void *value, int size) {
-    printf("basis_grad_x[%i]\n", size);
     cudaMemcpyToSymbol("basis_grad_x", value, size * sizeof(float));
 }
 void set_basis_grad_y(void *value, int size) {
-    printf("basis_grad_y[%i]\n", size);
     cudaMemcpyToSymbol("basis_grad_y", value, size * sizeof(float));
 }
 void set_basis_side(void *value, int size) {
-    printf("basis_side[%i]\n", size);
     cudaMemcpyToSymbol("basis_side", value, size * sizeof(float));
 }
 void set_basis_vertex(void *value, int size) {
-    printf("basis_vertex[%i]\n", size);
     cudaMemcpyToSymbol("basis_vertex", value, size * sizeof(float));
 }
 void set_w(void *value, int size) {
-    printf("w[%i]\n", size);
     cudaMemcpyToSymbol("w", value, size * sizeof(float));
 }
 void set_w_oned(void *value, int size) {
-    printf("w_oned[%i]\n", size);
     cudaMemcpyToSymbol("w_oned", value, size * sizeof(float));
 }
 void set_r1(void *value, int size) {
-    printf("r1[%i]\n", size);
     cudaMemcpyToSymbol("r1", value, size * sizeof(float));
 }
 void set_r2(void *value, int size) {
-    printf("r2[%i]\n", size);
     cudaMemcpyToSymbol("r2", value, size * sizeof(float));
 }
 void set_r_oned(void *value, int size) {
-    printf("r_oned[%i]\n", size);
     cudaMemcpyToSymbol("r_oned", value, size * sizeof(float));
 }
 
@@ -166,48 +156,6 @@ __device__ float flux_y(float u) {
     return u;
 }
 
-/* basis functions
- *
- * using the multidimensional normalized lagrange polynomials
- */
-__device__ float basis_eval(float x, float y, int i) {
-switch (i) {
-        case 0: return 1.414213562373095;
-        case 1: return -1.999999999999999 + 5.999999999999999*x;
-        case 2: return -3.464101615137754 + 3.464101615137750*x + 6.928203230275512*y;
-        case 3: return  2.449489742783153 + -1.959591794226528E+01*x + 1.648597081617952E-14*y + 2.449489742783160E+01*x*x;
-        case 4: return  4.242640687119131E+00 + -2.545584412271482E+01*x + -8.485281374238392E+00*y + 2.121320343559552E+01 * x*x +  4.242640687119219E+01 * x*y;
-        case 5: return  5.477225575051629E+00 + -1.095445115010309E+01*x + -3.286335345030997E+01*y + 5.477225575051381E+00 * x*x + 3.286335345031001E+01 * x*y +  3.286335345030994E+01 * y*y;
-    }
-    return -1;
-}
-
-/* basis function gradients
- *
- */
-__device__ float grad_basis_eval_x(float x, float y, int i) {
-    switch (i) {
-        case 0: return 0;
-        case 1: return 5.999999999999999;
-        case 2: return 3.464101615137750;
-        case 3: return -1.959591794226528E+01 + 2 * 2.449489742783160E+01*x;
-        case 4: return  -2.545584412271482E+01 + 2 * 2.121320343559552E+01 * x + 4.242640687119219E+01 * y;
-        case 5: return  -1.095445115010309E+01 + 2 * 5.477225575051381E+00 * x + 3.286335345031001E+01 * y; 
-    }
-    return 0;
-}
-__device__ float grad_basis_eval_y(float x, float y, int i) {
-    switch (i) {
-        case 0: return 0;
-        case 1: return 0;
-        case 2: return 6.928203230275512;
-        case 3: return 1.648597081617952E-14;
-        case 4: return -8.485281374238392E+00 + 4.242640687119219E+01 * x;
-        case 5: return 3.286335345030997E+01 + 3.286335345031001E+01 * x - 2* 3.286335345030994E+01 * y;
-    }
-    return 0;
-}
-
 /* riemann solver
  *
  * evaluates the riemann problem over the boundary using Gaussian quadrature
@@ -228,7 +176,7 @@ __device__ float riemann(float u_left, float u_right) {
  * returns the value of the intial condition at point x
  */
 __device__ float u0(float x, float y) {
-    return x - y;
+    return x;
 }
 
 /* boundary exact
@@ -614,6 +562,50 @@ __global__ void eval_riemann(float *c, float *left_riemann_rhs, float *right_rie
         }
     }
 }
+
+/* flux boundary evaluation 
+ *
+ * evaulates the flux at the boundaries by handling them somehow.
+ * THREADS: num_boundary
+ */
+__global__ void eval_riemann(float *c, float *riemann_rhs, 
+                        float *J, float *s_length,
+                        float *s_r, 
+                        float *V1x, float *V1y,
+                        float *V2x, float *V2y,
+                        float *V3x, float *V3y,
+                        int *right_idx_list, int *right_side_number, 
+                        float *Nx, float *Ny, 
+                        int n_quad1d, int n_p, int num_sides, int num_boundary) {
+    int idx = blockDim.x * blockIdx.x + threadIdx.x;
+
+    if (idx < num_boundary) {
+        switch (left_side) {
+            case 0: 
+                for (i = 0; i < n_quad1d; i++) {
+                    left_r1[i] = 0.5 + 0.5 * r_oned[i];
+                    left_r2[i] = 0.;
+                }
+                break;
+            case 1: 
+                for (i = 0; i < n_quad1d; i++) {
+                    left_r1[i] = (1. - r_oned[i]) / 2.;
+                    left_r2[i] = (1. + r_oned[i]) / 2.;
+                }
+                break;
+            case 2: 
+                for (i = 0; i < n_quad1d; i++) {
+                    left_r1[i] = 0.;
+                    left_r2[i] = 0.5 + 0.5 * r_oned[n_quad1d - 1 - i];
+                }
+                break;
+        }
+
+
+    }
+}
+
+
 
 /* volume integrals
  *

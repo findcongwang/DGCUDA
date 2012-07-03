@@ -823,7 +823,7 @@ int main(int argc, char *argv[]) {
     Uv1 = (float *) malloc(num_elem * sizeof(float));
     Uv2 = (float *) malloc(num_elem * sizeof(float));
     Uv3 = (float *) malloc(num_elem * sizeof(float));
-    eval_error<<<n_blocks_elem, n_threads>>>(d_c, d_V1x, d_V1y, d_V2x, d_V2y, d_V3x, d_V3y, 
+    eval_u<<<n_blocks_elem, n_threads>>>(d_c, d_V1x, d_V1y, d_V2x, d_V2y, d_V3x, d_V3y, 
                                              d_Uv1, d_Uv2, d_Uv3, num_elem, n_p);
     cudaThreadSynchronize();
     cudaMemcpy(Uv1, d_Uv1, num_elem * sizeof(float), cudaMemcpyDeviceToHost);
