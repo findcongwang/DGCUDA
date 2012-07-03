@@ -568,44 +568,6 @@ __global__ void eval_riemann(float *c, float *left_riemann_rhs, float *right_rie
  * evaulates the flux at the boundaries by handling them somehow.
  * THREADS: num_boundary
  */
-__global__ void eval_riemann(float *c, float *riemann_rhs, 
-                        float *J, float *s_length,
-                        float *s_r, 
-                        float *V1x, float *V1y,
-                        float *V2x, float *V2y,
-                        float *V3x, float *V3y,
-                        int *right_idx_list, int *right_side_number, 
-                        float *Nx, float *Ny, 
-                        int n_quad1d, int n_p, int num_sides, int num_boundary) {
-    int idx = blockDim.x * blockIdx.x + threadIdx.x;
-
-    if (idx < num_boundary) {
-        switch (left_side) {
-            case 0: 
-                for (i = 0; i < n_quad1d; i++) {
-                    left_r1[i] = 0.5 + 0.5 * r_oned[i];
-                    left_r2[i] = 0.;
-                }
-                break;
-            case 1: 
-                for (i = 0; i < n_quad1d; i++) {
-                    left_r1[i] = (1. - r_oned[i]) / 2.;
-                    left_r2[i] = (1. + r_oned[i]) / 2.;
-                }
-                break;
-            case 2: 
-                for (i = 0; i < n_quad1d; i++) {
-                    left_r1[i] = 0.;
-                    left_r2[i] = 0.5 + 0.5 * r_oned[n_quad1d - 1 - i];
-                }
-                break;
-        }
-
-
-    }
-}
-
-
 
 /* volume integrals
  *
