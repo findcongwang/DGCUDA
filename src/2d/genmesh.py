@@ -35,7 +35,6 @@ def genmesh(inFilename, outFilename):
     # add the vertices for each element into elem_list
     for i in xrange(0,num_elements):
         s = inFile.readline().split()
-        print s
         if len(s) == 8:
             v1 = int(s[5]) - 1
             v2 = int(s[6]) - 1

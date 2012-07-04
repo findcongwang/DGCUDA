@@ -222,7 +222,7 @@ __global__ void init_conditions(float *c,
                 // evaluate u there
                 u += w[j] * u0(x, y) * basis[i * n_quad + j];
             }
-            c[i*num_elem + idx] = u;
+            c[i * num_elem + idx] = u;
         } 
     }
 }
@@ -422,18 +422,85 @@ __global__ void preval_partials(float *V1x, float *V1y,
  *
  ***********************/
 
-/* flux evaluation
+/* riemann evaluation
+ *
+ * device function to solve the riemann problem.
+ */
+__device__ float eval_riemann(float *c_left, float *c_right,
+                              float *V1x, float *V1y,
+                              float *V2x, float *V2y,
+                              float *V3x, float *V3y,
+                              int j, // j, as usual, is the index of the integration point
+                              int left_side, int right_side,
+                              int left_idx, int right_idx,
+                              int n_p, int n_quad1d,
+                              int num_sides) {
+
+    float u_left, u_right;
+    int i;
+
+    u_left  = 0.;
+    u_right = 0.;
+
+    for (i = 0; i < n_p; i++) {
+        u_left  += c_left[i] * basis_side[left_side * n_p * n_quad1d + i * n_quad1d + j];
+    }
+
+    // make all threads in the first warps be boundary sides
+    if (right_idx == -1) {
+        float r1, r2;
+        float x, y;
+
+        // we (sometimes?) need the mapping back to the grid space
+        switch (left_side) {
+            case 0: 
+                r1 = 0.5 + 0.5 * r_oned[j];
+                r2 = 0.;
+                break;
+            case 1: 
+                r1 = (1. - r_oned[j]) / 2.;
+                r2 = (1. + r_oned[j]) / 2.;
+                break;
+            case 2: 
+                r1 = 0.;
+                r2 = 0.5 + 0.5 * r_oned[n_quad1d - 1 - j];
+                break;
+        }
+
+        // x = x2 * r + x3 * s + x1 * (1 - r - s)
+        x = V2x[left_idx] * r1
+          + V3x[left_idx] * r2
+          + V1x[left_idx] * (1 - r1 - r2);
+        y = V2y[left_idx] * r1
+          + V3y[left_idx] * r2
+          + V1y[left_idx] * (1 - r1 - r2);
+            
+        // deal with the boundary element here
+        u_right = boundary_exact(x, y);
+
+    } else {
+        // evaluate the right side at the integration point
+        for (i = 0; i < n_p; i++) {
+            u_right  += c_right[i] * basis_side[right_side * n_p * n_quad1d + i * n_quad1d + j];
+        }
+    }
+
+    return riemann(u_left, u_right);
+
+}
+
+/* surface integral evaluation
  *
  * evaluate all the riemann problems for each element.
  * THREADS: num_sides
  */
-__global__ void eval_riemann(float *c, float *left_riemann_rhs, float *right_riemann_rhs, 
+__global__ void eval_surface(float *c, float *left_riemann_rhs, float *right_riemann_rhs, 
                         float *J, float *s_length,
                         float *s_r, 
                         float *V1x, float *V1y,
                         float *V2x, float *V2y,
                         float *V3x, float *V3y,
-                        int *left_idx_list, int *right_idx_list,
+                        int *left_elem, int *right_elem,
                         int *left_side_number, int *right_side_number, 
                         float *Nx, float *Ny, 
                         int n_quad1d, int n_p, int num_sides, int num_elem) {
@@ -441,18 +508,16 @@ __global__ void eval_riemann(float *c, float *left_riemann_rhs, float *right_rie
 
     if (idx < num_sides) {
         int left_idx, right_idx, right_side, left_side, i, j, k;
-        // TODO: these need to be smaller for the smaller eval_riemanns
+        // TODO: these need to be smaller for the smaller eval_surfaces
         float c_left[36], c_right[36];
-        // and these are too large and we only need them for border cases...
-        float left_r1[25], left_r2[25];
         float nx, ny, s;
         float x, y;
         float u_left, u_right;
         float len, left_sum, right_sum;
 
         // find the left and right elements
-        left_idx  = left_idx_list[idx];
-        right_idx = right_idx_list[idx];
+        left_idx  = left_elem[idx];
+        right_idx = right_elem[idx];
 
         // get the length of the side
         len = s_length[idx];
@@ -484,33 +549,6 @@ __global__ void eval_riemann(float *c, float *left_riemann_rhs, float *right_rie
         left_side  = left_side_number [idx];
         right_side = right_side_number[idx];
 
-        // get the integration points for the left element's side
-        // TODO: handle boundary sides completely seperately. this is not necessary
-        //       for non boundary sides.
-        switch (left_side) {
-            case 0: 
-                for (i = 0; i < n_quad1d; i++) {
-                    left_r1[i] = 0.5 + 0.5 * r_oned[i];
-                    left_r2[i] = 0.;
-                }
-                break;
-            case 1: 
-                for (i = 0; i < n_quad1d; i++) {
-                    left_r1[i] = (1. - r_oned[i]) / 2.;
-                    left_r2[i] = (1. + r_oned[i]) / 2.;
-                }
-                break;
-            case 2: 
-                for (i = 0; i < n_quad1d; i++) {
-                    left_r1[i] = 0.;
-                    left_r2[i] = 0.5 + 0.5 * r_oned[n_quad1d - 1 - i];
-                }
-                break;
-        }
-
-        // TODO: does this speed it up?
-        __syncthreads();
-
         // multiply across by the i'th basis function
         for (i = 0; i < n_p; i++) {
             left_sum  = 0.;
@@ -518,35 +556,15 @@ __global__ void eval_riemann(float *c, float *left_riemann_rhs, float *right_rie
             // we're at the j'th integration point
             for (j = 0; j < n_quad1d; j++) {
                 // compute u evaluated over the j'th integration point
-                u_left  = 0.;
-                for (k = 0; k < n_p; k++) {
-                    u_left  += c_left[k] * basis_side[left_side * n_p * n_quad1d + k * n_quad1d + j];
-                }
-
-                // if it's a boundary element, use the boundary function to deal with it
-                if (right_idx == -1) {
-                    // x = x2 * r + x3 * s + x1 * (1 - r - s)
-                    x = V2x[left_idx] * left_r1[j] 
-                      + V3x[left_idx] * left_r2[j] 
-                      + V1x[left_idx] * (1 - left_r1[j] - left_r2[j]);
-                    y = V2y[left_idx] * left_r1[j] 
-                      + V3y[left_idx] * left_r2[j] 
-                      + V1y[left_idx] * (1 - left_r1[j] - left_r2[j]);
-                        
-                    u_right = boundary_exact(x, y);
-                } else {
-                    u_right = 0.;
-                    for (k = 0; k < n_p; k++) {
-                        // if it's not a boundary element, compute it
-                        u_right += c_right[k] * basis_side[right_side * n_p * n_quad1d + k * n_quad1d + n_quad1d - 1 - j];
-                    }
-                }
 
                 __syncthreads();
  
                 // solve the Riemann problem at this integration point
-                s = riemann(u_left, u_right);
-
+                s = eval_riemann(c_left, c_right,
+                                 V1x, V1y, V2x, V2y, V3x, V3y,
+                                 j, left_side, right_side, left_idx, right_idx,
+                                 n_p, n_quad1d, num_sides);
+ 
                 // calculate the quadrature over [-1,1] for these sides
                 left_sum  += (nx * flux_x(s) + ny * flux_y(s)) *
                              w_oned[j] * basis_side[left_side * n_p * n_quad1d + i * n_quad1d + j];
@@ -574,7 +592,7 @@ __global__ void eval_riemann(float *c, float *left_riemann_rhs, float *right_rie
  * evaluates and adds the volume integral to the rhs vector
  * THREADS: num_elem
  */
- __global__ void eval_quad(float *c, float *quad_rhs, 
+ __global__ void eval_volume(float *c, float *quad_rhs, 
                      float *J, 
                      float *xr, float *yr,
                      float *xs, float *ys,
@@ -687,21 +705,24 @@ __global__ void eval_u(float *c,
             register_c[i] = c[i * num_elem + idx];
         }
 
-        uv1 = 0;
-        uv2 = 0;
-        uv3 = 0;
+        uv1 = 0.;
+        uv2 = 0.;
+        uv3 = 0.;
 
-        // calculate values at three vertex points
+        // calculate values at the integration points
         for (i = 0; i < n_p; i++) {
-            uv1 += register_c[i] * basis_vertex[i * n_p + 0];
-            uv2 += register_c[i] * basis_vertex[i * n_p + 1];
-            uv3 += register_c[i] * basis_vertex[i * n_p + 2];
+            uv1 += register_c[i] * basis[i * n_p + 0];
+            uv2 += register_c[i] * basis[i * n_p + 1];
+            uv3 += register_c[i] * basis[i * n_p + 2];
         }
 
         // store result
         Uv1[idx] = uv1;
         Uv2[idx] = uv2;
         Uv3[idx] = uv3;
+        //Uv1[idx] = u0(V1x[idx], V1y[idx]);
+        //Uv2[idx] = u0(V2x[idx], V2y[idx]);
+        //Uv3[idx] = u0(V3x[idx], V3y[idx]);
     }
 }
 

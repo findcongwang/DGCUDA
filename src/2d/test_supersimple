@@ -1,1 +1,2 @@
-./dgcuda -d -n 3 -t 1 mesh/supersimple.pmsh output/supersimple.out
+./dgcuda -d -n 3 -t 0 mesh/supersimple.pmsh output/supersimple.out
+gmsh output/supersimple.out

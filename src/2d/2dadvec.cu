@@ -135,15 +135,16 @@ void read_mesh(FILE *mesh_file,
         s2 = 1;
         s3 = 1;
 
-        J = (V2x[i] - V1x[i]) * (V3y[i] - V1y[i]) - (V3x[i] - V1x[i]) * (V2y[i] - V1y[i]);
-        if (J < 0) {
-            tmpx = V1x[i];
-            tmpy = V1y[i];
-            V1x[i] = V2x[i];
-            V1y[i] = V2y[i];
-            V2x[i] = tmpx;
-            V2y[i] = tmpy;
-        }
+        // enforce strictly positive jacobian
+        //J = (V2x[i] - V1x[i]) * (V3y[i] - V1y[i]) - (V3x[i] - V1x[i]) * (V2y[i] - V1y[i]);
+        //if (J < 0) {
+            //tmpx = V1x[i];
+            //tmpy = V1y[i];
+            //V1x[i] = V2x[i];
+            //V1y[i] = V2y[i];
+            //V2x[i] = tmpx;
+            //V2y[i] = tmpy;
+        //}
 
         // scan through the existing sides to see if we already added it
         // TODO: yeah, there's a better way to do this.
@@ -254,8 +255,8 @@ void time_integrate(float dt, int n_quad, int n_quad1d, int n_p, int num_elem, i
     int n_blocks_sides   = (num_sides / n_threads) + ((num_sides % n_threads) ? 1 : 0);
 
     // stage 1
-    checkCudaError("error before stage 1: eval_riemann");
-    eval_riemann<<<n_blocks_sides, n_threads>>>
+    checkCudaError("error before stage 1: eval_surface");
+    eval_surface<<<n_blocks_sides, n_threads>>>
                     (d_c, d_left_riemann_rhs, d_right_riemann_rhs, d_J, 
                      d_s_length,
                      d_s_r,
@@ -287,9 +288,9 @@ void time_integrate(float dt, int n_quad, int n_quad1d, int n_p, int num_elem, i
         free(right_rhs);
     }
 
-    checkCudaError("error after stage 1: eval_riemann");
+    checkCudaError("error after stage 1: eval_surface");
 
-    eval_quad<<<n_blocks_elem, n_threads>>>
+    eval_volume<<<n_blocks_elem, n_threads>>>
                     (d_c, d_quad_rhs, d_J,
                      d_xr, d_yr, d_xs, d_ys,
                      n_quad, n_p, num_elem);
@@ -334,7 +335,7 @@ void time_integrate(float dt, int n_quad, int n_quad1d, int n_p, int num_elem, i
     checkCudaError("error after stage 1.");
 
     // stage 2
-    eval_riemann<<<n_blocks_sides, n_threads>>>
+    eval_surface<<<n_blocks_sides, n_threads>>>
                     (d_kstar, d_left_riemann_rhs, d_right_riemann_rhs, d_J, 
                      d_s_length,
                      d_s_r,
@@ -347,7 +348,7 @@ void time_integrate(float dt, int n_quad, int n_quad1d, int n_p, int num_elem, i
                      n_quad1d, n_p, num_sides, num_elem);
     cudaThreadSynchronize();
 
-    eval_quad<<<n_blocks_elem, n_threads>>>
+    eval_volume<<<n_blocks_elem, n_threads>>>
                     (d_c, d_quad_rhs, d_J,
                      d_xr, d_yr, d_xs, d_ys,
                      n_quad, n_p, num_elem);
@@ -364,7 +365,7 @@ void time_integrate(float dt, int n_quad, int n_quad1d, int n_p, int num_elem, i
     checkCudaError("error after stage 2.");
 
     // stage 3
-    eval_riemann<<<n_blocks_sides, n_threads>>>
+    eval_surface<<<n_blocks_sides, n_threads>>>
                     (d_kstar, d_left_riemann_rhs, d_right_riemann_rhs, d_J, 
                      d_s_length,
                      d_s_r,
@@ -377,7 +378,7 @@ void time_integrate(float dt, int n_quad, int n_quad1d, int n_p, int num_elem, i
                      n_quad1d, n_p, num_sides, num_elem);
     cudaThreadSynchronize();
 
-    eval_quad<<<n_blocks_elem, n_threads>>>
+    eval_volume<<<n_blocks_elem, n_threads>>>
                     (d_c, d_quad_rhs, d_J,
                      d_xr, d_yr, d_xs, d_ys,
                      n_quad, n_p, num_elem);
@@ -394,7 +395,7 @@ void time_integrate(float dt, int n_quad, int n_quad1d, int n_p, int num_elem, i
     checkCudaError("error after stage 3.");
 
     // stage 4
-    eval_riemann<<<n_blocks_sides, n_threads>>>
+    eval_surface<<<n_blocks_sides, n_threads>>>
                     (d_kstar, d_left_riemann_rhs, d_right_riemann_rhs, d_J, 
                      d_s_length,
                      d_s_r,
@@ -407,7 +408,7 @@ void time_integrate(float dt, int n_quad, int n_quad1d, int n_p, int num_elem, i
                      n_quad1d, n_p, num_sides, num_elem);
     cudaThreadSynchronize();
 
-    eval_quad<<<n_blocks_elem, n_threads>>>
+    eval_volume<<<n_blocks_elem, n_threads>>>
                     (d_c, d_quad_rhs, d_J,
                      d_xr, d_yr, d_xs, d_ys,
                      n_quad, n_p, num_elem);
