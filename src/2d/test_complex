@@ -1,2 +1,2 @@
-./dgcuda -d -n 1 -t 20 mesh/complex.pmsh output/complex.out
+./dgcuda -n 1 -t 1 mesh/complex.pmsh output/complex.out
 gmsh output/complex.out

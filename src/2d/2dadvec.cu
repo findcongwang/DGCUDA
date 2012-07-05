@@ -128,7 +128,7 @@ void read_mesh(FILE *mesh_file,
     i = 0;
     while(fgets(line, sizeof(line), mesh_file) != NULL) {
         // these three vertices define the element
-        sscanf(line, "%f %f %f %f %f %f", &V1x[i], &V1y[i], &V2x[i], &V2y[i], &V3x[i], &V3y[i]);
+        sscanf(line, "%G %G %G %G %G %G", &V1x[i], &V1y[i], &V2x[i], &V2y[i], &V3x[i], &V3y[i]);
 
         // determine whether we should add these three sides or not
         s1 = 1;
@@ -136,15 +136,15 @@ void read_mesh(FILE *mesh_file,
         s3 = 1;
 
         // enforce strictly positive jacobian
-        //J = (V2x[i] - V1x[i]) * (V3y[i] - V1y[i]) - (V3x[i] - V1x[i]) * (V2y[i] - V1y[i]);
-        //if (J < 0) {
-            //tmpx = V1x[i];
-            //tmpy = V1y[i];
-            //V1x[i] = V2x[i];
-            //V1y[i] = V2y[i];
-            //V2x[i] = tmpx;
-            //V2y[i] = tmpy;
-        //}
+        J = (V2x[i] - V1x[i]) * (V3y[i] - V1y[i]) - (V3x[i] - V1x[i]) * (V2y[i] - V1y[i]);
+        if (J < 0) {
+            tmpx = V1x[i];
+            tmpy = V1y[i];
+            V1x[i] = V2x[i];
+            V1y[i] = V2y[i];
+            V2x[i] = tmpx;
+            V2y[i] = tmpy;
+        }
 
         // scan through the existing sides to see if we already added it
         // TODO: yeah, there's a better way to do this.
@@ -248,7 +248,7 @@ void read_mesh(FILE *mesh_file,
     *num_sides = numsides;
 }
 
-void time_integrate(float dt, int n_quad, int n_quad1d, int n_p, int num_elem, int num_sides, int debug) {
+void time_integrate(float dt, int n_quad, int n_quad1d, int n_p, int num_elem, int num_sides, int debug, float t) {
     int n_threads = 256;
 
     int n_blocks_elem    = (num_elem  / n_threads) + ((num_elem  % n_threads) ? 1 : 0);
@@ -266,7 +266,7 @@ void time_integrate(float dt, int n_quad, int n_quad1d, int n_p, int num_elem, i
                      d_left_elem, d_right_elem,
                      d_left_side_number, d_right_side_number,
                      d_Nx, d_Ny, 
-                     n_quad1d, n_p, num_sides, num_elem);
+                     n_quad1d, n_p, num_sides, num_elem, t);
     cudaThreadSynchronize();
 
     if (debug) {
@@ -345,7 +345,7 @@ void time_integrate(float dt, int n_quad, int n_quad1d, int n_p, int num_elem, i
                      d_left_elem, d_right_elem,
                      d_left_side_number, d_right_side_number,
                      d_Nx, d_Ny, 
-                     n_quad1d, n_p, num_sides, num_elem);
+                     n_quad1d, n_p, num_sides, num_elem, t);
     cudaThreadSynchronize();
 
     eval_volume<<<n_blocks_elem, n_threads>>>
@@ -375,7 +375,7 @@ void time_integrate(float dt, int n_quad, int n_quad1d, int n_p, int num_elem, i
                      d_left_elem, d_right_elem,
                      d_left_side_number, d_right_side_number,
                      d_Nx, d_Ny, 
-                     n_quad1d, n_p, num_sides, num_elem);
+                     n_quad1d, n_p, num_sides, num_elem, t);
     cudaThreadSynchronize();
 
     eval_volume<<<n_blocks_elem, n_threads>>>
@@ -405,7 +405,7 @@ void time_integrate(float dt, int n_quad, int n_quad1d, int n_p, int num_elem, i
                      d_left_elem, d_right_elem,
                      d_left_side_number, d_right_side_number,
                      d_Nx, d_Ny, 
-                     n_quad1d, n_p, num_sides, num_elem);
+                     n_quad1d, n_p, num_sides, num_elem, t);
     cudaThreadSynchronize();
 
     eval_volume<<<n_blocks_elem, n_threads>>>
@@ -505,9 +505,10 @@ void init_gpu(int num_elem, int num_sides, int n_p,
     cudaMemcpy(d_left_side_number , left_side_number , num_sides * sizeof(int), cudaMemcpyHostToDevice);
     cudaMemcpy(d_right_side_number, right_side_number, num_sides * sizeof(int), cudaMemcpyHostToDevice);
 
-    cudaMemcpy(d_elem_s1, elem_s1, num_elem * sizeof(float), cudaMemcpyHostToDevice);
-    cudaMemcpy(d_elem_s2, elem_s2, num_elem * sizeof(float), cudaMemcpyHostToDevice);
-    cudaMemcpy(d_elem_s3, elem_s3, num_elem * sizeof(float), cudaMemcpyHostToDevice);
+    cudaMemcpy(d_elem_s1, elem_s1, num_elem * sizeof(int), cudaMemcpyHostToDevice);
+    cudaMemcpy(d_elem_s2, elem_s2, num_elem * sizeof(int), cudaMemcpyHostToDevice);
+    cudaMemcpy(d_elem_s3, elem_s3, num_elem * sizeof(int), cudaMemcpyHostToDevice);
+    checkCudaError("error inside gpu init.");
 
     cudaMemcpy(d_V1x, V1x, num_elem * sizeof(float), cudaMemcpyHostToDevice);
     cudaMemcpy(d_V1y, V1y, num_elem * sizeof(float), cudaMemcpyHostToDevice);
@@ -516,8 +517,8 @@ void init_gpu(int num_elem, int num_sides, int n_p,
     cudaMemcpy(d_V3x, V3x, num_elem * sizeof(float), cudaMemcpyHostToDevice);
     cudaMemcpy(d_V3y, V3y, num_elem * sizeof(float), cudaMemcpyHostToDevice);
 
-    cudaMemcpy(d_left_elem , left_elem , num_sides * sizeof(float), cudaMemcpyHostToDevice);
-    cudaMemcpy(d_right_elem, right_elem, num_sides * sizeof(float), cudaMemcpyHostToDevice);
+    cudaMemcpy(d_left_elem , left_elem , num_sides * sizeof(int), cudaMemcpyHostToDevice);
+    cudaMemcpy(d_right_elem, right_elem, num_sides * sizeof(int), cudaMemcpyHostToDevice);
 }
 
 void free_gpu() {
@@ -726,6 +727,7 @@ int main(int argc, char *argv[]) {
              elem_s1, elem_s2, elem_s3,
              left_elem, right_elem);
 
+    checkCudaError("error after gpu init.");
     n_threads        = 128;
     n_blocks_elem    = (num_elem  / n_threads) + ((num_elem  % n_threads) ? 1 : 0);
     n_blocks_sides   = (num_sides / n_threads) + ((num_sides % n_threads) ? 1 : 0);
@@ -803,7 +805,7 @@ int main(int argc, char *argv[]) {
     fprintf(out_file, "View \"Exported field \" {\n");
     for (t = 0; t < timesteps; t++) {
         // time integration
-        time_integrate(dt, n_quad, n_quad1d, n_p, num_elem, num_sides, debug);
+        time_integrate(dt, n_quad, n_quad1d, n_p, num_elem, num_sides, debug, t * dt);
     }
 
     if (debug) {
@@ -834,7 +836,7 @@ int main(int argc, char *argv[]) {
     // write data to file
     // TODO: this will output multiple vertices values. does gmsh care? i dunno...
     for (i = 0; i < num_elem; i++) {
-        fprintf(out_file, "ST (%f,%f,0,%f,%f,0,%f,%f,0) {%f,%f,%f};\n", 
+        fprintf(out_file, "ST (%G,%G,0,%G,%G,0,%G,%G,0) {%G,%G,%G};\n", 
                                V1x[i], V1y[i], V2x[i], V2y[i], V3x[i], V3y[i],
                                Uv1[i], Uv2[i], Uv3[i]);
     }

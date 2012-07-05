@@ -36,16 +36,16 @@ float *d_k4;
 // [   .               .           .            .           ]
 // [phi_np(r1, s1), phi_np(r2, s2), ... , phi_np(r_nq, s_nq)]
 //
-__device__ __constant__ float basis[2048];
+__device__ __constant__ float basis[1024];
 // note: these are multiplied by the weights
-__device__ __constant__ float basis_grad_x[2048]; 
-__device__ __constant__ float basis_grad_y[2048]; 
+__device__ __constant__ float basis_grad_x[1024]; 
+__device__ __constant__ float basis_grad_y[1024]; 
 
 // precomputed basis functions evaluated along the sides. ordered
 // similarly to basis and basis_grad_{x,y} but with one "matrix" for each side
 // starting with side 0. to get to each side, offset with:
 //      side_number * n_p * num_quad1d.
-__device__ __constant__ float basis_side[2048];
+__device__ __constant__ float basis_side[1024];
 __device__ __constant__ float basis_vertex[256];
 
 // weights for 2d and 1d quadrature rules
@@ -176,15 +176,15 @@ __device__ float riemann(float u_left, float u_right) {
  * returns the value of the intial condition at point x
  */
 __device__ float u0(float x, float y) {
-    return x;
+    return sinf(PI * x);
 }
 
 /* boundary exact
  *
  * returns the exact boundary conditions
  */
-__device__ float boundary_exact(float x, float y) {
-    return u0(x, y);
+__device__ float boundary_exact(float x, float y, float t) {
+    return u0(x - t, y - t);
 }
 
 /* u exact
@@ -434,7 +434,7 @@ __device__ float eval_riemann(float *c_left, float *c_right,
                               int left_side, int right_side,
                               int left_idx, int right_idx,
                               int n_p, int n_quad1d,
-                              int num_sides) {
+                              int num_sides, float t) {
 
     float u_left, u_right;
     int i;
@@ -476,7 +476,7 @@ __device__ float eval_riemann(float *c_left, float *c_right,
           + V1y[left_idx] * (1 - r1 - r2);
             
         // deal with the boundary element here
-        u_right = boundary_exact(x, y);
+        u_right = boundary_exact(x, y, t);
 
     } else {
         // evaluate the right side at the integration point
@@ -503,16 +503,14 @@ __global__ void eval_surface(float *c, float *left_riemann_rhs, float *right_rie
                         int *left_elem, int *right_elem,
                         int *left_side_number, int *right_side_number, 
                         float *Nx, float *Ny, 
-                        int n_quad1d, int n_p, int num_sides, int num_elem) {
+                        int n_quad1d, int n_p, int num_sides, int num_elem, float t) {
     int idx = blockDim.x * blockIdx.x + threadIdx.x;
 
     if (idx < num_sides) {
-        int left_idx, right_idx, right_side, left_side, i, j, k;
+        int left_idx, right_idx, right_side, left_side, i, j;
         // TODO: these need to be smaller for the smaller eval_surfaces
         float c_left[36], c_right[36];
         float nx, ny, s;
-        float x, y;
-        float u_left, u_right;
         float len, left_sum, right_sum;
 
         // find the left and right elements
@@ -563,7 +561,7 @@ __global__ void eval_surface(float *c, float *left_riemann_rhs, float *right_rie
                 s = eval_riemann(c_left, c_right,
                                  V1x, V1y, V2x, V2y, V3x, V3y,
                                  j, left_side, right_side, left_idx, right_idx,
-                                 n_p, n_quad1d, num_sides);
+                                 n_p, n_quad1d, num_sides, t);
  
                 // calculate the quadrature over [-1,1] for these sides
                 left_sum  += (nx * flux_x(s) + ny * flux_y(s)) *
@@ -720,9 +718,6 @@ __global__ void eval_u(float *c,
         Uv1[idx] = uv1;
         Uv2[idx] = uv2;
         Uv3[idx] = uv3;
-        //Uv1[idx] = u0(V1x[idx], V1y[idx]);
-        //Uv2[idx] = u0(V2x[idx], V2y[idx]);
-        //Uv3[idx] = u0(V3x[idx], V3y[idx]);
     }
 }
 

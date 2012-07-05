@@ -1,1 +1,2 @@
-./dgcuda -d -n 1 -t 0 mesh/simple.pmsh output/simple.out
+./dgcuda -n 1 -t 500 mesh/simple.pmsh output/simple.out
+gmsh output/simple.out
