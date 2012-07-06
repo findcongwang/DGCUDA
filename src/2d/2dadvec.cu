@@ -2,6 +2,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include "2dadvec_kernels.cu"
+#include "2dadvec_kernels_wrappers.cu"
 #include "quadrature.h"
 #include "basis.h"
 
@@ -248,18 +249,76 @@ void read_mesh(FILE *mesh_file,
     *num_sides = numsides;
 }
 
-void time_integrate(float dt, int n_quad, int n_quad1d, int n_p, int num_elem, int num_sides, int debug, float t) {
+void time_integrate(float dt, int n_quad, int n_quad1d, int n_p, int n, 
+                    int num_elem, int num_sides, int debug, float t) {
     int n_threads = 256;
 
     int n_blocks_elem    = (num_elem  / n_threads) + ((num_elem  % n_threads) ? 1 : 0);
     int n_blocks_sides   = (num_sides / n_threads) + ((num_sides % n_threads) ? 1 : 0);
 
+    void (*eval_surface_ftn)(float*, float*, float*, 
+                         float*,
+                         float*, float*,
+                         float*, float*,
+                         float*, float*,
+                         int*, int*,
+                         int*, int*,
+                         float*, float*,
+                         int, int, int, int, float) = NULL;
+    void (*eval_volume_ftn)(float*, float*, 
+                        float*, 
+                        float*, float*, 
+                        float*, float*,
+                        int, int, int) = NULL;
+    void (*eval_rhs_ftn)(float*, float*, float*, float*,
+                     int*, int*, int*,
+                     int, float, float, int, int, int) = NULL;
+
+    switch (n) {
+        case 0: eval_surface_ftn = eval_surface_wrapper0;
+                //&eval_volume_ftn  = &eval_volume_wrapper0;
+                //&eval_rhs_ftn     = &eval_rhs_wrapper0;
+                break;
+        case 1: eval_surface_ftn = eval_surface_wrapper1;
+                //&eval_volume_ftn  = &eval_volume_wrapper1;
+                //&eval_rhs_ftn     = &eval_rhs_wrapper1;
+                break;
+        case 2: eval_surface_ftn = eval_surface_wrapper2;
+                //&eval_volume_ftn  = &eval_volume_wrapper2;
+                //&eval_rhs_ftn     = &eval_rhs_wrapper2;
+                break;
+        case 3: eval_surface_ftn = eval_surface_wrapper3;
+                //&eval_volume_ftn  = &eval_volume_wrapper3;
+                //&eval_rhs_ftn     = &eval_rhs_wrapper3;
+                break;
+        case 4: eval_surface_ftn = eval_surface_wrapper4;
+                //&eval_volume_ftn  = &eval_volume_wrapper4;
+                //&eval_rhs_ftn     = &eval_rhs_wrapper4;
+                break;
+        case 5: eval_surface_ftn = eval_surface_wrapper5;
+                //&eval_volume_ftn  = &eval_volume_wrapper5;
+                //&eval_rhs_ftn     = &eval_rhs_wrapper5;
+                break;
+        case 6: eval_surface_ftn = eval_surface_wrapper6;
+                //&eval_volume_ftn  = &eval_volume_wrapper6;
+                //&eval_rhs_ftn     = &eval_rhs_wrapper6;
+                break;
+        case 7: eval_surface_ftn = eval_surface_wrapper7;
+                //&eval_volume_ftn  = &eval_volume_wrapper7;
+                //&eval_rhs_ftn     = &eval_rhs_wrapper7;
+                break;
+    }
+ 
+    if ((eval_surface_ftn == NULL) || (eval_volume_ftn == NULL) || (eval_rhs_ftn == NULL)) {
+        printf("ERROR: dispatched kernel functions were NULL.\n");
+        exit(0);
+    }
+
     // stage 1
-    checkCudaError("error before stage 1: eval_surface");
-    eval_surface<<<n_blocks_sides, n_threads>>>
-                    (d_c, d_left_riemann_rhs, d_right_riemann_rhs, d_J, 
-                     d_s_length,
-                     d_s_r,
+    checkCudaError("error before stage 1: eval_surface_ftn");
+    eval_surface_ftn<<<n_blocks_sides, n_threads>>>
+                    (d_c, d_left_riemann_rhs, d_right_riemann_rhs, 
+                     d_s_length, 
                      d_V1x, d_V1y,
                      d_V2x, d_V2y,
                      d_V3x, d_V3y,
@@ -288,7 +347,7 @@ void time_integrate(float dt, int n_quad, int n_quad1d, int n_p, int num_elem, i
         free(right_rhs);
     }
 
-    checkCudaError("error after stage 1: eval_surface");
+    checkCudaError("error after stage 1: eval_surface_ftn");
 
     eval_volume<<<n_blocks_elem, n_threads>>>
                     (d_c, d_quad_rhs, d_J,
@@ -318,7 +377,7 @@ void time_integrate(float dt, int n_quad, int n_quad1d, int n_p, int num_elem, i
     if (debug) {
         float *rhs = (float *) malloc(num_elem * n_p * sizeof(float));
         cudaMemcpy(rhs, d_k1, num_elem * n_p * sizeof(float), cudaMemcpyDeviceToHost);
-        printf(" eval_rhs\n");
+        printf(" eval_rhs_ftn\n");
         printf(" ~~~\n");
         for (int i = 0; i < num_elem * n_p; i++) {
             if (i != 0 && i % num_elem == 0) {
@@ -335,10 +394,9 @@ void time_integrate(float dt, int n_quad, int n_quad1d, int n_p, int num_elem, i
     checkCudaError("error after stage 1.");
 
     // stage 2
-    eval_surface<<<n_blocks_sides, n_threads>>>
-                    (d_kstar, d_left_riemann_rhs, d_right_riemann_rhs, d_J, 
+    eval_surface_ftn<<<n_blocks_sides, n_threads>>>
+                    (d_kstar, d_left_riemann_rhs, d_right_riemann_rhs, 
                      d_s_length,
-                     d_s_r,
                      d_V1x, d_V1y,
                      d_V2x, d_V2y,
                      d_V3x, d_V3y,
@@ -365,10 +423,9 @@ void time_integrate(float dt, int n_quad, int n_quad1d, int n_p, int num_elem, i
     checkCudaError("error after stage 2.");
 
     // stage 3
-    eval_surface<<<n_blocks_sides, n_threads>>>
-                    (d_kstar, d_left_riemann_rhs, d_right_riemann_rhs, d_J, 
+    eval_surface_ftn<<<n_blocks_sides, n_threads>>>
+                    (d_kstar, d_left_riemann_rhs, d_right_riemann_rhs, 
                      d_s_length,
-                     d_s_r,
                      d_V1x, d_V1y,
                      d_V2x, d_V2y,
                      d_V3x, d_V3y,
@@ -395,10 +452,9 @@ void time_integrate(float dt, int n_quad, int n_quad1d, int n_p, int num_elem, i
     checkCudaError("error after stage 3.");
 
     // stage 4
-    eval_surface<<<n_blocks_sides, n_threads>>>
-                    (d_kstar, d_left_riemann_rhs, d_right_riemann_rhs, d_J, 
+    eval_surface_ftn<<<n_blocks_sides, n_threads>>>
+                    (d_kstar, d_left_riemann_rhs, d_right_riemann_rhs, 
                      d_s_length,
-                     d_s_r,
                      d_V1x, d_V1y,
                      d_V2x, d_V2y,
                      d_V3x, d_V3y,
@@ -481,8 +537,6 @@ void init_gpu(int num_elem, int num_sides, int n_p,
     cudaMalloc((void **) &d_xs, num_elem * sizeof(float));
     cudaMalloc((void **) &d_ys, num_elem * sizeof(float));
 
-    cudaMalloc((void **) &d_s_r, n_p * sizeof(float));
-    
     cudaMalloc((void **) &d_left_side_number , num_sides * sizeof(int));
     cudaMalloc((void **) &d_right_side_number, num_sides * sizeof(int));
 
@@ -561,8 +615,6 @@ void free_gpu() {
     cudaFree(d_xs);
     cudaFree(d_ys);
 
-    cudaFree(d_s_r);
-    
     cudaFree(d_left_side_number);
     cudaFree(d_right_side_number);
 
@@ -805,7 +857,7 @@ int main(int argc, char *argv[]) {
     fprintf(out_file, "View \"Exported field \" {\n");
     for (t = 0; t < timesteps; t++) {
         // time integration
-        time_integrate(dt, n_quad, n_quad1d, n_p, num_elem, num_sides, debug, t * dt);
+        time_integrate(dt, n_quad, n_quad1d, n_p, n, num_elem, num_sides, debug, t * dt);
     }
 
     if (debug) {
@@ -826,7 +878,7 @@ int main(int argc, char *argv[]) {
     Uv1 = (float *) malloc(num_elem * sizeof(float));
     Uv2 = (float *) malloc(num_elem * sizeof(float));
     Uv3 = (float *) malloc(num_elem * sizeof(float));
-    eval_u<<<n_blocks_elem, n_threads>>>(d_c, d_V1x, d_V1y, d_V2x, d_V2y, d_V3x, d_V3y, 
+    eval_error<<<n_blocks_elem, n_threads>>>(d_c, d_V1x, d_V1y, d_V2x, d_V2y, d_V3x, d_V3y, 
                                              d_Uv1, d_Uv2, d_Uv3, num_elem, n_p);
     cudaThreadSynchronize();
     cudaMemcpy(Uv1, d_Uv1, num_elem * sizeof(float), cudaMemcpyDeviceToHost);

@@ -5,6 +5,7 @@
  * and    H = number of sides
  */
 
+
 #define PI 3.14159
 
 /***********************
@@ -86,9 +87,6 @@ void set_r2(void *value, int size) {
 void set_r_oned(void *value, int size) {
     cudaMemcpyToSymbol("r_oned", value, size * sizeof(float));
 }
-
-// evaluation points for the boundary integrals depending on the side
-float *d_s_r;
 
 // tells which side (1, 2, or 3) to evaluate this boundary integral over
 int *d_left_side_number;
@@ -176,7 +174,7 @@ __device__ float riemann(float u_left, float u_right) {
  * returns the value of the intial condition at point x
  */
 __device__ float u0(float x, float y) {
-    return sinf(PI * x);
+    return x;
 }
 
 /* boundary exact
@@ -427,9 +425,9 @@ __global__ void preval_partials(float *V1x, float *V1y,
  * device function to solve the riemann problem.
  */
 __device__ float eval_riemann(float *c_left, float *c_right,
-                              float *V1x, float *V1y,
-                              float *V2x, float *V2y,
-                              float *V3x, float *V3y,
+                              float v1x, float v1y,
+                              float v2x, float v2y,
+                              float v3x, float v3y,
                               int j, // j, as usual, is the index of the integration point
                               int left_side, int right_side,
                               int left_idx, int right_idx,
@@ -468,12 +466,12 @@ __device__ float eval_riemann(float *c_left, float *c_right,
         }
 
         // x = x2 * r + x3 * s + x1 * (1 - r - s)
-        x = V2x[left_idx] * r1
-          + V3x[left_idx] * r2
-          + V1x[left_idx] * (1 - r1 - r2);
-        y = V2y[left_idx] * r1
-          + V3y[left_idx] * r2
-          + V1y[left_idx] * (1 - r1 - r2);
+        x = v2x * r1
+          + v3x * r2
+          + v1x * (1 - r1 - r2);
+        y = v2y * r1
+          + v3y * r2
+          + v1y * (1 - r1 - r2);
             
         // deal with the boundary element here
         u_right = boundary_exact(x, y, t);
@@ -494,91 +492,44 @@ __device__ float eval_riemann(float *c_left, float *c_right,
  * evaluate all the riemann problems for each element.
  * THREADS: num_sides
  */
-__global__ void eval_surface(float *c, float *left_riemann_rhs, float *right_riemann_rhs, 
-                        float *J, float *s_length,
-                        float *s_r, 
-                        float *V1x, float *V1y,
-                        float *V2x, float *V2y,
-                        float *V3x, float *V3y,
-                        int *left_elem, int *right_elem,
-                        int *left_side_number, int *right_side_number, 
-                        float *Nx, float *Ny, 
-                        int n_quad1d, int n_p, int num_sides, int num_elem, float t) {
-    int idx = blockDim.x * blockIdx.x + threadIdx.x;
+__device__ void eval_surface(float *c_left, float *c_right, 
+                             float *left_riemann_rhs, float *right_riemann_rhs, 
+                             float len,
+                             float v1x, float v1y,
+                             float v2x, float v2y,
+                             float v3x, float v3y,
+                             int left_idx,  int right_idx,
+                             int left_side, int right_side, 
+                             float nx, float ny, 
+                             int n_quad1d, int n_p, int num_sides, 
+                             int num_elem, float t, int idx) {
+    int i, j;
+    float s, left_sum, right_sum;
 
-    if (idx < num_sides) {
-        int left_idx, right_idx, right_side, left_side, i, j;
-        // TODO: these need to be smaller for the smaller eval_surfaces
-        float c_left[36], c_right[36];
-        float nx, ny, s;
-        float len, left_sum, right_sum;
+    // multiply across by the i'th basis function
+    for (i = 0; i < n_p; i++) {
+        left_sum  = 0.;
+        right_sum = 0.;
+        // we're at the j'th integration point
+        for (j = 0; j < n_quad1d; j++) {
+            // solve the Riemann problem at this integration point
+            s = eval_riemann(c_left, c_right,
+                             v1x, v1y, v2x, v2y, v3x, v3y,
+                             j, left_side, right_side, left_idx, right_idx,
+                             n_p, n_quad1d, num_sides, t);
 
-        // find the left and right elements
-        left_idx  = left_elem[idx];
-        right_idx = right_elem[idx];
-
-        // get the length of the side
-        len = s_length[idx];
-
-        // get the normal vector for this side
-        nx = Nx[idx];
-        ny = Ny[idx];
-
-        // grab the coefficients for the left & right elements
-        // TODO: group all the boundary sides together so they are in the same warp;
-        //       means no warp divergence
-        if (right_idx != -1) {
-            // not a boundary side
-            for (i = 0; i < n_p; i++) {
-                c_left[i]  = c[i*num_elem + left_idx];
-                c_right[i] = c[i*num_elem + right_idx];
-            }
-        } else {
-            // this is a boundary side
-            for (i = 0; i < n_p; i++) {
-                c_left[i]  = c[i*num_elem + left_idx];
-            }
+            // calculate the quadrature over [-1,1] for these sides
+            left_sum  += (nx * flux_x(s) + ny * flux_y(s)) *
+                         w_oned[j] * basis_side[left_side * n_p * n_quad1d + i * n_quad1d + j];
+            right_sum += (nx * flux_x(s) + ny * flux_y(s)) *
+                         w_oned[j] * basis_side[right_side * n_p * n_quad1d + i * n_quad1d + n_quad1d - 1 - j];
         }
 
-        //TODO: does this speed it up
-        __syncthreads();
-
-        // need to find out what side we've got for evaluation (right, left, bottom)
-        left_side  = left_side_number [idx];
-        right_side = right_side_number[idx];
-
-        // multiply across by the i'th basis function
-        for (i = 0; i < n_p; i++) {
-            left_sum  = 0.;
-            right_sum = 0.;
-            // we're at the j'th integration point
-            for (j = 0; j < n_quad1d; j++) {
-                // compute u evaluated over the j'th integration point
-
-                __syncthreads();
- 
-                // solve the Riemann problem at this integration point
-                s = eval_riemann(c_left, c_right,
-                                 V1x, V1y, V2x, V2y, V3x, V3y,
-                                 j, left_side, right_side, left_idx, right_idx,
-                                 n_p, n_quad1d, num_sides, t);
- 
-                // calculate the quadrature over [-1,1] for these sides
-                left_sum  += (nx * flux_x(s) + ny * flux_y(s)) *
-                             w_oned[j] * basis_side[left_side * n_p * n_quad1d + i * n_quad1d + j];
-                right_sum += (nx * flux_x(s) + ny * flux_y(s)) *
-                             w_oned[j] * basis_side[right_side * n_p * n_quad1d + i * n_quad1d + n_quad1d - 1 - j];
-            }
-
-            __syncthreads();
-
-            // store this side's contribution in the riemann rhs vectors
-            left_riemann_rhs[i * num_sides + idx]  = -len / 2 * left_sum;
-            right_riemann_rhs[i * num_sides + idx] =  len / 2 * right_sum;
-        }
+        // store this side's contribution in the riemann rhs vectors
+        left_riemann_rhs[i * num_sides + idx]  = -len / 2 * left_sum;
+        right_riemann_rhs[i * num_sides + idx] =  len / 2 * right_sum;
     }
 }
-
 /* flux boundary evaluation 
  *
  * evaulates the flux at the boundaries by handling them somehow.
@@ -674,9 +625,9 @@ __global__ void eval_error(float *c,
         }
 
         // store result
-        Uv1[idx] = uv1 - uexact(V1x[idx], V1y[idx]);
-        Uv2[idx] = uv2 - uexact(V2x[idx], V2y[idx]);
-        Uv3[idx] = uv3 - uexact(V3x[idx], V3y[idx]);
+        Uv1[idx] = abs(uv1 - uexact(V1x[idx], V1y[idx]));
+        Uv2[idx] = abs(uv2 - uexact(V2x[idx], V2y[idx]));
+        Uv3[idx] = abs(uv3 - uexact(V3x[idx], V3y[idx]));
     }
 }
 
