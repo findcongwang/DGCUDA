@@ -147,7 +147,7 @@ switch (i) {
 }
 
 
-void preval_basis(float *r1_local, float *r2_local, float *s_r, float *w_local, float *w_oned_local, 
+void preval_basis(float **return_basis, float **return_basis_vertex, float *r1_local, float *r2_local, float *s_r, float *w_local, float *w_oned_local, 
                   int n_quad, int n_quad1d, int n_p) {
     float *basis_local        = (float *) malloc(n_quad * n_p * sizeof(float));
     float *basis_grad_x_local = (float *) malloc(n_quad * n_p * sizeof(float)); 
@@ -167,14 +167,11 @@ void preval_basis(float *r1_local, float *r2_local, float *s_r, float *w_local, 
     for (i = 0; i < n_p; i++) {
         printf("phi_%i = %f\n", i, phi_y(0, 0, i) );
     }
+
     float test;
     for (i = 0; i < n_p; i++) {
         test = 0.;
-        printf("phi_%i = ", i);
-        for (j = 0; j < n_quad; j++) {
-            test += w_local[j] * phi(r1[j], r2[j], i);
-        }
-        printf("int phi_%i = %f\n", i, test);
+        printf("phi_%i, w = ", i);
     }
     */
 
@@ -211,6 +208,15 @@ void preval_basis(float *r1_local, float *r2_local, float *s_r, float *w_local, 
     */
 
     // set the constants on the GPU to the evaluations
+    for (i = 0; i < n_quad * n_p; i++) {
+        (*return_basis)[i] = basis_local[i];
+    }
+    for (i = 0; i < n_p; i++) {
+        (*return_basis_vertex)[3 * i + 0] = basis_vertex_local[3 * i + 0];
+        (*return_basis_vertex)[3 * i + 1] = basis_vertex_local[3 * i + 1];
+        (*return_basis_vertex)[3 * i + 2] = basis_vertex_local[3 * i + 2];
+    }
+
     set_basis(basis_local, n_quad * n_p);
     set_basis_grad_x(basis_grad_x_local, n_quad * n_p);
     set_basis_grad_y(basis_grad_y_local, n_quad * n_p);

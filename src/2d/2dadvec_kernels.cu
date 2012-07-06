@@ -37,10 +37,10 @@ float *d_k4;
 // [   .               .           .            .           ]
 // [phi_np(r1, s1), phi_np(r2, s2), ... , phi_np(r_nq, s_nq)]
 //
-__device__ __constant__ float basis[1024];
+__device__ __constant__ float basis[2048];
 // note: these are multiplied by the weights
-__device__ __constant__ float basis_grad_x[1024]; 
-__device__ __constant__ float basis_grad_y[1024]; 
+__device__ __constant__ float basis_grad_x[2048]; 
+__device__ __constant__ float basis_grad_y[2048]; 
 
 // precomputed basis functions evaluated along the sides. ordered
 // similarly to basis and basis_grad_{x,y} but with one "matrix" for each side
@@ -174,7 +174,7 @@ __device__ float riemann(float u_left, float u_right) {
  * returns the value of the intial condition at point x
  */
 __device__ float u0(float x, float y) {
-    return x;
+    return x - 2 * y;
 }
 
 /* boundary exact
@@ -182,7 +182,7 @@ __device__ float u0(float x, float y) {
  * returns the exact boundary conditions
  */
 __device__ float boundary_exact(float x, float y, float t) {
-    return u0(x - t, y - t);
+    return x + t - 2 * y;
 }
 
 /* u exact
@@ -198,7 +198,7 @@ __device__ float uexact(float x, float y) {
  * computes the coefficients for the initial conditions
  * THREADS: num_elem
  */
-__global__ void init_conditions(float *c, 
+__global__ void init_conditions(float *c, float *J,
                                 float *V1x, float *V1y,
                                 float *V2x, float *V2y,
                                 float *V3x, float *V3y,
@@ -541,52 +541,33 @@ __device__ void eval_surface(float *c_left, float *c_right,
  * evaluates and adds the volume integral to the rhs vector
  * THREADS: num_elem
  */
- __global__ void eval_volume(float *c, float *quad_rhs, 
-                     float *J, 
-                     float *xr, float *yr,
-                     float *xs, float *ys,
-                     int n_quad, int n_p, int num_elem) {
-    int idx = blockDim.x * blockIdx.x + threadIdx.x;
+__device__ void eval_volume(float *r_c, float *quad_rhs, 
+                            float x_r, float y_r,
+                            float x_s, float y_s,
+                            int n_quad, int n_p, int num_elem, int idx) {
+    int i, j, k;
+    float sum, u;
 
-    if (idx < num_elem) {
-        int i, j, k;
-        float sum, u;
-        float register_c[36];
-        float x_r, x_s, y_r, y_s;
-
-        // evaulate the jacobians of the mappings for the chain rule
-        // x = x2 * r + x3 * s + x1 * (1 - r - s)
-        x_r = xr[idx];
-        y_r = yr[idx];
-        x_s = xs[idx];
-        y_s = ys[idx];
-
-        // get the coefficients for this element
-        for (i = 0; i < n_p; i++) {
-            register_c[i] = c[i * num_elem + idx];
-        }
-         
-        // evaluate the volume integral for each coefficient
-        for (i = 0; i < n_p; i++) {
-            sum = 0.;
-            for (j = 0; j < n_quad; j++) {
-                // Evaluate u at the integration point.
-                u = 0.;
-                for (k = 0; k < n_p; k++) {
-                    u += register_c[k] * basis[n_quad * k + j];
-                }
-
-                // Add to the sum
-                // [fx fy] * [y_s, -y_r; -x_s, x_r] * [phi_x phi_y]
-                sum += (  flux_x(u) * ( basis_grad_x[n_quad * i + j] * y_s
-                                       -basis_grad_y[n_quad * i + j] * y_r)
-                        + flux_y(u) * (-basis_grad_x[n_quad * i + j] * x_s 
-                                      + basis_grad_y[n_quad * i + j] * x_r));
+    // evaluate the volume integral for each coefficient
+    for (i = 0; i < n_p; i++) {
+        sum = 0.;
+        for (j = 0; j < n_quad; j++) {
+            // Evaluate u at the integration point.
+            u = 0.;
+            for (k = 0; k < n_p; k++) {
+                u += r_c[k] * basis[n_quad * k + j];
             }
 
-            // store the result
-            quad_rhs[i * num_elem + idx] = sum;
+            // Add to the sum
+            // [fx fy] * [y_s, -y_r; -x_s, x_r] * [phi_x phi_y]
+            sum += (  flux_x(u) * ( basis_grad_x[n_quad * i + j] * y_s
+                                   -basis_grad_y[n_quad * i + j] * y_r)
+                    + flux_y(u) * (-basis_grad_x[n_quad * i + j] * x_s 
+                                  + basis_grad_y[n_quad * i + j] * x_r));
         }
+
+        // store the result
+        quad_rhs[i * num_elem + idx] = sum;
     }
 }
 
@@ -660,9 +641,9 @@ __global__ void eval_u(float *c,
 
         // calculate values at the integration points
         for (i = 0; i < n_p; i++) {
-            uv1 += register_c[i] * basis[i * n_p + 0];
-            uv2 += register_c[i] * basis[i * n_p + 1];
-            uv3 += register_c[i] * basis[i * n_p + 2];
+            uv1 += register_c[i] * basis_vertex[i * n_p + 0];
+            uv2 += register_c[i] * basis_vertex[i * n_p + 1];
+            uv3 += register_c[i] * basis_vertex[i * n_p + 2];
         }
 
         // store result

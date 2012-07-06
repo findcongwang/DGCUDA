@@ -251,7 +251,7 @@ void read_mesh(FILE *mesh_file,
 
 void time_integrate(float dt, int n_quad, int n_quad1d, int n_p, int n, 
                     int num_elem, int num_sides, int debug, float t) {
-    int n_threads = 256;
+    int n_threads = 128;
 
     int n_blocks_elem    = (num_elem  / n_threads) + ((num_elem  % n_threads) ? 1 : 0);
     int n_blocks_sides   = (num_sides / n_threads) + ((num_sides % n_threads) ? 1 : 0);
@@ -266,7 +266,6 @@ void time_integrate(float dt, int n_quad, int n_quad1d, int n_p, int n,
                          float*, float*,
                          int, int, int, int, float) = NULL;
     void (*eval_volume_ftn)(float*, float*, 
-                        float*, 
                         float*, float*, 
                         float*, float*,
                         int, int, int) = NULL;
@@ -276,40 +275,40 @@ void time_integrate(float dt, int n_quad, int n_quad1d, int n_p, int n,
 
     switch (n) {
         case 0: eval_surface_ftn = eval_surface_wrapper0;
-                //&eval_volume_ftn  = &eval_volume_wrapper0;
+                eval_volume_ftn  = eval_volume_wrapper0;
                 //&eval_rhs_ftn     = &eval_rhs_wrapper0;
                 break;
         case 1: eval_surface_ftn = eval_surface_wrapper1;
-                //&eval_volume_ftn  = &eval_volume_wrapper1;
+                eval_volume_ftn  = eval_volume_wrapper1;
                 //&eval_rhs_ftn     = &eval_rhs_wrapper1;
                 break;
         case 2: eval_surface_ftn = eval_surface_wrapper2;
-                //&eval_volume_ftn  = &eval_volume_wrapper2;
+                eval_volume_ftn  = eval_volume_wrapper2;
                 //&eval_rhs_ftn     = &eval_rhs_wrapper2;
                 break;
         case 3: eval_surface_ftn = eval_surface_wrapper3;
-                //&eval_volume_ftn  = &eval_volume_wrapper3;
+                eval_volume_ftn  = eval_volume_wrapper3;
                 //&eval_rhs_ftn     = &eval_rhs_wrapper3;
                 break;
         case 4: eval_surface_ftn = eval_surface_wrapper4;
-                //&eval_volume_ftn  = &eval_volume_wrapper4;
+                eval_volume_ftn  = eval_volume_wrapper4;
                 //&eval_rhs_ftn     = &eval_rhs_wrapper4;
                 break;
         case 5: eval_surface_ftn = eval_surface_wrapper5;
-                //&eval_volume_ftn  = &eval_volume_wrapper5;
+                eval_volume_ftn  = eval_volume_wrapper5;
                 //&eval_rhs_ftn     = &eval_rhs_wrapper5;
                 break;
         case 6: eval_surface_ftn = eval_surface_wrapper6;
-                //&eval_volume_ftn  = &eval_volume_wrapper6;
+                eval_volume_ftn  = eval_volume_wrapper6;
                 //&eval_rhs_ftn     = &eval_rhs_wrapper6;
                 break;
         case 7: eval_surface_ftn = eval_surface_wrapper7;
-                //&eval_volume_ftn  = &eval_volume_wrapper7;
+                eval_volume_ftn  = eval_volume_wrapper7;
                 //&eval_rhs_ftn     = &eval_rhs_wrapper7;
                 break;
     }
  
-    if ((eval_surface_ftn == NULL) || (eval_volume_ftn == NULL) || (eval_rhs_ftn == NULL)) {
+    if ((eval_surface_ftn == NULL) || (eval_volume_ftn == NULL)) {// || (eval_rhs_ftn == NULL)) {
         printf("ERROR: dispatched kernel functions were NULL.\n");
         exit(0);
     }
@@ -349,8 +348,8 @@ void time_integrate(float dt, int n_quad, int n_quad1d, int n_p, int n,
 
     checkCudaError("error after stage 1: eval_surface_ftn");
 
-    eval_volume<<<n_blocks_elem, n_threads>>>
-                    (d_c, d_quad_rhs, d_J,
+    eval_volume_ftn<<<n_blocks_elem, n_threads>>>
+                    (d_c, d_quad_rhs, 
                      d_xr, d_yr, d_xs, d_ys,
                      n_quad, n_p, num_elem);
     cudaThreadSynchronize();
@@ -406,8 +405,8 @@ void time_integrate(float dt, int n_quad, int n_quad1d, int n_p, int n,
                      n_quad1d, n_p, num_sides, num_elem, t);
     cudaThreadSynchronize();
 
-    eval_volume<<<n_blocks_elem, n_threads>>>
-                    (d_c, d_quad_rhs, d_J,
+    eval_volume_ftn<<<n_blocks_elem, n_threads>>>
+                    (d_c, d_quad_rhs, 
                      d_xr, d_yr, d_xs, d_ys,
                      n_quad, n_p, num_elem);
     cudaThreadSynchronize();
@@ -435,8 +434,8 @@ void time_integrate(float dt, int n_quad, int n_quad1d, int n_p, int n,
                      n_quad1d, n_p, num_sides, num_elem, t);
     cudaThreadSynchronize();
 
-    eval_volume<<<n_blocks_elem, n_threads>>>
-                    (d_c, d_quad_rhs, d_J,
+    eval_volume_ftn<<<n_blocks_elem, n_threads>>>
+                    (d_c, d_quad_rhs, 
                      d_xr, d_yr, d_xs, d_ys,
                      n_quad, n_p, num_elem);
     cudaThreadSynchronize();
@@ -464,8 +463,8 @@ void time_integrate(float dt, int n_quad, int n_quad1d, int n_p, int n,
                      n_quad1d, n_p, num_sides, num_elem, t);
     cudaThreadSynchronize();
 
-    eval_volume<<<n_blocks_elem, n_threads>>>
-                    (d_c, d_quad_rhs, d_J,
+    eval_volume_ftn<<<n_blocks_elem, n_threads>>>
+                    (d_c, d_quad_rhs, 
                      d_xr, d_yr, d_xs, d_ys,
                      n_quad, n_p, num_elem);
     cudaThreadSynchronize();
@@ -684,6 +683,33 @@ int get_input(int argc, char *argv[],
     return 0;
 }
 
+void test_initial_condition(float *c,
+                            float *V1x, float *V1y,
+                            float *V2x, float *V2y,
+                            float *V3x, float *V3y,
+                            float *r1_local, float *r2_local,
+                            float *w_local, float *basis_local, int n_quad, int n_p) {   
+
+    int i, j;
+    float u, x, y;
+
+    for (i = 0; i < n_p; i++) {
+        u = 0.;
+        // perform quadrature
+        for (j = 0; j < n_quad; j++) {
+            // map from the canonical element to the actual point on the mesh
+            // x = x2 * r + x3 * s + x1 * (1 - r - s)
+            x = r1_local[j] * V2x[0] + r2_local[j] * V3x[0] + (1 - r1_local[j] - r2_local[j]) * V1x[0];
+            y = r1_local[j] * V2y[0] + r2_local[j] * V3y[0] + (1 - r1_local[j] - r2_local[j]) * V1y[0];
+
+                // evaluate u there
+            u += w_local[j] * x * basis_local[i * n_quad + j];
+        }
+        c[i] = u;
+        printf("c[%i] = %f\n", i, c[i]);
+    }
+}
+
 int main(int argc, char *argv[]) {
     checkCudaError("error before start.");
     int num_elem, num_sides;
@@ -815,10 +841,12 @@ int main(int argc, char *argv[]) {
                    &s_r, &oned_w_local, &n_quad, &n_quad1d);
 
     // evaluate the basis functions at those points and store on GPU
-    preval_basis(r1_local, r2_local, s_r, w_local, oned_w_local, n_quad, n_quad1d, n_p);
+    float *return_basis        = (float *) malloc(n_quad * n_p * sizeof(float));
+    float *return_basis_vertex = (float *) malloc(3 * n_p * sizeof(float));
+    preval_basis(&return_basis, &return_basis_vertex, r1_local, r2_local, s_r, w_local, oned_w_local, n_quad, n_quad1d, n_p);
 
     // initial conditions
-    init_conditions<<<n_blocks_elem, n_threads>>>(d_c, d_V1x, d_V1y, d_V2x, d_V2y, d_V3x, d_V3y,
+    init_conditions<<<n_blocks_elem, n_threads>>>(d_c, d_J, d_V1x, d_V1y, d_V2x, d_V2y, d_V3x, d_V3y,
                     n_quad, n_p, num_elem);
     checkCudaError("error after initial conditions.");
 
@@ -855,6 +883,26 @@ int main(int argc, char *argv[]) {
 
     checkCudaError("error before time integration.");
     fprintf(out_file, "View \"Exported field \" {\n");
+
+    float *c = (float *)malloc(n_p * sizeof(float));
+    // test initial condition
+    test_initial_condition(c, V1x, V1y, V2x, V2y, V3x, V3y, r1_local, r2_local, w_local, return_basis, n_quad, n_p);
+
+    float sum1;
+    float sum2;
+    float sum3;
+    int j;
+    sum1 = 0.;
+    sum2 = 0.;
+    sum3 = 0.;
+    for (i = 0; i < n_p; i++) {
+        sum1 += c[i] * return_basis_vertex[3*i + 0];
+        sum2 += c[i] * return_basis_vertex[3*i + 1];
+        sum3 += c[i] * return_basis_vertex[3*i + 2];
+    }
+    printf("vertex evaluations: %f, %f, %f\n", sum1, sum2, sum3);
+
+
     for (t = 0; t < timesteps; t++) {
         // time integration
         time_integrate(dt, n_quad, n_quad1d, n_p, n, num_elem, num_sides, debug, t * dt);
@@ -878,7 +926,7 @@ int main(int argc, char *argv[]) {
     Uv1 = (float *) malloc(num_elem * sizeof(float));
     Uv2 = (float *) malloc(num_elem * sizeof(float));
     Uv3 = (float *) malloc(num_elem * sizeof(float));
-    eval_error<<<n_blocks_elem, n_threads>>>(d_c, d_V1x, d_V1y, d_V2x, d_V2y, d_V3x, d_V3y, 
+    eval_u<<<n_blocks_elem, n_threads>>>(d_c, d_V1x, d_V1y, d_V2x, d_V2y, d_V3x, d_V3y, 
                                              d_Uv1, d_Uv2, d_Uv3, num_elem, n_p);
     cudaThreadSynchronize();
     cudaMemcpy(Uv1, d_Uv1, num_elem * sizeof(float), cudaMemcpyDeviceToHost);
