@@ -189,8 +189,8 @@ __device__ float boundary_exact(float x, float y, float t) {
  *
  * returns the exact value of u for error measurement.
  */
-__device__ float uexact(float x, float y) {
-    return u0(x, y);
+__device__ float uexact(float x, float y, float t) {
+    return u0(x - t, y - t);
 }
 
 /* initial conditions
@@ -314,7 +314,7 @@ __global__ void preval_normals(float *Nx, float *Ny,
                           float *V1x, float *V1y, 
                           float *V2x, float *V2y, 
                           float *V3x, float *V3y,
-                          int *left_elem, int *left_side_number, int num_sides) {
+                          int *left_side_number, int num_sides) {
 
     int idx = blockDim.x * blockIdx.x + threadIdx.x;
 
@@ -581,7 +581,7 @@ __global__ void eval_error(float *c,
                        float *V2x, float *V2y,
                        float *V3x, float *V3y,
                        float *Uv1, float *Uv2, float *Uv3,
-                       int num_elem, int n_p) {
+                       int num_elem, int n_p, float t) {
     int idx = blockDim.x * blockIdx.x + threadIdx.x;
     
     if (idx < num_elem) {
@@ -606,9 +606,9 @@ __global__ void eval_error(float *c,
         }
 
         // store result
-        Uv1[idx] = abs(uv1 - uexact(V1x[idx], V1y[idx]));
-        Uv2[idx] = abs(uv2 - uexact(V2x[idx], V2y[idx]));
-        Uv3[idx] = abs(uv3 - uexact(V3x[idx], V3y[idx]));
+        Uv1[idx] = abs(uv1 - uexact(V1x[idx], V1y[idx], t));
+        Uv2[idx] = abs(uv2 - uexact(V2x[idx], V2y[idx], t));
+        Uv3[idx] = abs(uv3 - uexact(V3x[idx], V3y[idx], t));
     }
 }
 
@@ -617,40 +617,26 @@ __global__ void eval_error(float *c,
  * evaluates u at the three vertex points for output
  * THREADS: num_elem
  */
-__global__ void eval_u(float *c, 
-                       float *V1x, float *V1y,
-                       float *V2x, float *V2y,
-                       float *V3x, float *V3y,
+__device__ void eval_u(float *c, 
                        float *Uv1, float *Uv2, float *Uv3,
-                       int num_elem, int n_p) {
-    int idx = blockDim.x * blockIdx.x + threadIdx.x;
-    
-    if (idx < num_elem) {
-        int i;
-        float register_c[36];
-        float uv1, uv2, uv3;
+                       int num_elem, int n_p, int idx) {
+    int i;
+    float uv1, uv2, uv3;
 
-        // read coefficient values
-        for (i = 0; i < n_p; i++) {
-            register_c[i] = c[i * num_elem + idx];
-        }
-
-        uv1 = 0.;
-        uv2 = 0.;
-        uv3 = 0.;
-
-        // calculate values at the integration points
-        for (i = 0; i < n_p; i++) {
-            uv1 += register_c[i] * basis_vertex[i * n_p + 0];
-            uv2 += register_c[i] * basis_vertex[i * n_p + 1];
-            uv3 += register_c[i] * basis_vertex[i * n_p + 2];
-        }
-
-        // store result
-        Uv1[idx] = uv1;
-        Uv2[idx] = uv2;
-        Uv3[idx] = uv3;
+    // calculate values at the integration points
+    uv1 = 0.;
+    uv2 = 0.;
+    uv3 = 0.;
+    for (i = 0; i < n_p; i++) {
+        uv1 += c[i] * basis_vertex[i * 3 + 0];
+        uv2 += c[i] * basis_vertex[i * 3 + 1];
+        uv3 += c[i] * basis_vertex[i * 3 + 2];
     }
+
+    // store result
+    Uv1[idx] = uv1;
+    Uv2[idx] = uv2;
+    Uv3[idx] = uv3;
 }
 
 /* right hand side

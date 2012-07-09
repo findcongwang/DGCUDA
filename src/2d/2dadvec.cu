@@ -269,46 +269,34 @@ void time_integrate(float dt, int n_quad, int n_quad1d, int n_p, int n,
                         float*, float*, 
                         float*, float*,
                         int, int, int) = NULL;
-    void (*eval_rhs_ftn)(float*, float*, float*, float*,
-                     int*, int*, int*,
-                     int, float, float, int, int, int) = NULL;
-
     switch (n) {
         case 0: eval_surface_ftn = eval_surface_wrapper0;
                 eval_volume_ftn  = eval_volume_wrapper0;
-                //&eval_rhs_ftn     = &eval_rhs_wrapper0;
                 break;
         case 1: eval_surface_ftn = eval_surface_wrapper1;
                 eval_volume_ftn  = eval_volume_wrapper1;
-                //&eval_rhs_ftn     = &eval_rhs_wrapper1;
                 break;
         case 2: eval_surface_ftn = eval_surface_wrapper2;
                 eval_volume_ftn  = eval_volume_wrapper2;
-                //&eval_rhs_ftn     = &eval_rhs_wrapper2;
                 break;
         case 3: eval_surface_ftn = eval_surface_wrapper3;
                 eval_volume_ftn  = eval_volume_wrapper3;
-                //&eval_rhs_ftn     = &eval_rhs_wrapper3;
                 break;
         case 4: eval_surface_ftn = eval_surface_wrapper4;
                 eval_volume_ftn  = eval_volume_wrapper4;
-                //&eval_rhs_ftn     = &eval_rhs_wrapper4;
                 break;
         case 5: eval_surface_ftn = eval_surface_wrapper5;
                 eval_volume_ftn  = eval_volume_wrapper5;
-                //&eval_rhs_ftn     = &eval_rhs_wrapper5;
                 break;
         case 6: eval_surface_ftn = eval_surface_wrapper6;
                 eval_volume_ftn  = eval_volume_wrapper6;
-                //&eval_rhs_ftn     = &eval_rhs_wrapper6;
                 break;
         case 7: eval_surface_ftn = eval_surface_wrapper7;
                 eval_volume_ftn  = eval_volume_wrapper7;
-                //&eval_rhs_ftn     = &eval_rhs_wrapper7;
                 break;
     }
  
-    if ((eval_surface_ftn == NULL) || (eval_volume_ftn == NULL)) {// || (eval_rhs_ftn == NULL)) {
+    if ((eval_surface_ftn == NULL) || (eval_volume_ftn == NULL)) {
         printf("ERROR: dispatched kernel functions were NULL.\n");
         exit(0);
     }
@@ -376,7 +364,7 @@ void time_integrate(float dt, int n_quad, int n_quad1d, int n_p, int n,
     if (debug) {
         float *rhs = (float *) malloc(num_elem * n_p * sizeof(float));
         cudaMemcpy(rhs, d_k1, num_elem * n_p * sizeof(float), cudaMemcpyDeviceToHost);
-        printf(" eval_rhs_ftn\n");
+        printf(" eval_rhs\n");
         printf(" ~~~\n");
         for (int i = 0; i < num_elem * n_p; i++) {
             if (i != 0 && i % num_elem == 0) {
@@ -703,7 +691,7 @@ void test_initial_condition(float *c,
             y = r1_local[j] * V2y[0] + r2_local[j] * V3y[0] + (1 - r1_local[j] - r2_local[j]) * V1y[0];
 
                 // evaluate u there
-            u += w_local[j] * x * basis_local[i * n_quad + j];
+            u += w_local[j] * (x - 2 * y) * basis_local[i * n_quad + j];
         }
         c[i] = u;
         printf("c[%i] = %f\n", i, c[i]);
@@ -737,6 +725,8 @@ int main(int argc, char *argv[]) {
     char *out_filename;
 
     float *Uv1, *Uv2, *Uv3;
+
+    void (*eval_u_ftn)(float*, float*, float*, float*, int, int) = NULL;
 
     // get input 
     if (get_input(argc, argv, &n, &debug, &timesteps, &mesh_filename, &out_filename)) {
@@ -821,7 +811,7 @@ int main(int argc, char *argv[]) {
                                                   d_V1x, d_V1y, 
                                                   d_V2x, d_V2y, 
                                                   d_V3x, d_V3y, 
-                                                  d_left_elem, d_left_side_number, num_sides); 
+                                                  d_left_side_number, num_sides); 
     cudaThreadSynchronize();
     preval_normals_direction<<<n_blocks_sides, n_threads>>>(d_Nx, d_Ny, 
                                                   d_V1x, d_V1y, 
@@ -900,7 +890,7 @@ int main(int argc, char *argv[]) {
         sum2 += c[i] * return_basis_vertex[3*i + 1];
         sum3 += c[i] * return_basis_vertex[3*i + 2];
     }
-    printf("vertex evaluations: %f, %f, %f\n", sum1, sum2, sum3);
+    printf("vertex = (%f, %f, %f)\n", sum1, sum2, sum3);
 
 
     for (t = 0; t < timesteps; t++) {
@@ -926,8 +916,27 @@ int main(int argc, char *argv[]) {
     Uv1 = (float *) malloc(num_elem * sizeof(float));
     Uv2 = (float *) malloc(num_elem * sizeof(float));
     Uv3 = (float *) malloc(num_elem * sizeof(float));
-    eval_u<<<n_blocks_elem, n_threads>>>(d_c, d_V1x, d_V1y, d_V2x, d_V2y, d_V3x, d_V3y, 
-                                             d_Uv1, d_Uv2, d_Uv3, num_elem, n_p);
+
+    switch (n) {
+        case 0: eval_u_ftn = eval_u_wrapper0;
+                break;
+        case 1: eval_u_ftn = eval_u_wrapper1;
+                break;
+        case 2: eval_u_ftn = eval_u_wrapper2;
+                break;
+        case 3: eval_u_ftn = eval_u_wrapper3;
+                break;
+        case 4: eval_u_ftn = eval_u_wrapper4;
+                break;
+        case 5: eval_u_ftn = eval_u_wrapper5;
+                break;
+        case 6: eval_u_ftn = eval_u_wrapper6;
+                break;
+        case 7: eval_u_ftn = eval_u_wrapper7;
+                break;
+    }
+
+    eval_u_ftn<<<n_blocks_elem, n_threads>>>(d_c, d_Uv1, d_Uv2, d_Uv3, num_elem, n_p);
     cudaThreadSynchronize();
     cudaMemcpy(Uv1, d_Uv1, num_elem * sizeof(float), cudaMemcpyDeviceToHost);
     cudaMemcpy(Uv2, d_Uv2, num_elem * sizeof(float), cudaMemcpyDeviceToHost);
