@@ -17,7 +17,7 @@
  * sets the 1d quadrature integration points and weights for the boundary integrals
  * and the 2d quadrature integration points and weights for the volume intergrals.
  */
-void set_quadrature(int p,
+void set_quadrature(int n,
                     float **r1_local, float **r2_local, float **w_local,
                     float **s_r, float **oned_w_local, 
                     int *n_quad, int *n_quad1d) {
@@ -41,37 +41,37 @@ void set_quadrature(int p,
 
     *
     */
-    switch (p) {
+    switch (n) {
         case 0: *n_quad = 1;
                 *n_quad1d = 1;
                 break;
         case 1: *n_quad = 3;
                 *n_quad1d = 2;
                 break;
-        case 2: *n_quad = 4;
+        case 2: *n_quad = 6;
                 *n_quad1d = 3;
                 break;
-        case 3: *n_quad = 6 ;
+        case 3: *n_quad = 12 ;
                 *n_quad1d = 4;
                 break;
-        case 4: *n_quad = 7;
+        case 4: *n_quad = 16;
                 *n_quad1d = 5;
                 break;
-        case 5: *n_quad = 12;
+        case 5: *n_quad = 25;
                 *n_quad1d = 6;
                 break;
-        case 6: *n_quad = 13;
-                *n_quad1d = 7;
-                break;
-        case 7: *n_quad = 16;
-                *n_quad1d = 8;
-                break;
-        case 8: *n_quad = 19;
-                *n_quad1d = 9;
-                break;
-        case 9: *n_quad = 25;
-                *n_quad1d = 10;
-                break;
+        //case 6: *n_quad = 13;
+                //*n_quad1d = 7;
+                //break;
+        //case 7: *n_quad = 16;
+                //*n_quad1d = 8;
+                //break;
+        //case 8: *n_quad = 19;
+                //*n_quad1d = 9;
+                //break;
+        //case 9: *n_quad = 25;
+                //*n_quad1d = 10;
+                //break;
     }
     // allocate integration points
     *r1_local = (float *) malloc(*n_quad * sizeof(float));
@@ -83,15 +83,21 @@ void set_quadrature(int p,
 
     // set 2D quadrature rules
     for (i = 0; i < *n_quad; i++) {
-        (*r1_local)[i] = quad_2d[p][3*i];
-        (*r2_local)[i] = quad_2d[p][3*i+1];
-        (*w_local) [i] = quad_2d[p][3*i+2] / 2.; //weights are 2 times too big for some reason
+        if (n > 0) {
+            (*r1_local)[i] = quad_2d[2 * n - 1][3*i];
+            (*r2_local)[i] = quad_2d[2 * n - 1][3*i+1];
+            (*w_local) [i] = quad_2d[2 * n - 1][3*i+2] / 2.; //weights are 2 times too big for some reason
+        } else {
+            (*r1_local)[i] = quad_2d[0][3*i];
+            (*r2_local)[i] = quad_2d[0][3*i+1];
+            (*w_local) [i] = quad_2d[0][3*i+2] / 2.; //weights are 2 times too big for some reason
+        }
     }
 
     // set 1D quadrature rules
     for (i = 0; i < *n_quad1d; i++) {
-        (*s_r)[i] = quad_1d[p][2*i];
-        (*oned_w_local)[i] = quad_1d[p][2*i+1];
+        (*s_r)[i] = quad_1d[n][2*i];
+        (*oned_w_local)[i] = quad_1d[n][2*i+1];
     }
 }
 
@@ -637,7 +643,7 @@ int get_input(int argc, char *argv[],
         if (strcmp(argv[i], "-n") == 0) {
             if (i + 1 < argc) {
                 *n = atoi(argv[i+1]);
-                if (*n < 0 || *n > 8) {
+                if (*n < 0 || *n > 5) {
                     usage_error();
                     return 1;
                 }
@@ -691,13 +697,14 @@ void test_initial_condition(float *c,
             y = r1_local[j] * V2y[0] + r2_local[j] * V3y[0] + (1 - r1_local[j] - r2_local[j]) * V1y[0];
 
                 // evaluate u there
-            u += w_local[j] * (x - 2 * y) * basis_local[i * n_quad + j];
+            u += w_local[j] * powf(x - y, 2) * basis_local[i * n_quad + j];
         }
         c[i] = u;
         printf("c[%i] = %f\n", i, c[i]);
     }
 }
 
+/*
 int main(int argc, char *argv[]) {
     checkCudaError("error before start.");
     int num_elem, num_sides;
@@ -727,6 +734,12 @@ int main(int argc, char *argv[]) {
     float *Uv1, *Uv2, *Uv3;
 
     void (*eval_u_ftn)(float*, float*, float*, float*, int, int) = NULL;
+    void (*eval_error_ftn)(float*, 
+                       float*, float*,
+                       float*, float*,
+                       float*, float*,
+                       float*, float*, float*, 
+                       int, int, float) = NULL;
 
     // get input 
     if (get_input(argc, argv, &n, &debug, &timesteps, &mesh_filename, &out_filename)) {
@@ -735,7 +748,7 @@ int main(int argc, char *argv[]) {
 
     // set the order of the approximation & timestep
     n_p = (n + 1) * (n + 2) / 2;
-    dt  = 0.01;
+    dt  = 0.00001;
 
     // open the mesh to get num_elem for allocations
     mesh_file = fopen(mesh_filename, "r");
@@ -831,9 +844,7 @@ int main(int argc, char *argv[]) {
                    &s_r, &oned_w_local, &n_quad, &n_quad1d);
 
     // evaluate the basis functions at those points and store on GPU
-    float *return_basis        = (float *) malloc(n_quad * n_p * sizeof(float));
-    float *return_basis_vertex = (float *) malloc(3 * n_p * sizeof(float));
-    preval_basis(&return_basis, &return_basis_vertex, r1_local, r2_local, s_r, w_local, oned_w_local, n_quad, n_quad1d, n_p);
+    preval_basis(r1_local, r2_local, s_r, w_local, oned_w_local, n_quad, n_quad1d, n_p);
 
     // initial conditions
     init_conditions<<<n_blocks_elem, n_threads>>>(d_c, d_J, d_V1x, d_V1y, d_V2x, d_V2y, d_V3x, d_V3y,
@@ -870,27 +881,8 @@ int main(int argc, char *argv[]) {
         free(Ny);
     }
 
-
     checkCudaError("error before time integration.");
     fprintf(out_file, "View \"Exported field \" {\n");
-
-    float *c = (float *)malloc(n_p * sizeof(float));
-    // test initial condition
-    test_initial_condition(c, V1x, V1y, V2x, V2y, V3x, V3y, r1_local, r2_local, w_local, return_basis, n_quad, n_p);
-
-    float sum1;
-    float sum2;
-    float sum3;
-    sum1 = 0.;
-    sum2 = 0.;
-    sum3 = 0.;
-    for (i = 0; i < n_p; i++) {
-        sum1 += c[i] * return_basis_vertex[3*i + 0];
-        sum2 += c[i] * return_basis_vertex[3*i + 1];
-        sum3 += c[i] * return_basis_vertex[3*i + 2];
-    }
-    printf("vertex = (%f, %f, %f)\n", sum1, sum2, sum3);
-
 
     for (t = 0; t < timesteps; t++) {
         // time integration
@@ -918,24 +910,36 @@ int main(int argc, char *argv[]) {
 
     switch (n) {
         case 0: eval_u_ftn = eval_u_wrapper0;
+                eval_error_ftn = eval_error_wrapper0;
                 break;
         case 1: eval_u_ftn = eval_u_wrapper1;
+                eval_error_ftn = eval_error_wrapper1;
                 break;
         case 2: eval_u_ftn = eval_u_wrapper2;
+                eval_error_ftn = eval_error_wrapper2;
                 break;
         case 3: eval_u_ftn = eval_u_wrapper3;
+                eval_error_ftn = eval_error_wrapper3;
                 break;
         case 4: eval_u_ftn = eval_u_wrapper4;
+                eval_error_ftn = eval_error_wrapper4;
                 break;
         case 5: eval_u_ftn = eval_u_wrapper5;
+                eval_error_ftn = eval_error_wrapper5;
                 break;
         case 6: eval_u_ftn = eval_u_wrapper6;
+                eval_error_ftn = eval_error_wrapper6;
                 break;
         case 7: eval_u_ftn = eval_u_wrapper7;
+                eval_error_ftn = eval_error_wrapper7;
                 break;
     }
 
-    eval_u_ftn<<<n_blocks_elem, n_threads>>>(d_c, d_Uv1, d_Uv2, d_Uv3, num_elem, n_p);
+    eval_error_ftn<<<n_blocks_elem, n_threads>>>(d_c, 
+                                                 d_V1x, d_V1y,
+                                                 d_V2x, d_V2y,
+                                                 d_V3x, d_V3y,
+                                                 d_Uv1, d_Uv2, d_Uv3, num_elem, n_p, t * dt);
     cudaThreadSynchronize();
     cudaMemcpy(Uv1, d_Uv1, num_elem * sizeof(float), cudaMemcpyDeviceToHost);
     cudaMemcpy(Uv2, d_Uv2, num_elem * sizeof(float), cudaMemcpyDeviceToHost);
@@ -990,3 +994,4 @@ int main(int argc, char *argv[]) {
 
     return 0;
 }
+*/

@@ -121,9 +121,9 @@ float quad_2d_degree10[] = {0.333333333333333,0.333333333333333,0.09081799038275
                            0.009540815400299,0.923655933587500,0.009421666963733};
 // put them together 
 float *quad_2d[] = {quad_2d_degree1, quad_2d_degree2, quad_2d_degree3,
-                     quad_2d_degree4, quad_2d_degree5, quad_2d_degree6,
-                     quad_2d_degree7, quad_2d_degree8, quad_2d_degree9,
-                     quad_2d_degree10}; 
+                    quad_2d_degree4, quad_2d_degree5, quad_2d_degree6,
+                    quad_2d_degree7, quad_2d_degree8, quad_2d_degree9,
+                    quad_2d_degree10}; 
 
 ////////////////////////////////////////
 // 1D Quadrature Rules

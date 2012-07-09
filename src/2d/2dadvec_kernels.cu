@@ -174,7 +174,7 @@ __device__ float riemann(float u_left, float u_right) {
  * returns the value of the intial condition at point x
  */
 __device__ float u0(float x, float y) {
-    return x - 2 * y;
+    return powf(x - y, 2);
 }
 
 /* boundary exact
@@ -182,7 +182,7 @@ __device__ float u0(float x, float y) {
  * returns the exact boundary conditions
  */
 __device__ float boundary_exact(float x, float y, float t) {
-    return x + t - 2 * y;
+    return u0(x, y);
 }
 
 /* u exact
@@ -190,7 +190,7 @@ __device__ float boundary_exact(float x, float y, float t) {
  * returns the exact value of u for error measurement.
  */
 __device__ float uexact(float x, float y, float t) {
-    return u0(x - t, y - t);
+    return u0(x, y);
 }
 
 /* initial conditions
@@ -466,12 +466,8 @@ __device__ float eval_riemann(float *c_left, float *c_right,
         }
 
         // x = x2 * r + x3 * s + x1 * (1 - r - s)
-        x = v2x * r1
-          + v3x * r2
-          + v1x * (1 - r1 - r2);
-        y = v2y * r1
-          + v3y * r2
-          + v1y * (1 - r1 - r2);
+        x = v2x * r1 + v3x * r2 + v1x * (1 - r1 - r2);
+        y = v2y * r1 + v3y * r2 + v1y * (1 - r1 - r2);
             
         // deal with the boundary element here
         u_right = boundary_exact(x, y, t);
@@ -597,9 +593,9 @@ __device__ void eval_error(float *c,
     }
 
     // store result
-    Uv1[idx] = abs(uv1 - uexact(v1x, v1y, t));
-    Uv2[idx] = abs(uv2 - uexact(v2x, v2y, t));
-    Uv3[idx] = abs(uv3 - uexact(v3x, v3y, t));
+    Uv1[idx] = uv1 - uexact(v1x, v1y, t);
+    Uv2[idx] = uv2 - uexact(v2x, v2y, t);
+    Uv3[idx] = uv3 - uexact(v3x, v3y, t);
 }
 
 /* evaluate u
