@@ -881,7 +881,6 @@ int main(int argc, char *argv[]) {
     float sum1;
     float sum2;
     float sum3;
-    int j;
     sum1 = 0.;
     sum2 = 0.;
     sum3 = 0.;

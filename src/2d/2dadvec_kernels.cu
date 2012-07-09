@@ -576,40 +576,30 @@ __device__ void eval_volume(float *r_c, float *quad_rhs,
  * evaluates u at the three vertex points for output
  * THREADS: num_elem
  */
-__global__ void eval_error(float *c, 
-                       float *V1x, float *V1y,
-                       float *V2x, float *V2y,
-                       float *V3x, float *V3y,
+__device__ void eval_error(float *c, 
+                       float v1x, float v1y,
+                       float v2x, float v2y,
+                       float v3x, float v3y,
                        float *Uv1, float *Uv2, float *Uv3,
-                       int num_elem, int n_p, float t) {
-    int idx = blockDim.x * blockIdx.x + threadIdx.x;
-    
-    if (idx < num_elem) {
-        int i;
-        float register_c[36];
-        float uv1, uv2, uv3;
+                       int num_elem, int n_p, float t, int idx) {
 
-        // read coefficient values
-        for (i = 0; i < n_p; i++) {
-            register_c[i] = c[i * num_elem + idx];
-        }
+    int i;
+    float uv1, uv2, uv3;
 
-        uv1 = 0.;
-        uv2 = 0.;
-        uv3 = 0.;
-
-        // calculate values at three vertex points
-        for (i = 0; i < n_p; i++) {
-            uv1 += register_c[i] * basis_vertex[i * 3 + 0];
-            uv2 += register_c[i] * basis_vertex[i * 3 + 1];
-            uv3 += register_c[i] * basis_vertex[i * 3 + 2];
-        }
-
-        // store result
-        Uv1[idx] = abs(uv1 - uexact(V1x[idx], V1y[idx], t));
-        Uv2[idx] = abs(uv2 - uexact(V2x[idx], V2y[idx], t));
-        Uv3[idx] = abs(uv3 - uexact(V3x[idx], V3y[idx], t));
+    // calculate values at three vertex points
+    uv1 = 0.;
+    uv2 = 0.;
+    uv3 = 0.;
+    for (i = 0; i < n_p; i++) {
+        uv1 += c[i] * basis_vertex[i * 3 + 0];
+        uv2 += c[i] * basis_vertex[i * 3 + 1];
+        uv3 += c[i] * basis_vertex[i * 3 + 2];
     }
+
+    // store result
+    Uv1[idx] = abs(uv1 - uexact(v1x, v1y, t));
+    Uv2[idx] = abs(uv2 - uexact(v2x, v2y, t));
+    Uv3[idx] = abs(uv3 - uexact(v3x, v3y, t));
 }
 
 /* evaluate u

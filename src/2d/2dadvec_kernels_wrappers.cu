@@ -1307,3 +1307,319 @@ __global__ void eval_u_wrapper7(float *c,
         eval_u(r_c, Uv1, Uv2, Uv3, num_elem, n_p, idx);
     }
 }
+
+//* eval error wrapper (n = 0)
+//*
+//* wrapper function for the eval_error device function.
+//* THREADS: num_sides
+__global__ void eval_error_wrapper0(float *c,
+                       float *V1x, float *V1y,
+                       float *V2x, float *V2y,
+                       float *V3x, float *V3y,
+                       float *Uv1, float *Uv2, float *Uv3,
+                       int num_elem, int n_p, float t) {
+    int idx = blockDim.x * blockIdx.x + threadIdx.x;
+
+    if (idx < num_elem) {
+        float r_c[1];
+
+        // get the coefficients for this element
+        r_c[0] = c[idx];
+
+        eval_error(r_c, V1x[idx], V1y[idx], V2x[idx], V2y[idx], V3x[idx], V3y[idx], 
+                   Uv1, Uv2, Uv3,
+                   num_elem, n_p, t, idx);
+    }
+}
+
+//* eval error wrapper (n = 1)
+//*
+//* wrapper function for the eval_error device function.
+//* THREADS: num_sides
+__global__ void eval_error_wrapper1(float *c,
+                       float *V1x, float *V1y,
+                       float *V2x, float *V2y,
+                       float *V3x, float *V3y,
+                       float *Uv1, float *Uv2, float *Uv3,
+                       int num_elem, int n_p, float t) {
+    int idx = blockDim.x * blockIdx.x + threadIdx.x;
+
+    if (idx < num_elem) {
+        float r_c[3];
+
+        // get the coefficients for this element
+        r_c[0] = c[idx];
+        r_c[1] = c[num_elem + idx];
+        r_c[2] = c[2 * num_elem + idx];
+
+        eval_error(r_c, V1x[idx], V1y[idx], V2x[idx], V2y[idx], V3x[idx], V3y[idx], 
+                   Uv1, Uv2, Uv3,
+                   num_elem, n_p, t, idx);
+    }
+}
+
+//* eval error wrapper (n = 2)
+//*
+//* wrapper function for the eval_error device function.
+//* THREADS: num_sides
+__global__ void eval_error_wrapper2(float *c,
+                       float *V1x, float *V1y,
+                       float *V2x, float *V2y,
+                       float *V3x, float *V3y,
+                       float *Uv1, float *Uv2, float *Uv3,
+                       int num_elem, int n_p, float t) {
+    int idx = blockDim.x * blockIdx.x + threadIdx.x;
+
+    if (idx < num_elem) {
+        float r_c[6];
+
+        // get the coefficients for this element
+        r_c[0] = c[idx];
+        r_c[1] = c[num_elem + idx];
+        r_c[2] = c[2 * num_elem + idx];
+        r_c[3] = c[3 * num_elem + idx];
+        r_c[4] = c[4 * num_elem + idx];
+        r_c[5] = c[5 * num_elem + idx];
+
+        eval_error(r_c, V1x[idx], V1y[idx], V2x[idx], V2y[idx], V3x[idx], V3y[idx], 
+                   Uv1, Uv2, Uv3,
+                   num_elem, n_p, t, idx);
+         
+    }
+}
+
+//* eval error wrapper (n = 3)
+//*
+//* wrapper function for the eval_error device function.
+//* THREADS: num_sides
+__global__ void eval_error_wrapper3(float *c,
+                       float *V1x, float *V1y,
+                       float *V2x, float *V2y,
+                       float *V3x, float *V3y,
+                       float *Uv1, float *Uv2, float *Uv3,
+                       int num_elem, int n_p, float t) {
+    int idx = blockDim.x * blockIdx.x + threadIdx.x;
+
+    if (idx < num_elem) {
+        float r_c[10];
+
+        // get the coefficients for this element
+        r_c[0] = c[idx];
+        r_c[1] = c[num_elem + idx];
+        r_c[2] = c[2 * num_elem + idx];
+        r_c[3] = c[3 * num_elem + idx];
+        r_c[4] = c[4 * num_elem + idx];
+        r_c[5] = c[5 * num_elem + idx];
+        r_c[6] = c[6 * num_elem + idx];
+        r_c[7] = c[7 * num_elem + idx];
+        r_c[8] = c[8 * num_elem + idx];
+        r_c[9] = c[9 * num_elem + idx];
+
+        eval_error(r_c, V1x[idx], V1y[idx], V2x[idx], V2y[idx], V3x[idx], V3y[idx], 
+                   Uv1, Uv2, Uv3,
+                   num_elem, n_p, t, idx);
+         
+    }
+}
+
+//* eval error wrapper (n = 4)
+//*
+//* wrapper function for the eval_error device function.
+//* THREADS: num_sides
+ 
+__global__ void eval_error_wrapper4(float *c, 
+                       float *V1x, float *V1y,
+                       float *V2x, float *V2y,
+                       float *V3x, float *V3y,
+                       float *Uv1, float *Uv2, float *Uv3,
+                       int num_elem, int n_p, float t) {
+    int idx = blockDim.x * blockIdx.x + threadIdx.x;
+
+    if (idx < num_elem) {
+        float r_c[15];
+
+        // get the coefficients for this element
+        r_c[0] = c[idx];
+        r_c[1] = c[num_elem + idx];
+        r_c[2] = c[2 * num_elem + idx];
+        r_c[3] = c[3 * num_elem + idx];
+        r_c[4] = c[4 * num_elem + idx];
+        r_c[5] = c[5 * num_elem + idx];
+        r_c[6] = c[6 * num_elem + idx];
+        r_c[7] = c[7 * num_elem + idx];
+        r_c[8] = c[8 * num_elem + idx];
+        r_c[9] = c[9 * num_elem + idx];
+
+        r_c[10] = c[10 * num_elem + idx];
+        r_c[11] = c[11 * num_elem + idx];
+        r_c[12] = c[12 * num_elem + idx];
+        r_c[13] = c[13 * num_elem + idx];
+        r_c[14] = c[14 * num_elem + idx];
+
+        eval_error(r_c, V1x[idx], V1y[idx], V2x[idx], V2y[idx], V3x[idx], V3y[idx], 
+                   Uv1, Uv2, Uv3,
+                   num_elem, n_p, t, idx);
+    }
+}
+
+//* eval error wrapper (n = 5)
+//*
+//* wrapper function for the eval_error device function.
+//* THREADS: num_sides
+__global__ void eval_error_wrapper5(float *c,
+                       float *V1x, float *V1y,
+                       float *V2x, float *V2y,
+                       float *V3x, float *V3y,
+                       float *Uv1, float *Uv2, float *Uv3,
+                       int num_elem, int n_p, float t) {
+    int idx = blockDim.x * blockIdx.x + threadIdx.x;
+
+    if (idx < num_elem) {
+        float r_c[21];
+
+        // get the coefficients for this element
+        r_c[0] = c[idx];
+        r_c[1] = c[num_elem + idx];
+        r_c[2] = c[2 * num_elem + idx];
+        r_c[3] = c[3 * num_elem + idx];
+        r_c[4] = c[4 * num_elem + idx];
+        r_c[5] = c[5 * num_elem + idx];
+        r_c[6] = c[6 * num_elem + idx];
+        r_c[7] = c[7 * num_elem + idx];
+        r_c[8] = c[8 * num_elem + idx];
+        r_c[9] = c[9 * num_elem + idx];
+
+        r_c[10] = c[10 * num_elem + idx];
+        r_c[11] = c[11 * num_elem + idx];
+        r_c[12] = c[12 * num_elem + idx];
+        r_c[13] = c[13 * num_elem + idx];
+        r_c[14] = c[14 * num_elem + idx];
+        r_c[15] = c[15 * num_elem + idx];
+        r_c[16] = c[16 * num_elem + idx];
+        r_c[17] = c[17 * num_elem + idx];
+        r_c[18] = c[18 * num_elem + idx];
+        r_c[19] = c[19 * num_elem + idx];
+
+        r_c[20] = c[20 * num_elem + idx];
+
+        eval_error(r_c, V1x[idx], V1y[idx], V2x[idx], V2y[idx], V3x[idx], V3y[idx], 
+                   Uv1, Uv2, Uv3,
+                   num_elem, n_p, t, idx);
+         
+    }
+}
+
+//* eval error wrapper (n = 6)
+//*
+//* wrapper function for the eval_error device function.
+//* THREADS: num_sides
+__global__ void eval_error_wrapper6(float *c,
+                       float *V1x, float *V1y,
+                       float *V2x, float *V2y,
+                       float *V3x, float *V3y,
+                       float *Uv1, float *Uv2, float *Uv3,
+                       int num_elem, int n_p, float t) {
+    int idx = blockDim.x * blockIdx.x + threadIdx.x;
+
+    if (idx < num_elem) {
+        float r_c[28];
+
+        // get the coefficients for this element
+        r_c[0] = c[idx];
+        r_c[1] = c[num_elem + idx];
+        r_c[2] = c[2 * num_elem + idx];
+        r_c[3] = c[3 * num_elem + idx];
+        r_c[4] = c[4 * num_elem + idx];
+        r_c[5] = c[5 * num_elem + idx];
+        r_c[6] = c[6 * num_elem + idx];
+        r_c[7] = c[7 * num_elem + idx];
+        r_c[8] = c[8 * num_elem + idx];
+        r_c[9] = c[9 * num_elem + idx];
+
+        r_c[10] = c[10 * num_elem + idx];
+        r_c[11] = c[11 * num_elem + idx];
+        r_c[12] = c[12 * num_elem + idx];
+        r_c[13] = c[13 * num_elem + idx];
+        r_c[14] = c[14 * num_elem + idx];
+        r_c[15] = c[15 * num_elem + idx];
+        r_c[16] = c[16 * num_elem + idx];
+        r_c[17] = c[17 * num_elem + idx];
+        r_c[18] = c[18 * num_elem + idx];
+        r_c[19] = c[19 * num_elem + idx];
+
+        r_c[20] = c[20 * num_elem + idx];
+        r_c[21] = c[21 * num_elem + idx];
+        r_c[22] = c[22 * num_elem + idx];
+        r_c[23] = c[23 * num_elem + idx];
+        r_c[24] = c[24 * num_elem + idx];
+        r_c[25] = c[25 * num_elem + idx];
+        r_c[26] = c[26 * num_elem + idx];
+        r_c[27] = c[27 * num_elem + idx];
+
+        eval_error(r_c, V1x[idx], V1y[idx], V2x[idx], V2y[idx], V3x[idx], V3y[idx], 
+                   Uv1, Uv2, Uv3,
+                   num_elem, n_p, t, idx);
+    }
+}
+
+//* eval error wrapper (n = 7)
+//*
+//* wrapper function for the eval_error device function.
+//* THREADS: num_sides
+__global__ void eval_error_wrapper7(float *c,
+                       float *V1x, float *V1y,
+                       float *V2x, float *V2y,
+                       float *V3x, float *V3y,
+                       float *Uv1, float *Uv2, float *Uv3,
+                       int num_elem, int n_p, float t) {
+    int idx = blockDim.x * blockIdx.x + threadIdx.x;
+
+    if (idx < num_elem) {
+        float r_c[36];
+
+        // get the coefficients for this element
+        r_c[0] = c[idx];
+        r_c[1] = c[num_elem + idx];
+        r_c[2] = c[2 * num_elem + idx];
+        r_c[3] = c[3 * num_elem + idx];
+        r_c[4] = c[4 * num_elem + idx];
+        r_c[5] = c[5 * num_elem + idx];
+        r_c[6] = c[6 * num_elem + idx];
+        r_c[7] = c[7 * num_elem + idx];
+        r_c[8] = c[8 * num_elem + idx];
+        r_c[9] = c[9 * num_elem + idx];
+
+        r_c[10] = c[10 * num_elem + idx];
+        r_c[11] = c[11 * num_elem + idx];
+        r_c[12] = c[12 * num_elem + idx];
+        r_c[13] = c[13 * num_elem + idx];
+        r_c[14] = c[14 * num_elem + idx];
+        r_c[15] = c[15 * num_elem + idx];
+        r_c[16] = c[16 * num_elem + idx];
+        r_c[17] = c[17 * num_elem + idx];
+        r_c[18] = c[18 * num_elem + idx];
+        r_c[19] = c[19 * num_elem + idx];
+
+        r_c[20] = c[20 * num_elem + idx];
+        r_c[21] = c[21 * num_elem + idx];
+        r_c[22] = c[22 * num_elem + idx];
+        r_c[23] = c[23 * num_elem + idx];
+        r_c[24] = c[24 * num_elem + idx];
+        r_c[25] = c[25 * num_elem + idx];
+        r_c[26] = c[26 * num_elem + idx];
+        r_c[27] = c[27 * num_elem + idx];
+        r_c[28] = c[28 * num_elem + idx];
+        r_c[29] = c[29 * num_elem + idx];
+
+        r_c[30] = c[30 * num_elem + idx];
+        r_c[31] = c[31 * num_elem + idx];
+        r_c[32] = c[32 * num_elem + idx];
+        r_c[33] = c[33 * num_elem + idx];
+        r_c[34] = c[34 * num_elem + idx];
+        r_c[35] = c[35 * num_elem + idx];
+
+        eval_error(r_c, V1x[idx], V1y[idx], V2x[idx], V2y[idx], V3x[idx], V3y[idx], 
+                   Uv1, Uv2, Uv3,
+                   num_elem, n_p, t, idx);
+    }
+}
