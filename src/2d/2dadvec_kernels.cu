@@ -14,17 +14,17 @@
  *
  ***********************/
 /* These are always prefixed with d_ for "device" */
-float *d_c;           // holds coefficients for each element
-float *d_quad_rhs;    // the right hand side containing the quadrature contributions
-float *d_left_riemann_rhs;  // the right hand side containing the left riemann contributions
-float *d_right_riemann_rhs; // the right hand side containing the right riemann contributions
+double *d_c;           // holds coefficients for each element
+double *d_quad_rhs;    // the right hand side containing the quadrature contributions
+double *d_left_riemann_rhs;  // the right hand side containing the left riemann contributions
+double *d_right_riemann_rhs; // the right hand side containing the right riemann contributions
 
 // runge kutta variables
-float *d_kstar;
-float *d_k1;
-float *d_k2;
-float *d_k3;
-float *d_k4;
+double *d_kstar;
+double *d_k1;
+double *d_k2;
+double *d_k3;
+double *d_k4;
 
 // precomputed basis functions 
 // TODO: maybe making these 2^n makes sure the offsets are cached more efficiently? who knows...
@@ -37,77 +37,77 @@ float *d_k4;
 // [   .               .           .            .           ]
 // [phi_np(r1, s1), phi_np(r2, s2), ... , phi_np(r_nq, s_nq)]
 //
-__device__ __constant__ float basis[2048];
+__device__ __constant__ double basis[2048];
 // note: these are multiplied by the weights
-__device__ __constant__ float basis_grad_x[2048]; 
-__device__ __constant__ float basis_grad_y[2048]; 
+__device__ __constant__ double basis_grad_x[2048]; 
+__device__ __constant__ double basis_grad_y[2048]; 
 
 // precomputed basis functions evaluated along the sides. ordered
 // similarly to basis and basis_grad_{x,y} but with one "matrix" for each side
 // starting with side 0. to get to each side, offset with:
 //      side_number * n_p * num_quad1d.
-__device__ __constant__ float basis_side[1024];
-__device__ __constant__ float basis_vertex[256];
+__device__ __constant__ double basis_side[1024];
+__device__ __constant__ double basis_vertex[256];
 
 // weights for 2d and 1d quadrature rules
-__device__ __constant__ float w[32];
-__device__ __constant__ float w_oned[16];
+__device__ __constant__ double w[32];
+__device__ __constant__ double w_oned[16];
 
-__device__ __constant__ float r1[32];
-__device__ __constant__ float r2[32];
-__device__ __constant__ float r_oned[32];
+__device__ __constant__ double r1[32];
+__device__ __constant__ double r2[32];
+__device__ __constant__ double r_oned[32];
 
 void set_basis(void *value, int size) {
-    cudaMemcpyToSymbol("basis", value, size * sizeof(float));
+    cudaMemcpyToSymbol("basis", value, size * sizeof(double));
 }
 void set_basis_grad_x(void *value, int size) {
-    cudaMemcpyToSymbol("basis_grad_x", value, size * sizeof(float));
+    cudaMemcpyToSymbol("basis_grad_x", value, size * sizeof(double));
 }
 void set_basis_grad_y(void *value, int size) {
-    cudaMemcpyToSymbol("basis_grad_y", value, size * sizeof(float));
+    cudaMemcpyToSymbol("basis_grad_y", value, size * sizeof(double));
 }
 void set_basis_side(void *value, int size) {
-    cudaMemcpyToSymbol("basis_side", value, size * sizeof(float));
+    cudaMemcpyToSymbol("basis_side", value, size * sizeof(double));
 }
 void set_basis_vertex(void *value, int size) {
-    cudaMemcpyToSymbol("basis_vertex", value, size * sizeof(float));
+    cudaMemcpyToSymbol("basis_vertex", value, size * sizeof(double));
 }
 void set_w(void *value, int size) {
-    cudaMemcpyToSymbol("w", value, size * sizeof(float));
+    cudaMemcpyToSymbol("w", value, size * sizeof(double));
 }
 void set_w_oned(void *value, int size) {
-    cudaMemcpyToSymbol("w_oned", value, size * sizeof(float));
+    cudaMemcpyToSymbol("w_oned", value, size * sizeof(double));
 }
 void set_r1(void *value, int size) {
-    cudaMemcpyToSymbol("r1", value, size * sizeof(float));
+    cudaMemcpyToSymbol("r1", value, size * sizeof(double));
 }
 void set_r2(void *value, int size) {
-    cudaMemcpyToSymbol("r2", value, size * sizeof(float));
+    cudaMemcpyToSymbol("r2", value, size * sizeof(double));
 }
 void set_r_oned(void *value, int size) {
-    cudaMemcpyToSymbol("r_oned", value, size * sizeof(float));
+    cudaMemcpyToSymbol("r_oned", value, size * sizeof(double));
 }
 
 // tells which side (1, 2, or 3) to evaluate this boundary integral over
 int *d_left_side_number;
 int *d_right_side_number;
 
-float *d_J;        // jacobian determinant 
-float *d_s_length; // length of sides
+double *d_J;        // jacobian determinant 
+double *d_s_length; // length of sides
 
 // the num_elem values of the x and y coordinates for the two vertices defining a side
 // TODO: can i delete these after the lengths are precomputed?
 //       maybe these should be in texture memory?
-float *d_s_V1x;
-float *d_s_V1y;
-float *d_s_V2x;
-float *d_s_V2y;
+double *d_s_V1x;
+double *d_s_V1y;
+double *d_s_V2x;
+double *d_s_V2y;
 
 // the num_elem values of the x and y partials
-float *d_xr;
-float *d_yr;
-float *d_xs;
-float *d_ys;
+double *d_xr;
+double *d_yr;
+double *d_xs;
+double *d_ys;
 
 // the K indices of the sides for each element ranged 0->H-1
 int *d_elem_s1;
@@ -117,21 +117,21 @@ int *d_elem_s3;
 // vertex x and y coordinates on the mesh which define an element
 // TODO: can i delete these after the jacobians are precomputed?
 //       maybe these should be in texture memory?
-float *d_V1x;
-float *d_V1y;
-float *d_V2x;
-float *d_V2y;
-float *d_V3x;
-float *d_V3y;
+double *d_V1x;
+double *d_V1y;
+double *d_V2x;
+double *d_V2y;
+double *d_V3x;
+double *d_V3y;
 
 // stores computed values at three vertices
-float *d_Uv1;
-float *d_Uv2;
-float *d_Uv3;
+double *d_Uv1;
+double *d_Uv2;
+double *d_Uv3;
 
 // normal vectors for the sides
-float *d_Nx;
-float *d_Ny;
+double *d_Nx;
+double *d_Ny;
 
 // index lists for sides
 int *d_left_elem;  // index of left  element for side idx
@@ -147,10 +147,10 @@ int *d_right_elem; // index of right element for side idx
  *
  * evaluates the flux f(u) at the point u.
  */
-__device__ float flux_x(float u) {
+__device__ double flux_x(double u) {
     return u;
 }
-__device__ float flux_y(float u) {
+__device__ double flux_y(double u) {
     return u;
 }
 
@@ -159,7 +159,7 @@ __device__ float flux_y(float u) {
  * evaluates the riemann problem over the boundary using Gaussian quadrature
  * with Legendre polynomials as basis functions.
  */
-__device__ float riemann(float u_left, float u_right) {
+__device__ double riemann(double u_left, double u_right) {
     return 0.5 * (u_left + u_right);
 }
 
@@ -173,15 +173,15 @@ __device__ float riemann(float u_left, float u_right) {
  *
  * returns the value of the intial condition at point x
  */
-__device__ float u0(float x, float y) {
-    return powf(x - y, 2);
+__device__ double u0(double x, double y) {
+    return pow(x - y, 0);
 }
 
 /* boundary exact
  *
  * returns the exact boundary conditions
  */
-__device__ float boundary_exact(float x, float y, float t) {
+__device__ double boundary_exact(double x, double y, double t) {
     return u0(x, y);
 }
 
@@ -189,7 +189,7 @@ __device__ float boundary_exact(float x, float y, float t) {
  *
  * returns the exact value of u for error measurement.
  */
-__device__ float uexact(float x, float y, float t) {
+__device__ double uexact(double x, double y, double t) {
     return u0(x, y);
 }
 
@@ -198,14 +198,14 @@ __device__ float uexact(float x, float y, float t) {
  * computes the coefficients for the initial conditions
  * THREADS: num_elem
  */
-__global__ void init_conditions(float *c, float *J,
-                                float *V1x, float *V1y,
-                                float *V2x, float *V2y,
-                                float *V3x, float *V3y,
+__global__ void init_conditions(double *c, double *J,
+                                double *V1x, double *V1y,
+                                double *V2x, double *V2y,
+                                double *V3x, double *V3y,
                                 int n_quad, int n_p, int num_elem) {
     int idx = blockDim.x * blockIdx.x + threadIdx.x;
     int i, j;
-    float x, y, u;
+    double x, y, u;
 
     if (idx < num_elem) {
         for (i = 0; i < n_p; i++) {
@@ -236,15 +236,15 @@ __global__ void init_conditions(float *c, float *J,
  * precomputes the length of each side.
  * THREADS: num_sides
  */ 
-__global__ void preval_side_length(float *s_length, 
-                              float *s_V1x, float *s_V1y, 
-                              float *s_V2x, float *s_V2y,
+__global__ void preval_side_length(double *s_length, 
+                              double *s_V1x, double *s_V1y, 
+                              double *s_V2x, double *s_V2y,
                               int num_sides) {
     int idx = blockDim.x * blockIdx.x + threadIdx.x;
 
     if (idx < num_sides) {
         // compute and store the length of the side
-        s_length[idx] = sqrtf(powf(s_V1x[idx] - s_V2x[idx],2) + powf(s_V1y[idx] - s_V2y[idx],2));
+        s_length[idx] = sqrtf(pow(s_V1x[idx] - s_V2x[idx],2) + pow(s_V1y[idx] - s_V2y[idx],2));
     }
 }
 
@@ -253,15 +253,15 @@ __global__ void preval_side_length(float *s_length,
  * precomputes the jacobian determinant for each element.
  * THREADS: num_elem
  */
-__global__ void preval_jacobian(float *J, 
-                           float *V1x, float *V1y, 
-                           float *V2x, float *V2y, 
-                           float *V3x, float *V3y,
+__global__ void preval_jacobian(double *J, 
+                           double *V1x, double *V1y, 
+                           double *V2x, double *V2y, 
+                           double *V3x, double *V3y,
                            int num_elem) {
     int idx = blockDim.x * blockIdx.x + threadIdx.x;
 
     if (idx < num_elem) {
-        float x1, y1, x2, y2, x3, y3;
+        double x1, y1, x2, y2, x3, y3;
 
         // read vertex points
         x1 = V1x[idx];
@@ -277,50 +277,25 @@ __global__ void preval_jacobian(float *J,
     }
 }
 
-/* force positive jacobians
- *
- * make sure all jacobians are positive by swapping two verticies.
- */
-__global__ void preval_jacobian_sign(float *J, 
-                           float *V1x, float *V1y, 
-                           float *V2x, float *V2y, 
-                           int num_elem) {
-    int idx = blockDim.x * blockIdx.x + threadIdx.x;
-
-    if (idx < num_elem) {
-        float tmpx, tmpy;
-        if (J[idx] < 0) {
-            tmpx = V1x[idx];
-            tmpy = V1y[idx];
-            V1x[idx] = V2x[idx];
-            V1y[idx] = V2y[idx];
-            V2x[idx] = tmpx;
-            V2y[idx] = tmpy;
-
-            J[idx] *= -1;
-        }
-    }
-}
-
 /* evaluate normal vectors
  *
  * computes the normal vectors for each element along each side.
  * THREADS: num_sides
  *
  */
-__global__ void preval_normals(float *Nx, float *Ny, 
-                          float *s_V1x, float *s_V1y, 
-                          float *s_V2x, float *s_V2y,
-                          float *V1x, float *V1y, 
-                          float *V2x, float *V2y, 
-                          float *V3x, float *V3y,
+__global__ void preval_normals(double *Nx, double *Ny, 
+                          double *s_V1x, double *s_V1y, 
+                          double *s_V2x, double *s_V2y,
+                          double *V1x, double *V1y, 
+                          double *V2x, double *V2y, 
+                          double *V3x, double *V3y,
                           int *left_side_number, int num_sides) {
 
     int idx = blockDim.x * blockIdx.x + threadIdx.x;
 
     if (idx < num_sides) {
-        float x, y, length;
-        float sv1x, sv1y, sv2x, sv2y;
+        double x, y, length;
+        double sv1x, sv1y, sv2x, sv2y;
     
         sv1x = s_V1x[idx];
         sv1y = s_V1y[idx];
@@ -332,7 +307,7 @@ __global__ void preval_normals(float *Nx, float *Ny,
         y = sv2y - sv1y;
     
         // normalize
-        length = sqrtf(powf(x, 2) + powf(y, 2));
+        length = sqrtf(pow(x, 2) + pow(y, 2));
 
         // store the result
         Nx[idx] = -y / length;
@@ -340,18 +315,18 @@ __global__ void preval_normals(float *Nx, float *Ny,
     }
 }
 
-__global__ void preval_normals_direction(float *Nx, float *Ny, 
-                          float *V1x, float *V1y, 
-                          float *V2x, float *V2y, 
-                          float *V3x, float *V3y,
+__global__ void preval_normals_direction(double *Nx, double *Ny, 
+                          double *V1x, double *V1y, 
+                          double *V2x, double *V2y, 
+                          double *V3x, double *V3y,
                           int *left_elem, int *left_side_number, int num_sides) {
 
     int idx = blockDim.x * blockIdx.x + threadIdx.x;
 
     if (idx < num_sides) {
-        float new_x, new_y, dot;
-        float initial_x, initial_y, target_x, target_y;
-        float x, y;
+        double new_x, new_y, dot;
+        double initial_x, initial_y, target_x, target_y;
+        double x, y;
         int left_idx, side;
 
         // get left side's vertices
@@ -398,11 +373,11 @@ __global__ void preval_normals_direction(float *Nx, float *Ny,
     }
 }
 
-__global__ void preval_partials(float *V1x, float *V1y,
-                                float *V2x, float *V2y,
-                                float *V3x, float *V3y,
-                                float *xr,  float *yr,
-                                float *xs,  float *ys, int num_elem) {
+__global__ void preval_partials(double *V1x, double *V1y,
+                                double *V2x, double *V2y,
+                                double *V3x, double *V3y,
+                                double *xr,  double *yr,
+                                double *xs,  double *ys, int num_elem) {
     int idx = blockDim.x * blockIdx.x + threadIdx.x;
     if (idx < num_elem) {
         // evaulate the jacobians of the mappings for the chain rule
@@ -424,17 +399,17 @@ __global__ void preval_partials(float *V1x, float *V1y,
  *
  * device function to solve the riemann problem.
  */
-__device__ float eval_riemann(float *c_left, float *c_right,
-                              float v1x, float v1y,
-                              float v2x, float v2y,
-                              float v3x, float v3y,
+__device__ double eval_riemann(double *c_left, double *c_right,
+                              double v1x, double v1y,
+                              double v2x, double v2y,
+                              double v3x, double v3y,
                               int j, // j, as usual, is the index of the integration point
                               int left_side, int right_side,
                               int left_idx, int right_idx,
                               int n_p, int n_quad1d,
-                              int num_sides, float t) {
+                              int num_sides, double t) {
 
-    float u_left, u_right;
+    double u_left, u_right;
     int i;
 
     u_left  = 0.;
@@ -446,10 +421,10 @@ __device__ float eval_riemann(float *c_left, float *c_right,
 
     // make all threads in the first warps be boundary sides
     if (right_idx == -1) {
-        float r1, r2;
-        float x, y;
+        double r1, r2;
+        double x, y;
 
-        // we (sometimes?) need the mapping back to the grid space
+        // we need the mapping back to the grid space
         switch (left_side) {
             case 0: 
                 r1 = 0.5 + 0.5 * r_oned[j];
@@ -488,19 +463,19 @@ __device__ float eval_riemann(float *c_left, float *c_right,
  * evaluate all the riemann problems for each element.
  * THREADS: num_sides
  */
-__device__ void eval_surface(float *c_left, float *c_right, 
-                             float *left_riemann_rhs, float *right_riemann_rhs, 
-                             float len,
-                             float v1x, float v1y,
-                             float v2x, float v2y,
-                             float v3x, float v3y,
+__device__ void eval_surface(double *c_left, double *c_right, 
+                             double *left_riemann_rhs, double *right_riemann_rhs, 
+                             double len,
+                             double v1x, double v1y,
+                             double v2x, double v2y,
+                             double v3x, double v3y,
                              int left_idx,  int right_idx,
                              int left_side, int right_side, 
-                             float nx, float ny, 
+                             double nx, double ny, 
                              int n_quad1d, int n_p, int num_sides, 
-                             int num_elem, float t, int idx) {
+                             int num_elem, double t, int idx) {
     int i, j;
-    float s, left_sum, right_sum;
+    double s, left_sum, right_sum;
 
     // multiply across by the i'th basis function
     for (i = 0; i < n_p; i++) {
@@ -537,12 +512,12 @@ __device__ void eval_surface(float *c_left, float *c_right,
  * evaluates and adds the volume integral to the rhs vector
  * THREADS: num_elem
  */
-__device__ void eval_volume(float *r_c, float *quad_rhs, 
-                            float x_r, float y_r,
-                            float x_s, float y_s,
+__device__ void eval_volume(double *r_c, double *quad_rhs, 
+                            double x_r, double y_r,
+                            double x_s, double y_s,
                             int n_quad, int n_p, int num_elem, int idx) {
     int i, j, k;
-    float sum, u;
+    double sum, u;
 
     // evaluate the volume integral for each coefficient
     for (i = 0; i < n_p; i++) {
@@ -572,15 +547,15 @@ __device__ void eval_volume(float *r_c, float *quad_rhs,
  * evaluates u at the three vertex points for output
  * THREADS: num_elem
  */
-__device__ void eval_error(float *c, 
-                       float v1x, float v1y,
-                       float v2x, float v2y,
-                       float v3x, float v3y,
-                       float *Uv1, float *Uv2, float *Uv3,
-                       int num_elem, int n_p, float t, int idx) {
+__device__ void eval_error(double *c, 
+                       double v1x, double v1y,
+                       double v2x, double v2y,
+                       double v3x, double v3y,
+                       double *Uv1, double *Uv2, double *Uv3,
+                       int num_elem, int n_p, double t, int idx) {
 
     int i;
-    float uv1, uv2, uv3;
+    double uv1, uv2, uv3;
 
     // calculate values at three vertex points
     uv1 = 0.;
@@ -603,11 +578,11 @@ __device__ void eval_error(float *c,
  * evaluates u at the three vertex points for output
  * THREADS: num_elem
  */
-__device__ void eval_u(float *c, 
-                       float *Uv1, float *Uv2, float *Uv3,
+__device__ void eval_u(double *c, 
+                       double *Uv1, double *Uv2, double *Uv3,
                        int num_elem, int n_p, int idx) {
     int i;
-    float uv1, uv2, uv3;
+    double uv1, uv2, uv3;
 
     // calculate values at the integration points
     uv1 = 0.;
@@ -631,12 +606,12 @@ __device__ void eval_u(float *c,
  * coefficients for each element
  * THREADS: num_elem
  */
-__global__ void eval_rhs(float *c, float *quad_rhs, float *left_riemann_rhs, float *right_riemann_rhs, 
+__global__ void eval_rhs(double *c, double *quad_rhs, double *left_riemann_rhs, double *right_riemann_rhs, 
                          int *elem_s1, int *elem_s2, int *elem_s3,
-                         int *left_elem, float *J, 
-                         float dt, int n_p, int num_sides, int num_elem) {
+                         int *left_elem, double *J, 
+                         double dt, int n_p, int num_sides, int num_elem) {
     int idx = blockDim.x * blockIdx.x + threadIdx.x;
-    float s1, s2, s3, register_J;
+    double s1, s2, s3, register_J;
     int i, s1_idx, s2_idx, s3_idx;
 
     if (idx < num_elem) {
@@ -685,7 +660,7 @@ __global__ void eval_rhs(float *c, float *quad_rhs, float *left_riemann_rhs, flo
  * 
  * I need to store u + alpha * k_i into some temporary variable called k*.
  */
-__global__ void rk4_tempstorage(float *c, float *kstar, float*k, float alpha, int n_p, int num_elem) {
+__global__ void rk4_tempstorage(double *c, double *kstar, double*k, double alpha, int n_p, int num_elem) {
     int idx = blockDim.x * blockIdx.x + threadIdx.x;
 
     if (idx < n_p * num_elem) {
@@ -698,7 +673,7 @@ __global__ void rk4_tempstorage(float *c, float *kstar, float*k, float alpha, in
  * computes the runge-kutta solution 
  * u_n+1 = u_n + k1/6 + k2/3 + k3/3 + k4/6
  */
-__global__ void rk4(float *c, float *k1, float *k2, float *k3, float *k4, int n_p, int num_elem) {
+__global__ void rk4(double *c, double *k1, double *k2, double *k3, double *k4, int n_p, int num_elem) {
     int idx = blockDim.x * blockIdx.x + threadIdx.x;
 
     if (idx < n_p * num_elem) {

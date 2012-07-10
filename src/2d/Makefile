@@ -1,9 +1,9 @@
 all: dgcuda
-tests: dgcudatest
+tests: runtests
 
-dgcuda: 2dadvec.cu 2dadvec_kernels.cu 2dadvec_kernels_wrappers.cu quadrature.h basis.h
-	nvcc 2dadvec.cu -o dgcuda
+dgcuda: main.cu 2dadvec.cu 2dadvec_kernels.cu 2dadvec_kernels_wrappers.cu quadrature.h basis.h
+	nvcc main.cu -o dgcuda
 
-dgcudatest: test_all.cu 2dadvec.cu 2dadvec_kernels.cu 2dadvec_kernels_wrappers.cu quadrature.h basis.h
-	nvcc test_all.cu -o dgcudatest
+runtests: test_all.cu 2dadvec.cu 2dadvec_kernels.cu 2dadvec_kernels_wrappers.cu quadrature.h basis.h
+	nvcc test_all.cu -o runtests
 
