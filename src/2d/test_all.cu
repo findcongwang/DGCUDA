@@ -347,7 +347,7 @@ int test_initial_projection(int n, int alpha, FILE *mesh_file, FILE *out_file) {
     // TODO: this will output multiple vertices values. does gmsh care? i dunno...
     fprintf(out_file, "View \"Exported field \" {\n");
     for (i = 0; i < num_elem; i++) {
-        fprintf(out_file, "ST (%G,%G,0,%G,%G,0,%G,%G,0) {%G,%G,%G};\n", 
+        fprintf(out_file, "ST (%lf,%lf,0,%lf,%lf,0,%lf,%lf,0) {%lf,%lf,%lf};\n", 
                                V1x[i], V1y[i], V2x[i], V2y[i], V3x[i], V3y[i],
                                Uv1[i], Uv2[i], Uv3[i]);
     }
@@ -524,7 +524,7 @@ int test_timestep(int n, int alpha, int timesteps, double dt, FILE *mesh_file, F
     fprintf(out_file, "View \"Exported field \" {\n");
 
     for (i = 0; i < timesteps; i++) {
-        t = dt * i;
+        t = i * dt;
         time_integrate_rk4(dt, n_quad, n_quad1d, n_p, n, num_elem, num_sides, 0, t);
     }
 
@@ -577,7 +577,7 @@ int test_timestep(int n, int alpha, int timesteps, double dt, FILE *mesh_file, F
     // write data to file
     // TODO: this will output multiple vertices values. does gmsh care? i dunno...
     for (i = 0; i < num_elem; i++) {
-        fprintf(out_file, "ST (%G,%G,0,%G,%G,0,%G,%G,0) {%G,%G,%G};\n", 
+        fprintf(out_file, "ST (%lf,%lf,0,%lf,%lf,0,%lf,%lf,0) {%lf,%lf,%lf};\n", 
                                V1x[i], V1y[i], V2x[i], V2y[i], V3x[i], V3y[i],
                                Uv1[i], Uv2[i], Uv3[i]);
     }
@@ -611,12 +611,6 @@ int test_timestep(int n, int alpha, int timesteps, double dt, FILE *mesh_file, F
     free(right_elem);
     free(left_side_number);
     free(right_side_number);
-
-    free(r1_local);
-    free(r2_local);
-    free(w_local);
-    free(s_r);
-    free(oned_w_local);
 
     free(error);
 
@@ -761,7 +755,7 @@ void run_timestep_tests() {
             printf("* u(x, y) = (x - y)^%i\n", alpha);
             printf("*************************\n");
             printf("    Testing canonical...\n");
-            dt = 0.0001;
+            dt = 0.001;
 
             char outfilename[100];
             for (n = alpha; n < 6; n++) {

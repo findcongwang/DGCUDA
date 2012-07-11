@@ -5,6 +5,8 @@
  * and    H = number of sides
  */
 
+#include "basis_eval.cu"
+
 
 #define PI 3.14159
 
@@ -173,24 +175,24 @@ __device__ double riemann(double u_left, double u_right) {
  *
  * returns the value of the intial condition at point x
  */
-__device__ double u0(double x, double y) {
-    return pow(x - y, 0);
+__device__ double u0(double x, double y, int alpha) {
+    return pow(x - y, alpha);
 }
 
 /* boundary exact
  *
  * returns the exact boundary conditions
  */
-__device__ double boundary_exact(double x, double y, double t) {
-    return u0(x, y);
+__device__ double boundary_exact(double x, double y, double t, int alpha) {
+    return u0(x, y, alpha);
 }
 
 /* u exact
  *
  * returns the exact value of u for error measurement.
  */
-__device__ double uexact(double x, double y, double t) {
-    return u0(x, y);
+__device__ double uexact(double x, double y, double t, int alpha) {
+    return u0(x, y, alpha);
 }
 
 /* initial conditions
@@ -202,7 +204,7 @@ __global__ void init_conditions(double *c, double *J,
                                 double *V1x, double *V1y,
                                 double *V2x, double *V2y,
                                 double *V3x, double *V3y,
-                                int n_quad, int n_p, int num_elem) {
+                                int n_quad, int n_p, int num_elem, int alpha) {
     int idx = blockDim.x * blockIdx.x + threadIdx.x;
     int i, j;
     double x, y, u;
@@ -218,7 +220,7 @@ __global__ void init_conditions(double *c, double *J,
                 y = r1[j] * V2y[idx] + r2[j] * V3y[idx] + (1 - r1[j] - r2[j]) * V1y[idx];
 
                 // evaluate u there
-                u += w[j] * u0(x, y) * basis[i * n_quad + j];
+                u += w[j] * u0(x, y, alpha) * basis[i * n_quad + j];
             }
             c[i * num_elem + idx] = u;
         } 
@@ -407,7 +409,7 @@ __device__ double eval_riemann(double *c_left, double *c_right,
                               int left_side, int right_side,
                               int left_idx, int right_idx,
                               int n_p, int n_quad1d,
-                              int num_sides, double t) {
+                              int num_sides, double t, int alpha) {
 
     double u_left, u_right;
     int i;
@@ -421,41 +423,40 @@ __device__ double eval_riemann(double *c_left, double *c_right,
 
     // make all threads in the first warps be boundary sides
     if (right_idx == -1) {
-        double r1, r2;
+        double r1_eval, r2_eval;
         double x, y;
 
         // we need the mapping back to the grid space
         switch (left_side) {
             case 0: 
-                r1 = 0.5 + 0.5 * r_oned[j];
-                r2 = 0.;
+                r1_eval = 0.5 + 0.5 * r_oned[j];
+                r2_eval = 0.;
                 break;
             case 1: 
-                r1 = (1. - r_oned[j]) / 2.;
-                r2 = (1. + r_oned[j]) / 2.;
+                r1_eval = (1. - r_oned[j]) / 2.;
+                r2_eval = (1. + r_oned[j]) / 2.;
                 break;
             case 2: 
-                r1 = 0.;
-                r2 = 0.5 + 0.5 * r_oned[n_quad1d - 1 - j];
+                r1_eval = 0.;
+                r2_eval = 0.5 + 0.5 * r_oned[n_quad1d - 1 - j];
                 break;
         }
 
         // x = x2 * r + x3 * s + x1 * (1 - r - s)
-        x = v2x * r1 + v3x * r2 + v1x * (1 - r1 - r2);
-        y = v2y * r1 + v3y * r2 + v1y * (1 - r1 - r2);
+        x = v2x * r1_eval + v3x * r2_eval + v1x * (1 - r1_eval - r2_eval);
+        y = v2y * r1_eval + v3y * r2_eval + v1y * (1 - r1_eval - r2_eval);
             
         // deal with the boundary element here
-        u_right = boundary_exact(x, y, t);
+        u_right = boundary_exact(x, y, t, alpha);
 
     } else {
         // evaluate the right side at the integration point
         for (i = 0; i < n_p; i++) {
-            u_right  += c_right[i] * basis_side[right_side * n_p * n_quad1d + i * n_quad1d + j];
+            u_right  += c_right[i] * basis_side[right_side * n_p * n_quad1d + i * n_quad1d + n_quad1d - 1 - j];
         }
     }
 
     return riemann(u_left, u_right);
-
 }
 
 /* surface integral evaluation
@@ -473,7 +474,7 @@ __device__ void eval_surface(double *c_left, double *c_right,
                              int left_side, int right_side, 
                              double nx, double ny, 
                              int n_quad1d, int n_p, int num_sides, 
-                             int num_elem, double t, int idx) {
+                             int num_elem, double t, int idx, int alpha) {
     int i, j;
     double s, left_sum, right_sum;
 
@@ -487,13 +488,13 @@ __device__ void eval_surface(double *c_left, double *c_right,
             s = eval_riemann(c_left, c_right,
                              v1x, v1y, v2x, v2y, v3x, v3y,
                              j, left_side, right_side, left_idx, right_idx,
-                             n_p, n_quad1d, num_sides, t);
+                             n_p, n_quad1d, num_sides, t, alpha);
 
             // calculate the quadrature over [-1,1] for these sides
-            left_sum  += (nx * flux_x(s) + ny * flux_y(s)) *
-                         w_oned[j] * basis_side[left_side * n_p * n_quad1d + i * n_quad1d + j];
-            right_sum += (nx * flux_x(s) + ny * flux_y(s)) *
-                         w_oned[j] * basis_side[right_side * n_p * n_quad1d + i * n_quad1d + n_quad1d - 1 - j];
+            left_sum  += (nx * flux_x(s) + ny * flux_y(s)) * w_oned[j] * 
+                         basis_side[left_side * n_p * n_quad1d + i * n_quad1d + j];
+            right_sum += (nx * flux_x(s) + ny * flux_y(s)) * w_oned[j] * 
+                         basis_side[right_side * n_p * n_quad1d + i * n_quad1d + n_quad1d - 1 - j];
         }
 
         // store this side's contribution in the riemann rhs vectors
@@ -552,7 +553,7 @@ __device__ void eval_error(double *c,
                        double v2x, double v2y,
                        double v3x, double v3y,
                        double *Uv1, double *Uv2, double *Uv3,
-                       int num_elem, int n_p, double t, int idx) {
+                       int num_elem, int n_p, double t, int idx, int alpha) {
 
     int i;
     double uv1, uv2, uv3;
@@ -568,9 +569,9 @@ __device__ void eval_error(double *c,
     }
 
     // store result
-    Uv1[idx] = uv1 - uexact(v1x, v1y, t);
-    Uv2[idx] = uv2 - uexact(v2x, v2y, t);
-    Uv3[idx] = uv3 - uexact(v3x, v3y, t);
+    Uv1[idx] = uv1 - uexact(v1x, v1y, t, alpha);
+    Uv2[idx] = uv2 - uexact(v2x, v2y, t, alpha);
+    Uv3[idx] = uv3 - uexact(v3x, v3y, t, alpha);
 }
 
 /* evaluate u

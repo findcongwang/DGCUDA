@@ -8,7 +8,7 @@ void eval_surface(double*, double*,
                    double, double,
                    int, int,
                    double, double,
-                   int, int, int, int, double);
+                   int, int, int, int, double, int, int);
 #endif
 
 /* eval surface wrapper (n = 0)
@@ -24,7 +24,7 @@ __global__ void eval_surface_wrapper0(double *c, double *left_riemann_rhs, doubl
                                       int *left_elem, int *right_elem,
                                       int *left_side_number, int *right_side_number, 
                                       double *Nx, double *Ny, 
-                                      int n_quad1d, int n_p, int num_sides, int num_elem, double t) {
+                                      int n_quad1d, int n_p, int num_sides, int num_elem, double t, int alpha) {
     int idx = blockDim.x * blockIdx.x + threadIdx.x;
 
     if (idx < num_sides) {
@@ -51,7 +51,7 @@ __global__ void eval_surface_wrapper0(double *c, double *left_riemann_rhs, doubl
                      left_elem[idx], right_elem[idx],
                      left_side_number[idx], right_side_number[idx],
                      Nx[idx], Ny[idx],
-                     n_quad1d, n_p, num_sides, num_elem, t, idx);
+                     n_quad1d, n_p, num_sides, num_elem, t, idx, alpha);
     }
 }
 
@@ -69,7 +69,7 @@ __global__ void eval_surface_wrapper1(double *c, double *left_riemann_rhs, doubl
                                       int *left_elem, int *right_elem,
                                       int *left_side_number, int *right_side_number, 
                                       double *Nx, double *Ny, 
-                                      int n_quad1d, int n_p, int num_sides, int num_elem, double t) {
+                                      int n_quad1d, int n_p, int num_sides, int num_elem, double t, int alpha) {
     int idx = blockDim.x * blockIdx.x + threadIdx.x;
 
     if (idx < num_sides) {
@@ -102,7 +102,7 @@ __global__ void eval_surface_wrapper1(double *c, double *left_riemann_rhs, doubl
                      left_elem[idx], right_elem[idx],
                      left_side_number[idx], right_side_number[idx],
                      Nx[idx], Ny[idx],
-                     n_quad1d, n_p, num_sides, num_elem, t, idx);
+                     n_quad1d, n_p, num_sides, num_elem, t, idx, alpha);
     }
 }
 
@@ -120,7 +120,7 @@ __global__ void eval_surface_wrapper2(double *c, double *left_riemann_rhs, doubl
                                       int *left_elem, int *right_elem,
                                       int *left_side_number, int *right_side_number, 
                                       double *Nx, double *Ny, 
-                                      int n_quad1d, int n_p, int num_sides, int num_elem, double t) {
+                                      int n_quad1d, int n_p, int num_sides, int num_elem, double t, int alpha) {
     int idx = blockDim.x * blockIdx.x + threadIdx.x;
 
     if (idx < num_sides) {
@@ -162,7 +162,7 @@ __global__ void eval_surface_wrapper2(double *c, double *left_riemann_rhs, doubl
                      left_elem[idx], right_elem[idx],
                      left_side_number[idx], right_side_number[idx],
                      Nx[idx], Ny[idx],
-                     n_quad1d, n_p, num_sides, num_elem, t, idx);
+                     n_quad1d, n_p, num_sides, num_elem, t, idx, alpha);
     }
 }
 
@@ -180,7 +180,7 @@ __global__ void eval_surface_wrapper3(double *c, double *left_riemann_rhs, doubl
                                       int *left_elem, int *right_elem,
                                       int *left_side_number, int *right_side_number, 
                                       double *Nx, double *Ny, 
-                                      int n_quad1d, int n_p, int num_sides, int num_elem, double t) {
+                                      int n_quad1d, int n_p, int num_sides, int num_elem, double t, int alpha) {
     int idx = blockDim.x * blockIdx.x + threadIdx.x;
 
     if (idx < num_sides) {
@@ -234,7 +234,7 @@ __global__ void eval_surface_wrapper3(double *c, double *left_riemann_rhs, doubl
                      left_elem[idx], right_elem[idx],
                      left_side_number[idx], right_side_number[idx],
                      Nx[idx], Ny[idx],
-                     n_quad1d, n_p, num_sides, num_elem, t, idx);
+                     n_quad1d, n_p, num_sides, num_elem, t, idx, alpha);
     }
 }
 
@@ -251,7 +251,7 @@ __global__ void eval_surface_wrapper4(double *c, double *left_riemann_rhs, doubl
                                       int *left_elem, int *right_elem,
                                       int *left_side_number, int *right_side_number, 
                                       double *Nx, double *Ny, 
-                                      int n_quad1d, int n_p, int num_sides, int num_elem, double t) {
+                                      int n_quad1d, int n_p, int num_sides, int num_elem, double t, int alpha) {
     int idx = blockDim.x * blockIdx.x + threadIdx.x;
 
     if (idx < num_sides) {
@@ -322,7 +322,7 @@ __global__ void eval_surface_wrapper4(double *c, double *left_riemann_rhs, doubl
                      left_elem[idx], right_elem[idx],
                      left_side_number[idx], right_side_number[idx],
                      Nx[idx], Ny[idx],
-                     n_quad1d, n_p, num_sides, num_elem, t, idx);
+                     n_quad1d, n_p, num_sides, num_elem, t, idx, alpha);
     }
 }
 
@@ -339,7 +339,7 @@ __global__ void eval_surface_wrapper5(double *c, double *left_riemann_rhs, doubl
                                       int *left_elem, int *right_elem,
                                       int *left_side_number, int *right_side_number, 
                                       double *Nx, double *Ny, 
-                                      int n_quad1d, int n_p, int num_sides, int num_elem, double t) {
+                                      int n_quad1d, int n_p, int num_sides, int num_elem, double t, int alpha) {
     int idx = blockDim.x * blockIdx.x + threadIdx.x;
 
     if (idx < num_sides) {
@@ -430,7 +430,7 @@ __global__ void eval_surface_wrapper5(double *c, double *left_riemann_rhs, doubl
                      left_elem[idx], right_elem[idx],
                      left_side_number[idx], right_side_number[idx],
                      Nx[idx], Ny[idx],
-                     n_quad1d, n_p, num_sides, num_elem, t, idx);
+                     n_quad1d, n_p, num_sides, num_elem, t, idx, alpha);
     }
 }
 
@@ -448,7 +448,7 @@ __global__ void eval_surface_wrapper6(double *c, double *left_riemann_rhs, doubl
                                       int *left_elem, int *right_elem,
                                       int *left_side_number, int *right_side_number, 
                                       double *Nx, double *Ny, 
-                                      int n_quad1d, int n_p, int num_sides, int num_elem, double t) {
+                                      int n_quad1d, int n_p, int num_sides, int num_elem, double t, int alpha) {
     int idx = blockDim.x * blockIdx.x + threadIdx.x;
 
     if (idx < num_sides) {
@@ -560,7 +560,7 @@ __global__ void eval_surface_wrapper6(double *c, double *left_riemann_rhs, doubl
                      left_elem[idx], right_elem[idx],
                      left_side_number[idx], right_side_number[idx],
                      Nx[idx], Ny[idx],
-                     n_quad1d, n_p, num_sides, num_elem, t, idx);
+                     n_quad1d, n_p, num_sides, num_elem, t, idx, alpha);
     }
 }
 
@@ -577,7 +577,7 @@ __global__ void eval_surface_wrapper7(double *c, double *left_riemann_rhs, doubl
                                       int *left_elem, int *right_elem,
                                       int *left_side_number, int *right_side_number, 
                                       double *Nx, double *Ny, 
-                                      int n_quad1d, int n_p, int num_sides, int num_elem, double t) {
+                                      int n_quad1d, int n_p, int num_sides, int num_elem, double t, int alpha) {
     int idx = blockDim.x * blockIdx.x + threadIdx.x;
 
     if (idx < num_sides) {
@@ -715,7 +715,7 @@ __global__ void eval_surface_wrapper7(double *c, double *left_riemann_rhs, doubl
                      left_elem[idx], right_elem[idx],
                      left_side_number[idx], right_side_number[idx],
                      Nx[idx], Ny[idx],
-                     n_quad1d, n_p, num_sides, num_elem, t, idx);
+                     n_quad1d, n_p, num_sides, num_elem, t, idx, alpha);
     }
 }
 
@@ -1317,7 +1317,7 @@ __global__ void eval_error_wrapper0(double *c,
                        double *V2x, double *V2y,
                        double *V3x, double *V3y,
                        double *Uv1, double *Uv2, double *Uv3,
-                       int num_elem, int n_p, double t) {
+                       int num_elem, int n_p, double t, int alpha) {
     int idx = blockDim.x * blockIdx.x + threadIdx.x;
 
     if (idx < num_elem) {
@@ -1328,7 +1328,7 @@ __global__ void eval_error_wrapper0(double *c,
 
         eval_error(r_c, V1x[idx], V1y[idx], V2x[idx], V2y[idx], V3x[idx], V3y[idx], 
                    Uv1, Uv2, Uv3,
-                   num_elem, n_p, t, idx);
+                   num_elem, n_p, t, idx, alpha);
     }
 }
 
@@ -1341,7 +1341,7 @@ __global__ void eval_error_wrapper1(double *c,
                        double *V2x, double *V2y,
                        double *V3x, double *V3y,
                        double *Uv1, double *Uv2, double *Uv3,
-                       int num_elem, int n_p, double t) {
+                       int num_elem, int n_p, double t, int alpha) {
     int idx = blockDim.x * blockIdx.x + threadIdx.x;
 
     if (idx < num_elem) {
@@ -1354,7 +1354,7 @@ __global__ void eval_error_wrapper1(double *c,
 
         eval_error(r_c, V1x[idx], V1y[idx], V2x[idx], V2y[idx], V3x[idx], V3y[idx], 
                    Uv1, Uv2, Uv3,
-                   num_elem, n_p, t, idx);
+                   num_elem, n_p, t, idx, alpha);
     }
 }
 
@@ -1367,7 +1367,7 @@ __global__ void eval_error_wrapper2(double *c,
                        double *V2x, double *V2y,
                        double *V3x, double *V3y,
                        double *Uv1, double *Uv2, double *Uv3,
-                       int num_elem, int n_p, double t) {
+                       int num_elem, int n_p, double t, int alpha) {
     int idx = blockDim.x * blockIdx.x + threadIdx.x;
 
     if (idx < num_elem) {
@@ -1383,7 +1383,7 @@ __global__ void eval_error_wrapper2(double *c,
 
         eval_error(r_c, V1x[idx], V1y[idx], V2x[idx], V2y[idx], V3x[idx], V3y[idx], 
                    Uv1, Uv2, Uv3,
-                   num_elem, n_p, t, idx);
+                   num_elem, n_p, t, idx, alpha);
          
     }
 }
@@ -1397,7 +1397,7 @@ __global__ void eval_error_wrapper3(double *c,
                        double *V2x, double *V2y,
                        double *V3x, double *V3y,
                        double *Uv1, double *Uv2, double *Uv3,
-                       int num_elem, int n_p, double t) {
+                       int num_elem, int n_p, double t, int alpha) {
     int idx = blockDim.x * blockIdx.x + threadIdx.x;
 
     if (idx < num_elem) {
@@ -1417,7 +1417,7 @@ __global__ void eval_error_wrapper3(double *c,
 
         eval_error(r_c, V1x[idx], V1y[idx], V2x[idx], V2y[idx], V3x[idx], V3y[idx], 
                    Uv1, Uv2, Uv3,
-                   num_elem, n_p, t, idx);
+                   num_elem, n_p, t, idx, alpha);
          
     }
 }
@@ -1432,7 +1432,7 @@ __global__ void eval_error_wrapper4(double *c,
                        double *V2x, double *V2y,
                        double *V3x, double *V3y,
                        double *Uv1, double *Uv2, double *Uv3,
-                       int num_elem, int n_p, double t) {
+                       int num_elem, int n_p, double t, int alpha) {
     int idx = blockDim.x * blockIdx.x + threadIdx.x;
 
     if (idx < num_elem) {
@@ -1458,7 +1458,7 @@ __global__ void eval_error_wrapper4(double *c,
 
         eval_error(r_c, V1x[idx], V1y[idx], V2x[idx], V2y[idx], V3x[idx], V3y[idx], 
                    Uv1, Uv2, Uv3,
-                   num_elem, n_p, t, idx);
+                   num_elem, n_p, t, idx, alpha);
     }
 }
 
@@ -1471,7 +1471,7 @@ __global__ void eval_error_wrapper5(double *c,
                        double *V2x, double *V2y,
                        double *V3x, double *V3y,
                        double *Uv1, double *Uv2, double *Uv3,
-                       int num_elem, int n_p, double t) {
+                       int num_elem, int n_p, double t, int alpha) {
     int idx = blockDim.x * blockIdx.x + threadIdx.x;
 
     if (idx < num_elem) {
@@ -1504,7 +1504,7 @@ __global__ void eval_error_wrapper5(double *c,
 
         eval_error(r_c, V1x[idx], V1y[idx], V2x[idx], V2y[idx], V3x[idx], V3y[idx], 
                    Uv1, Uv2, Uv3,
-                   num_elem, n_p, t, idx);
+                   num_elem, n_p, t, idx, alpha);
          
     }
 }
@@ -1518,7 +1518,7 @@ __global__ void eval_error_wrapper6(double *c,
                        double *V2x, double *V2y,
                        double *V3x, double *V3y,
                        double *Uv1, double *Uv2, double *Uv3,
-                       int num_elem, int n_p, double t) {
+                       int num_elem, int n_p, double t, int alpha) {
     int idx = blockDim.x * blockIdx.x + threadIdx.x;
 
     if (idx < num_elem) {
@@ -1558,7 +1558,7 @@ __global__ void eval_error_wrapper6(double *c,
 
         eval_error(r_c, V1x[idx], V1y[idx], V2x[idx], V2y[idx], V3x[idx], V3y[idx], 
                    Uv1, Uv2, Uv3,
-                   num_elem, n_p, t, idx);
+                   num_elem, n_p, t, idx, alpha);
     }
 }
 
@@ -1571,7 +1571,7 @@ __global__ void eval_error_wrapper7(double *c,
                        double *V2x, double *V2y,
                        double *V3x, double *V3y,
                        double *Uv1, double *Uv2, double *Uv3,
-                       int num_elem, int n_p, double t) {
+                       int num_elem, int n_p, double t, int alpha) {
     int idx = blockDim.x * blockIdx.x + threadIdx.x;
 
     if (idx < num_elem) {
@@ -1620,6 +1620,6 @@ __global__ void eval_error_wrapper7(double *c,
 
         eval_error(r_c, V1x[idx], V1y[idx], V2x[idx], V2y[idx], V3x[idx], V3y[idx], 
                    Uv1, Uv2, Uv3,
-                   num_elem, n_p, t, idx);
+                   num_elem, n_p, t, idx, alpha);
     }
 }

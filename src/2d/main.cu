@@ -4,7 +4,7 @@ int main(int argc, char *argv[]) {
     checkCudaError("error before start.");
     int num_elem, num_sides;
     int n_threads, n_blocks_elem, n_blocks_sides;
-    int i, n, n_p, timesteps, n_quad, n_quad1d;
+    int i, n, n_p, timesteps, n_quad, n_quad1d, alpha;
     int debug;
 
     double dt, t; 
@@ -34,16 +34,17 @@ int main(int argc, char *argv[]) {
                        double*, double*,
                        double*, double*,
                        double*, double*, double*, 
-                       int, int, double) = NULL;
+                       int, int, double, int) = NULL;
 
     // get input 
-    if (get_input(argc, argv, &n, &debug, &timesteps, &mesh_filename, &out_filename)) {
+    alpha = 0;
+    if (get_input(argc, argv, &n, &debug, &timesteps, &alpha, &mesh_filename, &out_filename)) {
         return 1;
     }
 
     // set the order of the approximation & timestep
     n_p = (n + 1) * (n + 2) / 2;
-    dt  = 0.01;
+    dt  = 0.001;
 
     // open the mesh to get num_elem for allocations
     mesh_file = fopen(mesh_filename, "r");
@@ -140,10 +141,11 @@ int main(int argc, char *argv[]) {
 
     // evaluate the basis functions at those points and store on GPU
     preval_basis(r1_local, r2_local, s_r, w_local, oned_w_local, n_quad, n_quad1d, n_p);
+    cudaThreadSynchronize();
 
     // initial conditions
     init_conditions<<<n_blocks_elem, n_threads>>>(d_c, d_J, d_V1x, d_V1y, d_V2x, d_V2y, d_V3x, d_V3y,
-                    n_quad, n_p, num_elem);
+                    n_quad, n_p, num_elem, alpha);
     checkCudaError("error after initial conditions.");
 
     printf("Computing...\n");
@@ -182,7 +184,7 @@ int main(int argc, char *argv[]) {
     for (i = 0; i < timesteps; i++) {
         // time integration
         t = i * dt;
-        time_integrate_rk4(dt, n_quad, n_quad1d, n_p, n, num_elem, num_sides, debug, t);
+        time_integrate_rk4(dt, n_quad, n_quad1d, n_p, n, num_elem, num_sides, debug, t, alpha);
     }
 
     if (debug) {
@@ -231,11 +233,12 @@ int main(int argc, char *argv[]) {
                 break;
     }
 
-    eval_error_ftn<<<n_blocks_elem, n_threads>>>(d_c, 
-                                                 d_V1x, d_V1y,
-                                                 d_V2x, d_V2y,
-                                                 d_V3x, d_V3y,
-                                                 d_Uv1, d_Uv2, d_Uv3, num_elem, n_p, t * dt);
+    //eval_error_ftn<<<n_blocks_elem, n_threads>>>(d_c, 
+                                                 //d_V1x, d_V1y,
+                                                 //d_V2x, d_V2y,
+                                                 //d_V3x, d_V3y,
+                                                 //d_Uv1, d_Uv2, d_Uv3, num_elem, n_p, t * dt);
+    eval_u_ftn<<<n_blocks_elem, n_threads>>>(d_c, d_Uv1, d_Uv2, d_Uv3, num_elem, n_p);
     cudaThreadSynchronize();
     cudaMemcpy(Uv1, d_Uv1, num_elem * sizeof(double), cudaMemcpyDeviceToHost);
     cudaMemcpy(Uv2, d_Uv2, num_elem * sizeof(double), cudaMemcpyDeviceToHost);
@@ -281,12 +284,6 @@ int main(int argc, char *argv[]) {
     free(right_elem);
     free(left_side_number);
     free(right_side_number);
-
-    free(r1_local);
-    free(r2_local);
-    free(w_local);
-    free(s_r);
-    free(oned_w_local);
 
     return 0;
 }

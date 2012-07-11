@@ -74,8 +74,8 @@ void set_quadrature(int n,
                 //break;
     }
     // allocate integration points
-    *r1_local = (double *) malloc(*n_quad * sizeof(double));
-    *r2_local = (double *) malloc(*n_quad * sizeof(double));
+    *r1_local = (double *)  malloc(*n_quad * sizeof(double));
+    *r2_local = (double *)  malloc(*n_quad * sizeof(double));
     *w_local  =  (double *) malloc(*n_quad * sizeof(double));
 
     *s_r = (double *) malloc(*n_quad1d * sizeof(double));
@@ -255,7 +255,7 @@ void read_mesh(FILE *mesh_file,
 }
 
 void time_integrate_rk4(double dt, int n_quad, int n_quad1d, int n_p, int n, 
-                    int num_elem, int num_sides, int debug, double t) {
+                    int num_elem, int num_sides, int debug, double t, int alpha) {
     int n_threads = 128;
 
     int n_blocks_elem    = (num_elem  / n_threads) + ((num_elem  % n_threads) ? 1 : 0);
@@ -270,7 +270,7 @@ void time_integrate_rk4(double dt, int n_quad, int n_quad1d, int n_p, int n,
                          int*, int*,
                          int*, int*,
                          double*, double*,
-                         int, int, int, int, double) = NULL;
+                         int, int, int, int, double, int) = NULL;
     void (*eval_volume_ftn)(double*, double*, 
                         double*, double*, 
                         double*, double*,
@@ -318,7 +318,7 @@ void time_integrate_rk4(double dt, int n_quad, int n_quad1d, int n_p, int n,
                      d_left_elem, d_right_elem,
                      d_left_side_number, d_right_side_number,
                      d_Nx, d_Ny, 
-                     n_quad1d, n_p, num_sides, num_elem, t);
+                     n_quad1d, n_p, num_sides, num_elem, t, alpha);
     cudaThreadSynchronize();
 
     if (debug) {
@@ -396,7 +396,7 @@ void time_integrate_rk4(double dt, int n_quad, int n_quad1d, int n_p, int n,
                      d_left_elem, d_right_elem,
                      d_left_side_number, d_right_side_number,
                      d_Nx, d_Ny, 
-                     n_quad1d, n_p, num_sides, num_elem, t);
+                     n_quad1d, n_p, num_sides, num_elem, t, alpha);
     cudaThreadSynchronize();
 
     eval_volume_ftn<<<n_blocks_elem, n_threads>>>
@@ -425,7 +425,7 @@ void time_integrate_rk4(double dt, int n_quad, int n_quad1d, int n_p, int n,
                      d_left_elem, d_right_elem,
                      d_left_side_number, d_right_side_number,
                      d_Nx, d_Ny, 
-                     n_quad1d, n_p, num_sides, num_elem, t);
+                     n_quad1d, n_p, num_sides, num_elem, t, alpha);
     cudaThreadSynchronize();
 
     eval_volume_ftn<<<n_blocks_elem, n_threads>>>
@@ -454,7 +454,7 @@ void time_integrate_rk4(double dt, int n_quad, int n_quad1d, int n_p, int n,
                      d_left_elem, d_right_elem,
                      d_left_side_number, d_right_side_number,
                      d_Nx, d_Ny, 
-                     n_quad1d, n_p, num_sides, num_elem, t);
+                     n_quad1d, n_p, num_sides, num_elem, t, alpha);
     cudaThreadSynchronize();
 
     eval_volume_ftn<<<n_blocks_elem, n_threads>>>
@@ -489,8 +489,6 @@ void init_gpu(int num_elem, int num_sides, int n_p,
     checkCudaError("error before init.");
     cudaDeviceReset();
 
-    // allocate allllllllllll the memory.
-    // TODO: this takes a really really long time on valor.
     cudaMalloc((void **) &d_c,        num_elem * n_p * sizeof(double));
     cudaMalloc((void **) &d_quad_rhs, num_elem * n_p * sizeof(double));
     cudaMalloc((void **) &d_left_riemann_rhs,  num_sides * n_p * sizeof(double));
@@ -626,7 +624,7 @@ void usage_error() {
 }
 
 int get_input(int argc, char *argv[],
-               int *n, int *debug, int *timesteps,
+               int *n, int *debug, int *timesteps, int *alpha,
                char **mesh_filename, char **out_filename) {
 
     int i;
@@ -666,6 +664,18 @@ int get_input(int argc, char *argv[],
         }
         if (strcmp(argv[i], "-d") == 0) {
             *debug = 1;
+        }
+        if (strcmp(argv[i], "-a") == 0) {
+            if (i + 1 < argc) {
+                *alpha = atoi(argv[i+1]);
+                if (*alpha < 0) {
+                    usage_error();
+                    return 1;
+                }
+            } else {
+                usage_error();
+                return 1;
+            }
         }
     } 
 
