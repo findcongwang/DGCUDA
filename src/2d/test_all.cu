@@ -4,7 +4,7 @@
 #include "2dadvec.cu"
 
 #define TOL 1E-5
-#define MAX_ALPHA 2
+#define MAX_ALPHA 3
 
 __device__ double *d_error;
 
@@ -126,7 +126,7 @@ __global__ void eval_rhs_fe(double *c, double *quad_rhs, double *left_riemann_rh
 
 // forward eulers
 void time_integrate_fe(double dt, int n_quad, int n_quad1d, int n_p, int n, 
-              int num_elem, int num_sides, double t) {
+              int num_elem, int num_sides, double t, int alpha) {
     int n_threads = 128;
 
     int n_blocks_elem    = (num_elem  / n_threads) + ((num_elem  % n_threads) ? 1 : 0);
@@ -140,7 +140,7 @@ void time_integrate_fe(double dt, int n_quad, int n_quad1d, int n_p, int n,
                          int*, int*,
                          int*, int*,
                          double*, double*,
-                         int, int, int, int, double) = NULL;
+                         int, int, int, int, double, int) = NULL;
     void (*eval_volume_ftn)(double*, double*, 
                         double*, double*, 
                         double*, double*,
@@ -186,7 +186,7 @@ void time_integrate_fe(double dt, int n_quad, int n_quad1d, int n_p, int n,
                      d_left_elem, d_right_elem,
                      d_left_side_number, d_right_side_number,
                      d_Nx, d_Ny, 
-                     n_quad1d, n_p, num_sides, num_elem, t);
+                     n_quad1d, n_p, num_sides, num_elem, t, alpha);
     cudaThreadSynchronize();
 
     checkCudaError("error after eval_surface_ftn");
@@ -525,7 +525,7 @@ int test_timestep(int n, int alpha, int timesteps, double dt, FILE *mesh_file, F
 
     for (i = 0; i < timesteps; i++) {
         t = i * dt;
-        time_integrate_rk4(dt, n_quad, n_quad1d, n_p, n, num_elem, num_sides, 0, t);
+        time_integrate_rk4(dt, n_quad, n_quad1d, n_p, n, num_elem, num_sides, 0, t, alpha);
     }
 
     // evaluate at the vertex points and copy over data
