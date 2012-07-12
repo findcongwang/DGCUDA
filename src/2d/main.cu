@@ -186,11 +186,8 @@ int main(int argc, char *argv[]) {
     checkCudaError("error before time integration.");
     fprintf(out_file, "View \"Exported field \" {\n");
 
-    for (i = 0; i < timesteps; i++) {
-        // time integration
-        t = i * dt;
-        time_integrate_rk4(dt, n_quad, n_quad1d, n_p, n, num_elem, num_sides, debug, t, alpha);
-    }
+    time_integrate_rk4(dt, n_quad, n_quad1d, n_p, n, num_elem, num_sides, debug, alpha, timesteps);
+    t = timesteps * dt;
 
     if (debug) {
         double *c = (double *) malloc(num_elem * n_p * sizeof(double));

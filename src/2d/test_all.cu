@@ -80,129 +80,6 @@ __global__ void eval_error_alpha(double *c,
     }
 }
 
-__global__ void eval_rhs_fe(double *c, double *quad_rhs, double *left_riemann_rhs, double *right_riemann_rhs, 
-                         int *elem_s1, int *elem_s2, int *elem_s3,
-                         int *left_elem, double *J, 
-                         double dt, int n_p, int num_sides, int num_elem) {
-    int idx = blockDim.x * blockIdx.x + threadIdx.x;
-    double s1, s2, s3, register_J;
-    int i, s1_idx, s2_idx, s3_idx;
-
-    if (idx < num_elem) {
-
-        register_J = J[idx];
-
-        // get the indicies for the riemann contributions for this element
-        s1_idx = elem_s1[idx];
-        s2_idx = elem_s2[idx];
-        s3_idx = elem_s3[idx];
-
-        for (i = 0; i < n_p; i++) {
-
-            // determine left or right pointing
-            if (idx == left_elem[s1_idx]) {
-                s1 = left_riemann_rhs[i * num_sides + s1_idx];
-            } else {
-                s1 = right_riemann_rhs[i * num_sides + s1_idx];
-            }
-
-            if (idx == left_elem[s2_idx]) {
-                s2 = left_riemann_rhs[i * num_sides + s2_idx];
-            } else {
-                s2 = right_riemann_rhs[i * num_sides + s2_idx];
-            }
-
-            if (idx == left_elem[s3_idx]) {
-                s3 = left_riemann_rhs[i * num_sides + s3_idx];
-            } else {
-                s3 = right_riemann_rhs[i * num_sides + s3_idx];
-            }
-
-            // calculate the coefficient c
-            c[i * num_elem + idx] += 1. / register_J * dt * (quad_rhs[i * num_elem + idx] + s1 + s2 + s3);
-        }
-    }
-}
-
-// forward eulers
-void time_integrate_fe(double dt, int n_quad, int n_quad1d, int n_p, int n, 
-              int num_elem, int num_sides, double t, int alpha) {
-    int n_threads = 128;
-
-    int n_blocks_elem    = (num_elem  / n_threads) + ((num_elem  % n_threads) ? 1 : 0);
-    int n_blocks_sides   = (num_sides / n_threads) + ((num_sides % n_threads) ? 1 : 0);
-
-    void (*eval_surface_ftn)(double*, double*, double*, 
-                         double*,
-                         double*, double*,
-                         double*, double*,
-                         double*, double*,
-                         int*, int*,
-                         int*, int*,
-                         double*, double*,
-                         int, int, int, int, double, int) = NULL;
-    void (*eval_volume_ftn)(double*, double*, 
-                        double*, double*, 
-                        double*, double*,
-                        int, int, int) = NULL;
-    switch (n) {
-        case 0: eval_surface_ftn = eval_surface_wrapper0;
-                eval_volume_ftn  = eval_volume_wrapper0;
-                break;
-        case 1: eval_surface_ftn = eval_surface_wrapper1;
-                eval_volume_ftn  = eval_volume_wrapper1;
-                break;
-        case 2: eval_surface_ftn = eval_surface_wrapper2;
-                eval_volume_ftn  = eval_volume_wrapper2;
-                break;
-        case 3: eval_surface_ftn = eval_surface_wrapper3;
-                eval_volume_ftn  = eval_volume_wrapper3;
-                break;
-        case 4: eval_surface_ftn = eval_surface_wrapper4;
-                eval_volume_ftn  = eval_volume_wrapper4;
-                break;
-        case 5: eval_surface_ftn = eval_surface_wrapper5;
-                eval_volume_ftn  = eval_volume_wrapper5;
-                break;
-        case 6: eval_surface_ftn = eval_surface_wrapper6;
-                eval_volume_ftn  = eval_volume_wrapper6;
-                break;
-        case 7: eval_surface_ftn = eval_surface_wrapper7;
-                eval_volume_ftn  = eval_volume_wrapper7;
-                break;
-    }
- 
-    if ((eval_surface_ftn == NULL) || (eval_volume_ftn == NULL)) {
-        printf("ERROR: dispatched kernel functions were NULL.\n");
-        exit(0);
-    }
-
-    eval_surface_ftn<<<n_blocks_sides, n_threads>>>
-                    (d_c, d_left_riemann_rhs, d_right_riemann_rhs, 
-                     d_s_length, 
-                     d_V1x, d_V1y,
-                     d_V2x, d_V2y,
-                     d_V3x, d_V3y,
-                     d_left_elem, d_right_elem,
-                     d_left_side_number, d_right_side_number,
-                     d_Nx, d_Ny, 
-                     n_quad1d, n_p, num_sides, num_elem, t, alpha);
-    cudaThreadSynchronize();
-
-    checkCudaError("error after eval_surface_ftn");
-
-    eval_volume_ftn<<<n_blocks_elem, n_threads>>>
-                    (d_c, d_quad_rhs, 
-                     d_xr, d_yr, d_xs, d_ys,
-                     n_quad, n_p, num_elem);
-    cudaThreadSynchronize();
-
-    eval_rhs_fe<<<n_blocks_elem, n_threads>>>(d_c, d_quad_rhs, d_left_riemann_rhs, d_right_riemann_rhs, 
-                                          d_elem_s1, d_elem_s2, d_elem_s3, 
-                                          d_left_elem, d_J, dt, n_p, num_sides, num_elem);
-    cudaThreadSynchronize();
-}
-
 int test_initial_projection(int n, int alpha, FILE *mesh_file, FILE *out_file) {
     checkCudaError("error before start.");
     int num_elem, num_sides;
@@ -523,10 +400,8 @@ int test_timestep(int n, int alpha, int timesteps, double dt, FILE *mesh_file, F
 
     fprintf(out_file, "View \"Exported field \" {\n");
 
-    for (i = 0; i < timesteps; i++) {
-        t = i * dt;
-        time_integrate_rk4(dt, n_quad, n_quad1d, n_p, n, num_elem, num_sides, 0, t, alpha);
-    }
+    time_integrate_rk4(dt, n_quad, n_quad1d, n_p, n, num_elem, num_sides, 0, alpha, timesteps);
+    t = timesteps * dt;
 
     // evaluate at the vertex points and copy over data
     Uv1 = (double *) malloc(num_elem * sizeof(double));
