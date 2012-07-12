@@ -742,7 +742,7 @@ void run_timestep_tests() {
     double dt;
     FILE *mesh, *out;
 
-    for (timesteps = 1; timesteps < 10; timesteps *= 10) {
+    for (timesteps = 1; timesteps < 1000; timesteps *= 10) {
         printf("*************************\n");
         printf("* TIMESTEPS : %i\n", timesteps);
         printf("*************************\n");
