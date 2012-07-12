@@ -139,6 +139,11 @@ int main(int argc, char *argv[]) {
     set_quadrature(n, &r1_local, &r2_local, &w_local, 
                    &s_r, &oned_w_local, &n_quad, &n_quad1d);
 
+    printf(" ? 2d quadrature rules:\n");
+    for (i = 0; i < n_quad; i++) {
+        printf("     > (%lf, %lf) - %lf \n", r1_local[i], r2_local[i], w_local[i]);
+    }
+
     // evaluate the basis functions at those points and store on GPU
     preval_basis(r1_local, r2_local, s_r, w_local, oned_w_local, n_quad, n_quad1d, n_p);
     cudaThreadSynchronize();
@@ -284,6 +289,13 @@ int main(int argc, char *argv[]) {
     free(right_elem);
     free(left_side_number);
     free(right_side_number);
+
+    free(r1_local);
+    free(r2_local);
+    free(w_local);
+    free(s_r);
+    free(oned_w_local);
+
 
     return 0;
 }

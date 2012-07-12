@@ -223,11 +223,4 @@ void preval_basis(double *r1_local, double *r2_local, double *s_r, double *w_loc
     free(basis_grad_y_local);
     free(basis_side_local);
     free(basis_vertex_local);
-
-    free(r1_local);
-    free(r2_local);
-    free(w_local);
-    free(s_r);
-    free(w_oned_local);
-
 }
