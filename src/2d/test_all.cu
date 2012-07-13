@@ -6,7 +6,7 @@
 #define TOL 1E-5
 #define MAX_ALPHA 3
 
-__device__ double *d_error;
+__device__ float *d_error;
 
 /* test_all.cu
  * 
@@ -18,14 +18,14 @@ __device__ double *d_error;
  * find the initial projection for (x - y)^alpha
  * THREADS: num_elem
  */
-__global__ void init_conditions_alpha(double *c, double *J,
-                                double *V1x, double *V1y,
-                                double *V2x, double *V2y,
-                                double *V3x, double *V3y,
+__global__ void init_conditions_alpha(float *c, float *J,
+                                float *V1x, float *V1y,
+                                float *V2x, float *V2y,
+                                float *V3x, float *V3y,
                                 int n_quad, int n_p, int num_elem, int alpha) {
     int idx = blockDim.x * blockIdx.x + threadIdx.x;
     int i, j;
-    double x, y, u;
+    float x, y, u;
 
     if (idx < num_elem) {
         for (i = 0; i < n_p; i++) {
@@ -50,18 +50,18 @@ __global__ void init_conditions_alpha(double *c, double *J,
  * evaluates u at the three vertex points for output
  * THREADS: num_elem
  */
-__global__ void eval_error_alpha(double *c, 
-                       double *V1x, double *V1y,
-                       double *V2x, double *V2y,
-                       double *V3x, double *V3y,
-                       double *error, 
-                       int num_elem, int n_p, int n_quad, double alpha) {
+__global__ void eval_error_alpha(float *c, 
+                       float *V1x, float *V1y,
+                       float *V2x, float *V2y,
+                       float *V3x, float *V3y,
+                       float *error, 
+                       int num_elem, int n_p, int n_quad, float alpha) {
 
     int idx = blockIdx.x * blockDim.x + threadIdx.x;
     if (idx < num_elem) {
         int i, j;
-        double u, sum;
-        double x, y;
+        float u, sum;
+        float x, y;
 
         sum = 0.;
         for (j = 0; j < n_quad; j++) {
@@ -86,14 +86,14 @@ int test_initial_projection(int n, int alpha, FILE *mesh_file, FILE *out_file) {
     int n_threads, n_blocks_elem;
     int i, n_p, n_quad, n_quad1d;
 
-    double total_error; 
-    double *V1x, *V1y, *V2x, *V2y, *V3x, *V3y;
-    double *sides_x1, *sides_x2;
-    double *sides_y1, *sides_y2;
+    float total_error; 
+    float *V1x, *V1y, *V2x, *V2y, *V3x, *V3y;
+    float *sides_x1, *sides_x2;
+    float *sides_y1, *sides_y2;
 
-    double *r1_local, *r2_local, *w_local;
+    float *r1_local, *r2_local, *w_local;
 
-    double *s_r, *oned_w_local;
+    float *s_r, *oned_w_local;
 
     int *left_elem, *right_elem;
     int *elem_s1, *elem_s2, *elem_s3;
@@ -101,10 +101,10 @@ int test_initial_projection(int n, int alpha, FILE *mesh_file, FILE *out_file) {
 
     char line[100];
 
-    double *error;
-    double *Uv1, *Uv2, *Uv3;
+    float *error;
+    float *Uv1, *Uv2, *Uv3;
 
-    void (*eval_u_ftn)(double*, double*, double*, double*, int, int) = NULL;
+    void (*eval_u_ftn)(float*, float*, float*, float*, int, int) = NULL;
 
     // set the order of the approximation & timestep
     n_p = (n + 1) * (n + 2) / 2;
@@ -114,12 +114,12 @@ int test_initial_projection(int n, int alpha, FILE *mesh_file, FILE *out_file) {
     sscanf(line, "%i", &num_elem);
 
     // allocate vertex points
-    V1x = (double *) malloc(num_elem * sizeof(double));
-    V1y = (double *) malloc(num_elem * sizeof(double));
-    V2x = (double *) malloc(num_elem * sizeof(double));
-    V2y = (double *) malloc(num_elem * sizeof(double));
-    V3x = (double *) malloc(num_elem * sizeof(double));
-    V3y = (double *) malloc(num_elem * sizeof(double));
+    V1x = (float *) malloc(num_elem * sizeof(float));
+    V1y = (float *) malloc(num_elem * sizeof(float));
+    V2x = (float *) malloc(num_elem * sizeof(float));
+    V2y = (float *) malloc(num_elem * sizeof(float));
+    V3x = (float *) malloc(num_elem * sizeof(float));
+    V3y = (float *) malloc(num_elem * sizeof(float));
 
     elem_s1 = (int *) malloc(num_elem * sizeof(int));
     elem_s2 = (int *) malloc(num_elem * sizeof(int));
@@ -129,10 +129,10 @@ int test_initial_projection(int n, int alpha, FILE *mesh_file, FILE *out_file) {
     left_side_number  = (int *)   malloc(3*num_elem * sizeof(int));
     right_side_number = (int *)   malloc(3*num_elem * sizeof(int));
 
-    sides_x1    = (double *) malloc(3*num_elem * sizeof(double));
-    sides_x2    = (double *) malloc(3*num_elem * sizeof(double));
-    sides_y1    = (double *) malloc(3*num_elem * sizeof(double));
-    sides_y2    = (double *) malloc(3*num_elem * sizeof(double)); 
+    sides_x1    = (float *) malloc(3*num_elem * sizeof(float));
+    sides_x2    = (float *) malloc(3*num_elem * sizeof(float));
+    sides_y1    = (float *) malloc(3*num_elem * sizeof(float));
+    sides_y2    = (float *) malloc(3*num_elem * sizeof(float)); 
     left_elem   = (int *) malloc(3*num_elem * sizeof(int));
     right_elem  = (int *) malloc(3*num_elem * sizeof(int));
 
@@ -177,7 +177,7 @@ int test_initial_projection(int n, int alpha, FILE *mesh_file, FILE *out_file) {
     checkCudaError("error after initial conditions.");
 
     cudaThreadSynchronize();
-    cudaMalloc((void **) &d_error, num_elem * sizeof(double));
+    cudaMalloc((void **) &d_error, num_elem * sizeof(float));
     eval_error_alpha<<<n_blocks_elem, n_threads>>>(d_c, d_V1x, d_V1y, 
                                                    d_V2x, d_V2y, d_V3x, d_V3y,
                                                    d_error, num_elem, n_p, n_quad, alpha);
@@ -202,17 +202,17 @@ int test_initial_projection(int n, int alpha, FILE *mesh_file, FILE *out_file) {
     }
 
     // evaluate at the vertex points and copy over data
-    Uv1 = (double *) malloc(num_elem * sizeof(double));
-    Uv2 = (double *) malloc(num_elem * sizeof(double));
-    Uv3 = (double *) malloc(num_elem * sizeof(double));
+    Uv1 = (float *) malloc(num_elem * sizeof(float));
+    Uv2 = (float *) malloc(num_elem * sizeof(float));
+    Uv3 = (float *) malloc(num_elem * sizeof(float));
     eval_u_ftn<<<n_blocks_elem, n_threads>>>(d_c, d_Uv1, d_Uv2, d_Uv3, num_elem, n_p);
-    cudaMemcpy(Uv1, d_Uv1, num_elem * sizeof(double), cudaMemcpyDeviceToHost);
-    cudaMemcpy(Uv2, d_Uv2, num_elem * sizeof(double), cudaMemcpyDeviceToHost);
-    cudaMemcpy(Uv3, d_Uv3, num_elem * sizeof(double), cudaMemcpyDeviceToHost);
+    cudaMemcpy(Uv1, d_Uv1, num_elem * sizeof(float), cudaMemcpyDeviceToHost);
+    cudaMemcpy(Uv2, d_Uv2, num_elem * sizeof(float), cudaMemcpyDeviceToHost);
+    cudaMemcpy(Uv3, d_Uv3, num_elem * sizeof(float), cudaMemcpyDeviceToHost);
 
     // get the L1 error
-    error = (double *) malloc(num_elem * sizeof(double));
-    cudaMemcpy(error, d_error, num_elem * sizeof(double), cudaMemcpyDeviceToHost);
+    error = (float *) malloc(num_elem * sizeof(float));
+    cudaMemcpy(error, d_error, num_elem * sizeof(float), cudaMemcpyDeviceToHost);
 
     // get the total L1 error
     total_error = 0.;
@@ -272,19 +272,19 @@ int test_initial_projection(int n, int alpha, FILE *mesh_file, FILE *out_file) {
     }
 }
 
-int test_timestep(int n, int alpha, int timesteps, double dt, FILE *mesh_file, FILE *out_file) {
+int test_timestep(int n, int alpha, int timesteps, float dt, FILE *mesh_file, FILE *out_file) {
     checkCudaError("error before start.");
     int num_elem, num_sides;
     int n_threads, n_blocks_elem, n_blocks_sides;
     int i, n_p, t, n_quad, n_quad1d;
 
-    double *V1x, *V1y, *V2x, *V2y, *V3x, *V3y;
-    double *sides_x1, *sides_x2;
-    double *sides_y1, *sides_y2;
+    float *V1x, *V1y, *V2x, *V2y, *V3x, *V3y;
+    float *sides_x1, *sides_x2;
+    float *sides_y1, *sides_y2;
 
-    double *r1_local, *r2_local, *w_local;
+    float *r1_local, *r2_local, *w_local;
 
-    double *s_r, *oned_w_local;
+    float *s_r, *oned_w_local;
 
     int *left_elem, *right_elem;
     int *elem_s1, *elem_s2, *elem_s3;
@@ -292,11 +292,11 @@ int test_timestep(int n, int alpha, int timesteps, double dt, FILE *mesh_file, F
 
     char line[100];
 
-    double total_error;
-    double *error;
-    double *Uv1, *Uv2, *Uv3;
+    float total_error;
+    float *error;
+    float *Uv1, *Uv2, *Uv3;
 
-    void (*eval_u_ftn)(double*, double*, double*, double*, int, int) = NULL;
+    void (*eval_u_ftn)(float*, float*, float*, float*, int, int) = NULL;
 
     // set the order of the approximation & timestep
     n_p = (n + 1) * (n + 2) / 2;
@@ -310,12 +310,12 @@ int test_timestep(int n, int alpha, int timesteps, double dt, FILE *mesh_file, F
     sscanf(line, "%i", &num_elem);
 
     // allocate vertex points
-    V1x = (double *) malloc(num_elem * sizeof(double));
-    V1y = (double *) malloc(num_elem * sizeof(double));
-    V2x = (double *) malloc(num_elem * sizeof(double));
-    V2y = (double *) malloc(num_elem * sizeof(double));
-    V3x = (double *) malloc(num_elem * sizeof(double));
-    V3y = (double *) malloc(num_elem * sizeof(double));
+    V1x = (float *) malloc(num_elem * sizeof(float));
+    V1y = (float *) malloc(num_elem * sizeof(float));
+    V2x = (float *) malloc(num_elem * sizeof(float));
+    V2y = (float *) malloc(num_elem * sizeof(float));
+    V3x = (float *) malloc(num_elem * sizeof(float));
+    V3y = (float *) malloc(num_elem * sizeof(float));
 
     elem_s1 = (int *) malloc(num_elem * sizeof(int));
     elem_s2 = (int *) malloc(num_elem * sizeof(int));
@@ -325,10 +325,10 @@ int test_timestep(int n, int alpha, int timesteps, double dt, FILE *mesh_file, F
     left_side_number  = (int *)   malloc(3*num_elem * sizeof(int));
     right_side_number = (int *)   malloc(3*num_elem * sizeof(int));
 
-    sides_x1    = (double *) malloc(3*num_elem * sizeof(double));
-    sides_x2    = (double *) malloc(3*num_elem * sizeof(double));
-    sides_y1    = (double *) malloc(3*num_elem * sizeof(double));
-    sides_y2    = (double *) malloc(3*num_elem * sizeof(double)); 
+    sides_x1    = (float *) malloc(3*num_elem * sizeof(float));
+    sides_x2    = (float *) malloc(3*num_elem * sizeof(float));
+    sides_y1    = (float *) malloc(3*num_elem * sizeof(float));
+    sides_y2    = (float *) malloc(3*num_elem * sizeof(float)); 
     left_elem   = (int *) malloc(3*num_elem * sizeof(int));
     right_elem  = (int *) malloc(3*num_elem * sizeof(int));
 
@@ -404,9 +404,9 @@ int test_timestep(int n, int alpha, int timesteps, double dt, FILE *mesh_file, F
     t = timesteps * dt;
 
     // evaluate at the vertex points and copy over data
-    Uv1 = (double *) malloc(num_elem * sizeof(double));
-    Uv2 = (double *) malloc(num_elem * sizeof(double));
-    Uv3 = (double *) malloc(num_elem * sizeof(double));
+    Uv1 = (float *) malloc(num_elem * sizeof(float));
+    Uv2 = (float *) malloc(num_elem * sizeof(float));
+    Uv3 = (float *) malloc(num_elem * sizeof(float));
 
     switch (n) {
         case 0: eval_u_ftn = eval_u_wrapper0;
@@ -428,13 +428,13 @@ int test_timestep(int n, int alpha, int timesteps, double dt, FILE *mesh_file, F
     }
 
     // get the L1 error
-    error = (double *) malloc(num_elem * sizeof(double));
-    cudaMalloc((void **) &d_error, num_elem * sizeof(double));
+    error = (float *) malloc(num_elem * sizeof(float));
+    cudaMalloc((void **) &d_error, num_elem * sizeof(float));
     eval_error_alpha<<<n_blocks_elem, n_threads>>>(d_c, d_V1x, d_V1y, 
                                                    d_V2x, d_V2y, d_V3x, d_V3y,
                                                    d_error, num_elem, n_p, n_quad, alpha);
 
-    cudaMemcpy(error, d_error, num_elem * sizeof(double), cudaMemcpyDeviceToHost);
+    cudaMemcpy(error, d_error, num_elem * sizeof(float), cudaMemcpyDeviceToHost);
 
     // get the total L1 error
     total_error = 0.;
@@ -445,9 +445,9 @@ int test_timestep(int n, int alpha, int timesteps, double dt, FILE *mesh_file, F
  
     eval_u_ftn<<<n_blocks_elem, n_threads>>>(d_c, d_Uv1, d_Uv2, d_Uv3, num_elem, n_p);
     cudaThreadSynchronize();
-    cudaMemcpy(Uv1, d_Uv1, num_elem * sizeof(double), cudaMemcpyDeviceToHost);
-    cudaMemcpy(Uv2, d_Uv2, num_elem * sizeof(double), cudaMemcpyDeviceToHost);
-    cudaMemcpy(Uv3, d_Uv3, num_elem * sizeof(double), cudaMemcpyDeviceToHost);
+    cudaMemcpy(Uv1, d_Uv1, num_elem * sizeof(float), cudaMemcpyDeviceToHost);
+    cudaMemcpy(Uv2, d_Uv2, num_elem * sizeof(float), cudaMemcpyDeviceToHost);
+    cudaMemcpy(Uv3, d_Uv3, num_elem * sizeof(float), cudaMemcpyDeviceToHost);
 
     // write data to file
     // TODO: this will output multiple vertices values. does gmsh care? i dunno...
@@ -614,7 +614,7 @@ void run_initial_projection_tests() {
 
 void run_timestep_tests() {
     int alpha, n, timesteps;
-    double dt;
+    float dt;
     FILE *mesh, *out;
 
     for (timesteps = 1; timesteps < 1000; timesteps *= 10) {
