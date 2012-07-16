@@ -177,7 +177,7 @@ __device__ float riemann(float u_left, float u_right) {
  * returns the value of the intial condition at point x
  */
 __device__ float u0(float x, float y, int alpha) {
-    return pow(x - y, alpha);
+    return x + y;//pow(x - y, alpha);
 }
 
 /* boundary exact
@@ -185,7 +185,7 @@ __device__ float u0(float x, float y, int alpha) {
  * returns the exact boundary conditions
  */
 __device__ float boundary_exact(float x, float y, float t, int alpha) {
-    return u0(x, y, alpha);
+    return x - 2*t + y;//u0(x, y, alpha);
 }
 
 /* u exact

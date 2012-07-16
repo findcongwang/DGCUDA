@@ -1,2 +1,2 @@
-./dgcuda -a 3 -n 5 -t 100 mesh/uniform.pmsh output/uniform.out
+./dgcuda -a 1 -n 5 -t 10 mesh/uniform.pmsh output/uniform.out
 gmsh output/uniform.out

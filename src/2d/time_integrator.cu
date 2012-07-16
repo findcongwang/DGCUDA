@@ -137,7 +137,7 @@ void time_integrate_rk4(float dt, int n_quad, int n_quad1d, int n_p, int n,
     }
  
     if ((eval_surface_ftn == NULL) || (eval_volume_ftn == NULL)) {
-        printf("ERROR: dispatched kernel functions were NULL.\n");
+        printf("ERROR: dispatched kernel functions in rk4 were NULL.\n");
         exit(0);
     }
 
@@ -155,7 +155,6 @@ void time_integrate_rk4(float dt, int n_quad, int n_quad1d, int n_p, int n,
                          d_left_side_number, d_right_side_number,
                          d_Nx, d_Ny, 
                          n_quad1d, n_p, num_sides, num_elem, t, alpha);
-        cudaThreadSynchronize();
 
         if (debug) {
             printf("\n\n dt = %lf -\n", dt);
@@ -233,7 +232,6 @@ void time_integrate_rk4(float dt, int n_quad, int n_quad1d, int n_p, int n,
                          d_left_side_number, d_right_side_number,
                          d_Nx, d_Ny, 
                          n_quad1d, n_p, num_sides, num_elem, t, alpha);
-        cudaThreadSynchronize();
 
         eval_volume_ftn<<<n_blocks_elem, n_threads>>>
                         (d_kstar, d_quad_rhs, 
@@ -262,7 +260,6 @@ void time_integrate_rk4(float dt, int n_quad, int n_quad1d, int n_p, int n,
                          d_left_side_number, d_right_side_number,
                          d_Nx, d_Ny, 
                          n_quad1d, n_p, num_sides, num_elem, t, alpha);
-        cudaThreadSynchronize();
 
         eval_volume_ftn<<<n_blocks_elem, n_threads>>>
                         (d_kstar, d_quad_rhs, 
@@ -291,7 +288,6 @@ void time_integrate_rk4(float dt, int n_quad, int n_quad1d, int n_p, int n,
                          d_left_side_number, d_right_side_number,
                          d_Nx, d_Ny, 
                          n_quad1d, n_p, num_sides, num_elem, t, alpha);
-        cudaThreadSynchronize();
 
         eval_volume_ftn<<<n_blocks_elem, n_threads>>>
                         (d_kstar, d_quad_rhs, 
@@ -313,7 +309,6 @@ void time_integrate_rk4(float dt, int n_quad, int n_quad1d, int n_p, int n,
         checkCudaError("error after final stage.");
     }
 }
-
 
 /***********************
  * FORWARD EULER
@@ -414,7 +409,7 @@ void time_integrate_fe(float dt, int n_quad, int n_quad1d, int n_p, int n,
     }
  
     if ((eval_surface_ftn == NULL) || (eval_volume_ftn == NULL)) {
-        printf("ERROR: dispatched kernel functions were NULL.\n");
+        printf("ERROR: dispatched kernel functions in fe were NULL.\n");
         exit(0);
     }
 

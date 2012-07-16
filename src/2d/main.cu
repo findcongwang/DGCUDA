@@ -118,28 +118,27 @@ int main(int argc, char *argv[]) {
     if (num_elem >= 256) {
         min_jacobian<<<n_blocks_jacobian, 256>>>(d_J, d_min_J, num_elem);
 
+        // each block finds the smallest value, so need to sort through n_blocks_jacobian
         min_J = (float *) malloc(n_blocks_jacobian * sizeof(float));
         cudaMemcpy(min_J, d_min_J, n_blocks_jacobian * sizeof(float), cudaMemcpyDeviceToHost);
         min_j = min_J[0];
-
         for (i = 0; i < n_blocks_jacobian; i++) {
             min_j = (min_J[i] > min_j) ? min_J[i] : min_j;
         }
-
         free(min_J);
 
     } else {
+        // just grab all the jacobians and sort them since there are so few of them
         min_J = (float *) malloc(num_elem * sizeof(float));
         cudaMemcpy(min_J, d_J, num_elem * sizeof(float), cudaMemcpyDeviceToHost);
         min_j = min_J[0];
-
         for (i = 0; i < num_elem; i++) {
             min_j = (min_J[i] > min_j) ? min_J[i] : min_j;
         }
-
         free(min_J);
     }
 
+    // choose dt to make this scheme stable
     dt  = min_j / 2. / (2. * n + 1.) * sqrt(2.);
 
     preval_side_length<<<n_blocks_sides, n_threads>>>(d_s_length, d_s_V1x, d_s_V1y, d_s_V2x, d_s_V2y, 
@@ -157,6 +156,7 @@ int main(int argc, char *argv[]) {
                                                   d_V2x, d_V2y, 
                                                   d_V3x, d_V3y, 
                                                   d_left_elem, d_left_side_number, num_sides); 
+
     preval_partials<<<n_blocks_elem, n_threads>>>(d_V1x, d_V1y,
                                                   d_V2x, d_V2y,
                                                   d_V3x, d_V3y,
@@ -186,29 +186,6 @@ int main(int argc, char *argv[]) {
     printf(" ? %i timesteps\n", timesteps);
     printf(" ? min jacobian = %f\n", min_j);
     printf(" ? dt = %f\n", dt);
-    printf(" ? 1d quadrature rules:\n");
-    for (i = 0; i < n_quad1d; i++) {
-        printf("     > %f - %f \n", s_r[i], oned_w_local[i]);
-    }
-    printf(" ? 2d quadrature rules:\n");
-    for (i = 0; i < n_quad; i++) {
-        printf("     > (%f, %f) - %f \n", r1_local[i], r2_local[i], w_local[i]);
-    }
-
-    if (debug) {
-        float *Nx = (float *) malloc(num_sides * sizeof(float));
-        float *Ny = (float *) malloc(num_sides * sizeof(float));
-
-        cudaMemcpy(Nx, d_Nx, num_sides *sizeof(float), cudaMemcpyDeviceToHost);
-        cudaMemcpy(Ny, d_Ny, num_sides *sizeof(float), cudaMemcpyDeviceToHost);
-
-        printf(" ? normals\n");
-        for (i = 0; i < num_sides; i++) {
-            printf("    > (%f, %f) \n", Nx[i], Ny[i]);
-        }
-        free(Nx);
-        free(Ny);
-    }
 
     checkCudaError("error before time integration.");
     fprintf(out_file, "View \"Exported field \" {\n");

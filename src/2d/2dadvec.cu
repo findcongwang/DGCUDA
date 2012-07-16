@@ -137,7 +137,6 @@ void read_mesh(FILE *mesh_file,
     while(fgets(line, sizeof(line), mesh_file) != NULL) {
         // these three vertices define the element
         sscanf(line, "%f %f %f %f %f %f", &V1x[i], &V1y[i], &V2x[i], &V2y[i], &V3x[i], &V3y[i]);
-        //printf("(%f, %f, %f, %f, %f, %f)\n", V1x[i], V1y[i], V2x[i], V2y[i], V3x[i], V3y[i]);
 
         // determine whether we should add these three sides or not
         s1 = 1;

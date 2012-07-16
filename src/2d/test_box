@@ -1,2 +1,2 @@
-./dgcuda -d -a 2 -n 1 -t 0 mesh/box.pmsh output/box.out
+./dgcuda -a 2 -n 2 -t 10 mesh/box.pmsh output/box.out
 gmsh output/box.out
