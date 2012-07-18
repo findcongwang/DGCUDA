@@ -87,7 +87,7 @@ __global__ void eval_rhs_rk4(float *c, float *quad_rhs, float *left_riemann_rhs,
 }
 
 void time_integrate_rk4(float dt, int n_quad, int n_quad1d, int n_p, int n, 
-                    int num_elem, int num_sides, int debug, int alpha, int timesteps) {
+                    int num_elem, int num_sides, int timesteps) {
     int n_threads = 128;
     int i;
     float t;
@@ -104,7 +104,7 @@ void time_integrate_rk4(float dt, int n_quad, int n_quad1d, int n_p, int n,
                          int*, int*,
                          int*, int*,
                          float*, float*,
-                         int, int, int, int, float, int) = NULL;
+                         int, int, int, int, float) = NULL;
     void (*eval_volume_ftn)(float*, float*, 
                         float*, float*, 
                         float*, float*,
@@ -128,14 +128,8 @@ void time_integrate_rk4(float dt, int n_quad, int n_quad1d, int n_p, int n,
         case 5: eval_surface_ftn = eval_surface_wrapper5;
                 eval_volume_ftn  = eval_volume_wrapper5;
                 break;
-        case 6: eval_surface_ftn = eval_surface_wrapper6;
-                eval_volume_ftn  = eval_volume_wrapper6;
-                break;
-        case 7: eval_surface_ftn = eval_surface_wrapper7;
-                eval_volume_ftn  = eval_volume_wrapper7;
-                break;
     }
- 
+
     if ((eval_surface_ftn == NULL) || (eval_volume_ftn == NULL)) {
         printf("ERROR: dispatched kernel functions in rk4 were NULL.\n");
         exit(0);
@@ -154,26 +148,7 @@ void time_integrate_rk4(float dt, int n_quad, int n_quad1d, int n_p, int n,
                          d_left_elem, d_right_elem,
                          d_left_side_number, d_right_side_number,
                          d_Nx, d_Ny, 
-                         n_quad1d, n_p, num_sides, num_elem, t, alpha);
-
-        if (debug) {
-            printf("\n\n dt = %lf -\n", dt);
-            printf("-------------------------\n");
-            float *left_rhs = (float *) malloc(num_sides * n_p * sizeof(float));
-            float *right_rhs = (float *) malloc(num_sides * n_p * sizeof(float));
-            cudaMemcpy(left_rhs, d_left_riemann_rhs, num_sides * n_p * sizeof(float), cudaMemcpyDeviceToHost);
-            cudaMemcpy(right_rhs, d_right_riemann_rhs, num_sides * n_p * sizeof(float), cudaMemcpyDeviceToHost);
-            printf(" riemann\n");
-            printf(" ~~~\n");
-            for (int i = 0; i < num_sides * n_p; i++) {
-                if (i != 0 && i % num_sides == 0) {
-                    printf("   --- \n");
-                }
-                printf(" > (%lf, %lf) \n", left_rhs[i], right_rhs[i]);
-            }
-            free(left_rhs);
-            free(right_rhs);
-        }
+                         n_quad1d, n_p, num_sides, num_elem, t);
 
         checkCudaError("error after stage 1: eval_surface_ftn");
 
@@ -183,38 +158,10 @@ void time_integrate_rk4(float dt, int n_quad, int n_quad1d, int n_p, int n,
                          n_quad, n_p, num_elem);
         cudaThreadSynchronize();
 
-        if (debug) {
-            float *quad_rhs = (float *) malloc(num_elem * n_p * sizeof(float));
-            cudaMemcpy(quad_rhs, d_quad_rhs, num_elem * n_p * sizeof(float), cudaMemcpyDeviceToHost);
-            printf(" quad_rhs\n");
-            printf(" ~~~\n");
-            for (int i = 0; i < num_elem * n_p; i++) {
-                if (i != 0 && i % num_elem == 0) {
-                    printf("   --- \n");
-                }
-                printf(" > %lf \n", quad_rhs[i]);
-            }
-            free(quad_rhs);
-        }
-
         eval_rhs_rk4<<<n_blocks_elem, n_threads>>>(d_k1, d_quad_rhs, d_left_riemann_rhs, d_right_riemann_rhs, 
                                               d_elem_s1, d_elem_s2, d_elem_s3, 
                                               d_left_elem, d_J, dt, n_p, num_sides, num_elem);
         cudaThreadSynchronize();
-
-        if (debug) {
-            float *rhs = (float *) malloc(num_elem * n_p * sizeof(float));
-            cudaMemcpy(rhs, d_k1, num_elem * n_p * sizeof(float), cudaMemcpyDeviceToHost);
-            printf(" eval_rhs\n");
-            printf(" ~~~\n");
-            for (int i = 0; i < num_elem * n_p; i++) {
-                if (i != 0 && i % num_elem == 0) {
-                    printf("   --- \n");
-                }
-                printf(" > %lf \n", rhs[i]);
-            }
-            free(rhs);
-        }
 
         rk4_tempstorage<<<n_blocks_rk4, n_threads>>>(d_c, d_kstar, d_k1, 0.5, n_p, num_elem);
         cudaThreadSynchronize();
@@ -231,7 +178,7 @@ void time_integrate_rk4(float dt, int n_quad, int n_quad1d, int n_p, int n,
                          d_left_elem, d_right_elem,
                          d_left_side_number, d_right_side_number,
                          d_Nx, d_Ny, 
-                         n_quad1d, n_p, num_sides, num_elem, t, alpha);
+                         n_quad1d, n_p, num_sides, num_elem, t);
 
         eval_volume_ftn<<<n_blocks_elem, n_threads>>>
                         (d_kstar, d_quad_rhs, 
@@ -259,7 +206,7 @@ void time_integrate_rk4(float dt, int n_quad, int n_quad1d, int n_p, int n,
                          d_left_elem, d_right_elem,
                          d_left_side_number, d_right_side_number,
                          d_Nx, d_Ny, 
-                         n_quad1d, n_p, num_sides, num_elem, t, alpha);
+                         n_quad1d, n_p, num_sides, num_elem, t);
 
         eval_volume_ftn<<<n_blocks_elem, n_threads>>>
                         (d_kstar, d_quad_rhs, 
@@ -287,7 +234,7 @@ void time_integrate_rk4(float dt, int n_quad, int n_quad1d, int n_p, int n,
                          d_left_elem, d_right_elem,
                          d_left_side_number, d_right_side_number,
                          d_Nx, d_Ny, 
-                         n_quad1d, n_p, num_sides, num_elem, t, alpha);
+                         n_quad1d, n_p, num_sides, num_elem, t);
 
         eval_volume_ftn<<<n_blocks_elem, n_threads>>>
                         (d_kstar, d_quad_rhs, 
@@ -360,7 +307,7 @@ __global__ void eval_rhs_fe(float *c, float *quad_rhs, float *left_riemann_rhs, 
 
 // forward eulers
 void time_integrate_fe(float dt, int n_quad, int n_quad1d, int n_p, int n, 
-              int num_elem, int num_sides, int alpha, int timesteps) {
+              int num_elem, int num_sides, int timesteps) {
     int n_threads = 128;
     int i;
     float t;
@@ -376,7 +323,7 @@ void time_integrate_fe(float dt, int n_quad, int n_quad1d, int n_p, int n,
                          int*, int*,
                          int*, int*,
                          float*, float*,
-                         int, int, int, int, float, int) = NULL;
+                         int, int, int, int, float) = NULL;
     void (*eval_volume_ftn)(float*, float*, 
                         float*, float*, 
                         float*, float*,
@@ -400,14 +347,7 @@ void time_integrate_fe(float dt, int n_quad, int n_quad1d, int n_p, int n,
         case 5: eval_surface_ftn = eval_surface_wrapper5;
                 eval_volume_ftn  = eval_volume_wrapper5;
                 break;
-        case 6: eval_surface_ftn = eval_surface_wrapper6;
-                eval_volume_ftn  = eval_volume_wrapper6;
-                break;
-        case 7: eval_surface_ftn = eval_surface_wrapper7;
-                eval_volume_ftn  = eval_volume_wrapper7;
-                break;
     }
- 
     if ((eval_surface_ftn == NULL) || (eval_volume_ftn == NULL)) {
         printf("ERROR: dispatched kernel functions in fe were NULL.\n");
         exit(0);
@@ -424,7 +364,7 @@ void time_integrate_fe(float dt, int n_quad, int n_quad1d, int n_p, int n,
                          d_left_elem, d_right_elem,
                          d_left_side_number, d_right_side_number,
                          d_Nx, d_Ny, 
-                         n_quad1d, n_p, num_sides, num_elem, t, alpha);
+                         n_quad1d, n_p, num_sides, num_elem, t);
         cudaThreadSynchronize();
 
         checkCudaError("error after eval_surface_ftn");

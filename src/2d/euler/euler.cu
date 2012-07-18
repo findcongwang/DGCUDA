@@ -4,8 +4,7 @@ int main(int argc, char *argv[]) {
     checkCudaError("error before start.");
     int num_elem, num_sides;
     int n_threads, n_blocks_elem, n_blocks_jacobian, n_blocks_sides;
-    int i, n, n_p, timesteps, n_quad, n_quad1d, alpha;
-    int debug;
+    int i, n, n_p, timesteps, n_quad, n_quad1d;
 
     float dt, t;
     float *min_J, min_j;
@@ -38,8 +37,7 @@ int main(int argc, char *argv[]) {
                        int, int, float, int) = NULL;
 
     // get input 
-    alpha = 0;
-    if (get_input(argc, argv, &n, &debug, &timesteps, &alpha, &mesh_filename, &out_filename)) {
+    if (get_input(argc, argv, &n, &timesteps, &mesh_filename, &out_filename)) {
         return 1;
     }
 
@@ -175,7 +173,7 @@ int main(int argc, char *argv[]) {
 
     // initial conditions
     init_conditions<<<n_blocks_elem, n_threads>>>(d_c, d_J, d_V1x, d_V1y, d_V2x, d_V2y, d_V3x, d_V3y,
-                    n_quad, n_p, num_elem, alpha);
+                    n_quad, n_p, num_elem);
     checkCudaError("error after initial conditions.");
 
     printf("Computing...\n");
@@ -186,26 +184,13 @@ int main(int argc, char *argv[]) {
     printf(" ? %i timesteps\n", timesteps);
     printf(" ? min jacobian = %f\n", min_j);
     printf(" ? dt = %f\n", dt);
+    printf(" ? endtime = %f\n", dt * timesteps);
 
     checkCudaError("error before time integration.");
     fprintf(out_file, "View \"Exported field \" {\n");
 
-    time_integrate_rk4(dt, n_quad, n_quad1d, n_p, n, num_elem, num_sides, debug, alpha, timesteps);
+    time_integrate_rk4(dt, n_quad, n_quad1d, n_p, n, num_elem, num_sides, timesteps);
     t = timesteps * dt;
-
-    if (debug) {
-        float *c = (float *) malloc(num_elem * n_p * sizeof(float));
-        cudaMemcpy(c, d_c, num_elem * n_p * sizeof(float), cudaMemcpyDeviceToHost);
-        printf(" c\n");
-        printf(" ~~~\n");
-        for (i = 0; i < num_elem * n_p; i++) {
-            if (i != 0 && i % num_elem == 0) {
-                printf("   --- \n");
-            }
-            printf(" > %f\n", c[i]);
-        }
-        free(c);
-    }
 
     // evaluate at the vertex points and copy over data
     Uv1 = (float *) malloc(num_elem * sizeof(float));
@@ -214,37 +199,21 @@ int main(int argc, char *argv[]) {
 
     switch (n) {
         case 0: eval_u_ftn = eval_u_wrapper0;
-                eval_error_ftn = eval_error_wrapper0;
                 break;
         case 1: eval_u_ftn = eval_u_wrapper1;
-                eval_error_ftn = eval_error_wrapper1;
                 break;
         case 2: eval_u_ftn = eval_u_wrapper2;
-                eval_error_ftn = eval_error_wrapper2;
                 break;
         case 3: eval_u_ftn = eval_u_wrapper3;
-                eval_error_ftn = eval_error_wrapper3;
                 break;
         case 4: eval_u_ftn = eval_u_wrapper4;
-                eval_error_ftn = eval_error_wrapper4;
                 break;
         case 5: eval_u_ftn = eval_u_wrapper5;
-                eval_error_ftn = eval_error_wrapper5;
-                break;
-        case 6: eval_u_ftn = eval_u_wrapper6;
-                eval_error_ftn = eval_error_wrapper6;
-                break;
-        case 7: eval_u_ftn = eval_u_wrapper7;
-                eval_error_ftn = eval_error_wrapper7;
                 break;
     }
 
-    //eval_error_ftn<<<n_blocks_elem, n_threads>>>(d_c, 
-                                                 //d_V1x, d_V1y,
-                                                 //d_V2x, d_V2y,
-                                                 //d_V3x, d_V3y,
-                                                 //d_Uv1, d_Uv2, d_Uv3, num_elem, n_p, t * dt);
     eval_u_ftn<<<n_blocks_elem, n_threads>>>(d_c, d_Uv1, d_Uv2, d_Uv3, num_elem, n_p);
+
     cudaThreadSynchronize();
     cudaMemcpy(Uv1, d_Uv1, num_elem * sizeof(float), cudaMemcpyDeviceToHost);
     cudaMemcpy(Uv2, d_Uv2, num_elem * sizeof(float), cudaMemcpyDeviceToHost);

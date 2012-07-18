@@ -251,23 +251,24 @@ void init_gpu(int num_elem, int num_sides, int n_p,
               float *sides_x2, float *sides_y2,
               int *elem_s1, int *elem_s2, int *elem_s3,
               int *left_elem, int *right_elem) {
+    int min_J_size = (num_elem  / 256) + ((num_elem  % 256) ? 1 : 0);
+
     checkCudaError("error before init.");
     cudaDeviceReset();
 
-    cudaMalloc((void **) &d_c,        num_elem * n_p * sizeof(float));
-    cudaMalloc((void **) &d_quad_rhs, num_elem * n_p * sizeof(float));
-    cudaMalloc((void **) &d_left_riemann_rhs,  num_sides * n_p * sizeof(float));
-    cudaMalloc((void **) &d_right_riemann_rhs, num_sides * n_p * sizeof(float));
+    cudaMalloc((void **) &d_c,        4 * num_elem * n_p * sizeof(float));
+    cudaMalloc((void **) &d_quad_rhs, 4 * num_elem * n_p * sizeof(float));
+    cudaMalloc((void **) &d_left_riemann_rhs,  4 * num_sides * n_p * sizeof(float));
+    cudaMalloc((void **) &d_right_riemann_rhs, 4 * num_sides * n_p * sizeof(float));
 
-    cudaMalloc((void **) &d_kstar, num_elem * n_p * sizeof(float));
-    cudaMalloc((void **) &d_k1, num_elem * n_p * sizeof(float));
-    cudaMalloc((void **) &d_k2, num_elem * n_p * sizeof(float));
-    cudaMalloc((void **) &d_k3, num_elem * n_p * sizeof(float));
-    cudaMalloc((void **) &d_k4, num_elem * n_p * sizeof(float));
+    cudaMalloc((void **) &d_kstar, 4 * num_elem * n_p * sizeof(float));
+    cudaMalloc((void **) &d_k1, 4 * num_elem * n_p * sizeof(float));
+    cudaMalloc((void **) &d_k2, 4 * num_elem * n_p * sizeof(float));
+    cudaMalloc((void **) &d_k3, 4 * num_elem * n_p * sizeof(float));
+    cudaMalloc((void **) &d_k4, 4 * num_elem * n_p * sizeof(float));
 
-    cudaMalloc((void **) &d_J    , num_elem * sizeof(float));
-    int min_J_size = (num_elem  / 256) + ((num_elem  % 256) ? 1 : 0);
-    cudaMalloc((void **) &d_min_J, min_J_size * sizeof(float));
+    cudaMalloc((void **) &d_J       , num_elem * sizeof(float));
+    cudaMalloc((void **) &d_min_J   , min_J_size * sizeof(float));
     cudaMalloc((void **) &d_s_length, num_sides * sizeof(float));
 
     cudaMalloc((void **) &d_s_V1x, num_sides * sizeof(float));
@@ -303,10 +304,6 @@ void init_gpu(int num_elem, int num_sides, int n_p,
 
     cudaMalloc((void **) &d_right_elem, num_sides * sizeof(int));
     cudaMalloc((void **) &d_left_elem , num_sides * sizeof(int));
-
-    // set d_c to 0 not necessary
-    //cudaMemset(d_c, 0., num_elem * n_p * sizeof(float));
-    cudaMemset(d_quad_rhs, 0., num_elem * n_p * sizeof(float));
 
     // copy over data
     cudaMemcpy(d_s_V1x, sides_x1, num_sides * sizeof(float), cudaMemcpyHostToDevice);
