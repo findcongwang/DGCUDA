@@ -61,18 +61,6 @@ void set_quadrature(int n,
         case 5: *n_quad = 25;
                 *n_quad1d = 6;
                 break;
-        //case 6: *n_quad = 13;
-                //*n_quad1d = 7;
-                //break;
-        //case 7: *n_quad = 16;
-                //*n_quad1d = 8;
-                //break;
-        //case 8: *n_quad = 19;
-                //*n_quad1d = 9;
-                //break;
-        //case 9: *n_quad = 25;
-                //*n_quad1d = 10;
-                //break;
     }
     // allocate integration points
     *r1_local = (float *)  malloc(*n_quad * sizeof(float));
@@ -404,13 +392,12 @@ void usage_error() {
 }
 
 int get_input(int argc, char *argv[],
-               int *n, int *debug, int *timesteps, int *alpha,
+               int *n, int *timesteps, 
                char **mesh_filename, char **out_filename) {
 
     int i;
 
     *timesteps = 1;
-    *debug     = 0;
     // read command line input
     if (argc < 5) {
         usage_error();
@@ -430,25 +417,11 @@ int get_input(int argc, char *argv[],
                 return 1;
             }
         }
+        // number of timesteps
         if (strcmp(argv[i], "-t") == 0) {
             if (i + 1 < argc) {
                 *timesteps = atoi(argv[i+1]);
                 if (*timesteps < 0) {
-                    usage_error();
-                    return 1;
-                }
-            } else {
-                usage_error();
-                return 1;
-            }
-        }
-        if (strcmp(argv[i], "-d") == 0) {
-            *debug = 1;
-        }
-        if (strcmp(argv[i], "-a") == 0) {
-            if (i + 1 < argc) {
-                *alpha = atoi(argv[i+1]);
-                if (*alpha < 0) {
                     usage_error();
                     return 1;
                 }
@@ -466,31 +439,3 @@ int get_input(int argc, char *argv[],
 
     return 0;
 }
-
-void test_initial_condition(float *c,
-                            float *V1x, float *V1y,
-                            float *V2x, float *V2y,
-                            float *V3x, float *V3y,
-                            float *r1_local, float *r2_local,
-                            float *w_local, float *basis_local, int n_quad, int n_p) {   
-
-    int i, j;
-    float u, x, y;
-
-    for (i = 0; i < n_p; i++) {
-        u = 0.;
-        // perform quadrature
-        for (j = 0; j < n_quad; j++) {
-            // map from the canonical element to the actual point on the mesh
-            // x = x2 * r + x3 * s + x1 * (1 - r - s)
-            x = r1_local[j] * V2x[0] + r2_local[j] * V3x[0] + (1 - r1_local[j] - r2_local[j]) * V1x[0];
-            y = r1_local[j] * V2y[0] + r2_local[j] * V3y[0] + (1 - r1_local[j] - r2_local[j]) * V1y[0];
-
-                // evaluate u there
-            u += w_local[j] * pow(x - y, 2) * basis_local[i * n_quad + j];
-        }
-        c[i] = u;
-        printf("c[%i] = %f\n", i, c[i]);
-    }
-}
-

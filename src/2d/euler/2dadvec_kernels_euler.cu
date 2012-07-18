@@ -1,8 +1,13 @@
-/* 2dadvec_kernels.cu
+/* 2dadvec_kernels_euler.cu
  *
- * This file contains the kernels for the 2D advection DG method.
- * We use K = number of elements
- * and    H = number of sides
+ * This file contains the kernels for the 2D euler DG method.
+ *
+ * d_t [   rho   ] + d_x [     rho * u    ] + d_y [    rho * v     ] = 0
+ * d_t [ rho * u ] + d_x [ rho * u^2 + p  ] + d_y [   rho * u * v  ] = 0
+ * d_t [ rho * v ] + d_x [  rho * u * v   ] + d_y [  rho * v^2 + p ] = 0
+ * d_t [    E    ] + d_x [ u * ( E +  p ) ] + d_y [ v * ( E +  p ) ] = 0
+ *
+
  */
 
 #define PI 3.14159
@@ -13,17 +18,17 @@
  *
  ***********************/
 /* These are always prefixed with d_ for "device" */
-float *d_c;           // holds coefficients for each element
-float *d_quad_rhs;    // the right hand side containing the quadrature contributions
+float *d_c;                 // coefficients for [rho, u, v, E]
+float *d_quad_rhs;          // the right hand side containing the quadrature contributions
 float *d_left_riemann_rhs;  // the right hand side containing the left riemann contributions
 float *d_right_riemann_rhs; // the right hand side containing the right riemann contributions
 
+// TODO: switch to low storage runge-kutta
 // runge kutta variables
-float *d_kstar;
+float *d_kstar
 float *d_k1;
 float *d_k2;
 float *d_k3;
-float *d_k4;
 
 // precomputed basis functions 
 // TODO: maybe making these 2^n makes sure the offsets are cached more efficiently? who knows...
@@ -142,18 +147,6 @@ int *d_right_elem; // index of right element for side idx
  * DEVICE FUNCTIONS
  *
  ***********************/
-
-/* flux function
- *
- * evaluates the flux f(u) at the point u.
- */
-__device__ float flux_x(float u) {
-    return u;
-}
-__device__ float flux_y(float u) {
-    return u;
-}
-
 /* riemann solver
  *
  * evaluates the riemann problem over the boundary using Gaussian quadrature
@@ -531,7 +524,41 @@ __device__ float eval_riemann(float *c_left, float *c_right,
  * evaluate all the riemann problems for each element.
  * THREADS: num_sides
  */
-__device__ void eval_surface(float *c_left, float *c_right, 
+/*
+ * d_t [   rho   ] + d_x [     rho * u    ] + d_y [    rho * v     ] = 0
+ * d_t [ rho * u ] + d_x [ rho * u^2 + p  ] + d_y [   rho * u * v  ] = 0
+ * d_t [ rho * v ] + d_x [  rho * u * v   ] + d_y [  rho * v^2 + p ] = 0
+ * d_t [    E    ] + d_x [ u * ( E +  p ) ] + d_y [ v * ( E +  p ) ] = 0
+ */
+
+__device__ void flux(float rho, float u, float v, float E, 
+                     float *flux_x1, float *flux_y1,
+                     float *flux_x2, float *flux_y2,
+                     float *flux_x3, float *flux_y3,
+                     float *flux_x4, float *flux_y4);
+    // evaluate pressure
+
+    float p = pressure(rho, u, v, E);
+
+    // flux_1 
+    *flux_x = rho * u;
+    *flux_y = rho * v;
+
+    // flux_2
+    *flux_x = rho * u * u + p;
+    *flux_y = rho * u * v;
+
+    // flux_3
+    *flux_x = rho * u * v;
+    *flux_y = rho * v * v + p;
+
+    // flux_4
+    *flux_x4 = u * (E + p);
+    *flux_y4 = v * (E + p);
+}
+
+
+__device__ void eval_surface(float *c_left, *c_right,
                              float *left_riemann_rhs, float *right_riemann_rhs, 
                              float len,
                              float v1x, float v1y,
@@ -541,32 +568,71 @@ __device__ void eval_surface(float *c_left, float *c_right,
                              int left_side, int right_side, 
                              float nx, float ny, 
                              int n_quad1d, int n_p, int num_sides, 
-                             int num_elem, float t, int idx, int alpha) {
+                             int num_elem, float t, int idx) {
     int i, j;
-    float s, left_sum, right_sum;
+    float s, left_sum, right_sum, flux_x, flux_y;
 
     // multiply across by the i'th basis function
     for (i = 0; i < n_p; i++) {
-        left_sum  = 0.;
-        right_sum = 0.;
-        // we're at the j'th integration point
-        for (j = 0; j < n_quad1d; j++) {
-            // solve the Riemann problem at this integration point
-            s = eval_riemann(c_left, c_right,
-                             v1x, v1y, v2x, v2y, v3x, v3y,
-                             j, left_side, right_side, left_idx, right_idx,
-                             n_p, n_quad1d, num_sides, t, alpha);
 
-            // calculate the quadrature over [-1,1] for these sides
-            left_sum  += (nx * flux_x(s) + ny * flux_y(s)) * w_oned[j] * 
-                         basis_side[left_side * n_p * n_quad1d + i * n_quad1d + j];
-            right_sum += (nx * flux_x(s) + ny * flux_y(s)) * w_oned[j] * 
-                         basis_side[right_side * n_p * n_quad1d + i * n_quad1d + n_quad1d - 1 - j];
+        left_sum1  = 0.;
+        right_sum1 = 0.;
+        left_sum2  = 0.;
+        right_sum2 = 0.;
+        left_sum3  = 0.;
+        right_sum3 = 0.;
+        left_sum4  = 0.;
+        right_sum4 = 0.;
+
+        for (j = 0; j < n_quad1d; j++) {
+
+            // calculate the riemann problems
+            eval_riemann(c_left, c_right, v1x, v1y, v2x, v2y, v3x, v3y,
+                         j, left_side, right_side,
+                         left_idx, right_idx,
+                         n_p, n_quad1d, num_sides,
+                         &rho, &u, &v, &E);
+
+            // calculate the fluxes
+            flux(rho, u, v, E,
+                 &flux_x1, &flux_y1,
+                 &flux_x2, &flux_y2,
+                 &flux_x3, &flux_y3,
+                 &flux_x4, &flux_y4);
+
+            // 1st row
+            left_sum1  += (nx * flux_x1 + ny * flux_y1) * w_oned[j] * 
+                           basis_side[left_side * n_p * n_quad1d + i * n_quad1d + j];
+            right_sum1 += (nx * flux_x1 + ny * flux_y1) * w_oned[j] * 
+                           basis_side[right_side * n_p * n_quad1d + i * n_quad1d + n_quad1d - 1 - j];
+            // 2nd row
+            left_sum2  += (nx * flux_x2 + ny * flux_y2) * w_oned[j] * 
+                           basis_side[left_side * n_p * n_quad1d + i * n_quad1d + j];
+            right_sum2 += (nx * flux_x2 + ny * flux_y2) * w_oned[j] * 
+                           basis_side[right_side * n_p * n_quad1d + i * n_quad1d + n_quad1d - 1 - j];
+
+            // 3rd row
+            left_sum3  += (nx * flux_x3 + ny * flux_y3) * w_oned[j] * 
+                           basis_side[left_side * n_p * n_quad1d + i * n_quad1d + j];
+            right_sum3 += (nx * flux_x3 + ny * flux_y3) * w_oned[j] * 
+                           basis_side[right_side * n_p * n_quad1d + i * n_quad1d + n_quad1d - 1 - j];
+
+            // 4th row
+            left_sum4  += (nx * flux_x4 + ny * flux_y4) * w_oned[j] * 
+                           basis_side[left_side * n_p * n_quad1d + i * n_quad1d + j];
+            right_sum4 += (nx * flux_x4 + ny * flux_y4) * w_oned[j] * 
+                           basis_side[right_side * n_p * n_quad1d + i * n_quad1d + n_quad1d - 1 - j];
         }
 
         // store this side's contribution in the riemann rhs vectors
-        left_riemann_rhs[i * num_sides + idx]  = -len / 2 * left_sum;
-        right_riemann_rhs[i * num_sides + idx] =  len / 2 * right_sum;
+        left_riemann_rhs[num_elem * n_p * 0 + i * num_sides + idx]  = -len / 2 * left_sum1;
+        left_riemann_rhs[num_elem * n_p * 1 + i * num_sides + idx]  = -len / 2 * left_sum2;
+        left_riemann_rhs[num_elem * n_p * 2 + i * num_sides + idx]  = -len / 2 * left_sum3;
+        left_riemann_rhs[num_elem * n_p * 3 + i * num_sides + idx]  = -len / 2 * left_sum4;
+        right_riemann_rhs[num_elem * n_p * 0 + i * num_sides + idx] =  len / 2 * right_sum1;
+        right_riemann_rhs[num_elem * n_p * 1 + i * num_sides + idx] =  len / 2 * right_sum2;
+        right_riemann_rhs[num_elem * n_p * 2 + i * num_sides + idx] =  len / 2 * right_sum3;
+        right_riemann_rhs[num_elem * n_p * 3 + i * num_sides + idx] =  len / 2 * right_sum4;
     }
 }
 /* flux boundary evaluation 
@@ -580,33 +646,67 @@ __device__ void eval_surface(float *c_left, float *c_right,
  * evaluates and adds the volume integral to the rhs vector
  * THREADS: num_elem
  */
-__device__ void eval_volume(float *r_c, float *quad_rhs, 
+__device__ void eval_volume(float *c_rho, float *c_u,
+                            float *c_v,   float *c_E,
+                            float *quad_rhs, 
                             float x_r, float y_r,
                             float x_s, float y_s,
                             int n_quad, int n_p, int num_elem, int idx) {
     int i, j, k;
-    float sum, u;
+    float rho, u, v, E;
+    float flux_x1, flux_y1, flux_x2, flux_x2;
+    float flux_x3, flux_y3, flux_x4, flux_x4;
+    float sum1, sum2, sum3, sum4;
 
     // evaluate the volume integral for each coefficient
     for (i = 0; i < n_p; i++) {
         sum = 0.;
         for (j = 0; j < n_quad; j++) {
-            // Evaluate u at the integration point.
-            u = 0.;
+
+            // evaluate rho, u, v, E at the integration point.
+            rho = 0.;
+            u   = 0.;
+            v   = 0.;
+            E   = 0.;
             for (k = 0; k < n_p; k++) {
-                u += r_c[k] * basis[n_quad * k + j];
+                rho += c_rho[k] * basis[n_quad * k + j];
+                u   += c_u[k]   * basis[n_quad * k + j];
+                v   += c_v[k]   * basis[n_quad * k + j];
+                E   += c_E[k]   * basis[n_quad * k + j];
             }
 
+            // evaluate flux
+            flux(rho, u, v, E,
+                 &flux_x1, &flux_y1,
+                 &flux_x2, &flux_y2,
+                 &flux_x3, &flux_y3,
+                 &flux_x4, &flux_y4);
+                 
             // Add to the sum
             // [fx fy] * [y_s, -y_r; -x_s, x_r] * [phi_x phi_y]
-            sum += (  flux_x(u) * ( basis_grad_x[n_quad * i + j] * y_s
-                                   -basis_grad_y[n_quad * i + j] * y_r)
-                    + flux_y(u) * (-basis_grad_x[n_quad * i + j] * x_s 
-                                  + basis_grad_y[n_quad * i + j] * x_r));
+            sum1 += (  flux_x1 * ( basis_grad_x[n_quad * i + j] * y_s
+                                  -basis_grad_y[n_quad * i + j] * y_r)
+                     + flux_y1 * (-basis_grad_x[n_quad * i + j] * x_s 
+                                 + basis_grad_y[n_quad * i + j] * x_r));
+            sum2 += (  flux_x2 * ( basis_grad_x[n_quad * i + j] * y_s
+                                  -basis_grad_y[n_quad * i + j] * y_r)
+                     + flux_y2 * (-basis_grad_x[n_quad * i + j] * x_s 
+                                 + basis_grad_y[n_quad * i + j] * x_r));
+            sum3 += (  flux_x3 * ( basis_grad_x[n_quad * i + j] * y_s
+                                  -basis_grad_y[n_quad * i + j] * y_r)
+                     + flux_y3 * (-basis_grad_x[n_quad * i + j] * x_s 
+                                 + basis_grad_y[n_quad * i + j] * x_r));
+            sum4 += (  flux_x4 * ( basis_grad_x[n_quad * i + j] * y_s
+                                  -basis_grad_y[n_quad * i + j] * y_r)
+                     + flux_y4 * (-basis_grad_x[n_quad * i + j] * x_s 
+                                 + basis_grad_y[n_quad * i + j] * x_r));
         }
 
         // store the result
-        quad_rhs[i * num_elem + idx] = sum;
+        quad_rhs[num_elem * n_p * 0 + i * num_elem + idx] = sum;
+        quad_rhs[num_elem * n_p * 1 + i * num_elem + idx] = sum;
+        quad_rhs[num_elem * n_p * 2 + i * num_elem + idx] = sum;
+        quad_rhs[num_elem * n_p * 3 + i * num_elem + idx] = sum;
     }
 }
 
