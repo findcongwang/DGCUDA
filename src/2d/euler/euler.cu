@@ -25,10 +25,19 @@ int main(int argc, char *argv[]) {
     char line[100];
     char *mesh_filename;
     char *out_filename;
+    char *rho_out_filename;
+    char *u_out_filename;
+    char *v_out_filename;
+    char *E_out_filename;
+    char *outfile_base;
+    int outfile_len;
 
     float *Uv1, *Uv2, *Uv3;
 
+    void (*eval_rho_ftn)(float*, float*, float*, float*, int, int) = NULL;
     void (*eval_u_ftn)(float*, float*, float*, float*, int, int) = NULL;
+    void (*eval_v_ftn)(float*, float*, float*, float*, int, int) = NULL;
+    void (*eval_E_ftn)(float*, float*, float*, float*, int, int) = NULL;
     void (*eval_error_ftn)(float*, 
                        float*, float*,
                        float*, float*,
@@ -41,12 +50,16 @@ int main(int argc, char *argv[]) {
         return 1;
     }
 
+    rho_out_filename = "output/uniform_rho.out";
+    u_out_filename = "output/uniform_u.out";
+    v_out_filename = "output/uniform_v.out";
+    E_out_filename = "output/uniform_E.out";
+
     // set the order of the approximation & timestep
     n_p = (n + 1) * (n + 2) / 2;
 
     // open the mesh to get num_elem for allocations
     mesh_file = fopen(mesh_filename, "r");
-    out_file  = fopen(out_filename , "w");
     if (!mesh_file) {
         printf("\nERROR: mesh file not found.\n");
         return 1;
@@ -187,9 +200,8 @@ int main(int argc, char *argv[]) {
     printf(" ? endtime = %f\n", dt * timesteps);
 
     checkCudaError("error before time integration.");
-    fprintf(out_file, "View \"Exported field \" {\n");
 
-    time_integrate_rk4(dt, n_quad, n_quad1d, n_p, n, num_elem, num_sides, timesteps);
+    time_integrate_fe(dt, n_quad, n_quad1d, n_p, n, num_elem, num_sides, timesteps);
     t = timesteps * dt;
 
     // evaluate at the vertex points and copy over data
@@ -198,38 +210,96 @@ int main(int argc, char *argv[]) {
     Uv3 = (float *) malloc(num_elem * sizeof(float));
 
     switch (n) {
-        case 0: eval_u_ftn = eval_u_wrapper0;
+        case 0: eval_rho_ftn = eval_rho_wrapper0;
+                eval_u_ftn = eval_u_wrapper0;
+                eval_v_ftn = eval_v_wrapper0;
+                eval_E_ftn = eval_E_wrapper0;
                 break;
-        case 1: eval_u_ftn = eval_u_wrapper1;
+        case 1: eval_rho_ftn = eval_rho_wrapper1;
+                eval_u_ftn = eval_u_wrapper1;
+                eval_v_ftn = eval_v_wrapper1;
+                eval_E_ftn = eval_E_wrapper1;
                 break;
-        case 2: eval_u_ftn = eval_u_wrapper2;
+        case 2: eval_rho_ftn = eval_rho_wrapper2;
+                eval_u_ftn = eval_u_wrapper2;
+                eval_v_ftn = eval_v_wrapper2;
+                eval_E_ftn = eval_E_wrapper2;
                 break;
-        case 3: eval_u_ftn = eval_u_wrapper3;
+        case 3: eval_rho_ftn = eval_rho_wrapper3;
+                eval_u_ftn = eval_u_wrapper3;
+                eval_v_ftn = eval_v_wrapper3;
+                eval_E_ftn = eval_E_wrapper3;
                 break;
-        case 4: eval_u_ftn = eval_u_wrapper4;
+        case 4: eval_rho_ftn = eval_rho_wrapper4;
+                eval_u_ftn = eval_u_wrapper4;
+                eval_v_ftn = eval_v_wrapper4;
+                eval_E_ftn = eval_E_wrapper4;
                 break;
-        case 5: eval_u_ftn = eval_u_wrapper5;
+        case 5: eval_rho_ftn = eval_rho_wrapper5;
+                eval_u_ftn = eval_u_wrapper5;
+                eval_v_ftn = eval_v_wrapper5;
+                eval_E_ftn = eval_E_wrapper5;
                 break;
     }
 
-    eval_u_ftn<<<n_blocks_elem, n_threads>>>(d_c, d_Uv1, d_Uv2, d_Uv3, num_elem, n_p);
-
-    cudaThreadSynchronize();
+    // evaluate rho and write to file 
+    eval_rho_ftn<<<n_blocks_elem, n_threads>>>(d_c, d_Uv1, d_Uv2, d_Uv3, num_elem, n_p);
     cudaMemcpy(Uv1, d_Uv1, num_elem * sizeof(float), cudaMemcpyDeviceToHost);
     cudaMemcpy(Uv2, d_Uv2, num_elem * sizeof(float), cudaMemcpyDeviceToHost);
     cudaMemcpy(Uv3, d_Uv3, num_elem * sizeof(float), cudaMemcpyDeviceToHost);
-
-    // write data to file
-    // TODO: this will output multiple vertices values. does gmsh care? i dunno...
+    out_file  = fopen(rho_out_filename , "w");
+    fprintf(out_file, "View \"Exported field \" {\n");
     for (i = 0; i < num_elem; i++) {
         fprintf(out_file, "ST (%f,%f,0,%f,%f,0,%f,%f,0) {%f,%f,%f};\n", 
                                V1x[i], V1y[i], V2x[i], V2y[i], V3x[i], V3y[i],
                                Uv1[i], Uv2[i], Uv3[i]);
     }
-
     fprintf(out_file,"};");
+    fclose(out_file);
 
-    // close the output file
+    // evaluate u and write to file
+    eval_u_ftn<<<n_blocks_elem, n_threads>>>(d_c, d_Uv1, d_Uv2, d_Uv3, num_elem, n_p);
+    cudaMemcpy(Uv1, d_Uv1, num_elem * sizeof(float), cudaMemcpyDeviceToHost);
+    cudaMemcpy(Uv2, d_Uv2, num_elem * sizeof(float), cudaMemcpyDeviceToHost);
+    cudaMemcpy(Uv3, d_Uv3, num_elem * sizeof(float), cudaMemcpyDeviceToHost);
+    out_file  = fopen(u_out_filename , "w");
+    fprintf(out_file, "View \"Exported field \" {\n");
+    for (i = 0; i < num_elem; i++) {
+        fprintf(out_file, "ST (%f,%f,0,%f,%f,0,%f,%f,0) {%f,%f,%f};\n", 
+                               V1x[i], V1y[i], V2x[i], V2y[i], V3x[i], V3y[i],
+                               Uv1[i], Uv2[i], Uv3[i]);
+    }
+    fprintf(out_file,"};");
+    fclose(out_file);
+
+    // evaluate v and write to file
+    eval_v_ftn<<<n_blocks_elem, n_threads>>>(d_c, d_Uv1, d_Uv2, d_Uv3, num_elem, n_p);
+    cudaMemcpy(Uv1, d_Uv1, num_elem * sizeof(float), cudaMemcpyDeviceToHost);
+    cudaMemcpy(Uv2, d_Uv2, num_elem * sizeof(float), cudaMemcpyDeviceToHost);
+    cudaMemcpy(Uv3, d_Uv3, num_elem * sizeof(float), cudaMemcpyDeviceToHost);
+    out_file  = fopen(v_out_filename , "w");
+    fprintf(out_file, "View \"Exported field \" {\n");
+    for (i = 0; i < num_elem; i++) {
+        fprintf(out_file, "ST (%f,%f,0,%f,%f,0,%f,%f,0) {%f,%f,%f};\n", 
+                               V1x[i], V1y[i], V2x[i], V2y[i], V3x[i], V3y[i],
+                               Uv1[i], Uv2[i], Uv3[i]);
+    }
+    fprintf(out_file,"};");
+    fclose(out_file);
+
+    // evaluate E and write to file
+    eval_E_ftn<<<n_blocks_elem, n_threads>>>(d_c, d_Uv1, d_Uv2, d_Uv3, num_elem, n_p);
+    cudaMemcpy(Uv1, d_Uv1, num_elem * sizeof(float), cudaMemcpyDeviceToHost);
+    cudaMemcpy(Uv2, d_Uv2, num_elem * sizeof(float), cudaMemcpyDeviceToHost);
+    cudaMemcpy(Uv3, d_Uv3, num_elem * sizeof(float), cudaMemcpyDeviceToHost);
+    out_file  = fopen(E_out_filename , "w");
+    fprintf(out_file, "View \"Exported field \" {\n");
+    for (i = 0; i < num_elem; i++) {
+        fprintf(out_file, "ST (%f,%f,0,%f,%f,0,%f,%f,0) {%f,%f,%f};\n", 
+                               V1x[i], V1y[i], V2x[i], V2y[i], V3x[i], V3y[i],
+                               Uv1[i], Uv2[i], Uv3[i]);
+    }
+    fprintf(out_file,"};");
     fclose(out_file);
 
     // free variables

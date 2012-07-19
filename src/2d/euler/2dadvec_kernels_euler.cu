@@ -226,7 +226,10 @@ __global__ void init_conditions(float *c, float *J,
 
     if (idx < num_elem) {
         for (i = 0; i < n_p; i++) {
+            rho = 0.;
             u = 0.;
+            v = 0.;
+            E = 0.;
             // perform quadrature
             for (j = 0; j < n_quad; j++) {
                 // map from the canonical element to the actual point on the mesh

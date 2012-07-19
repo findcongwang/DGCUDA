@@ -32,7 +32,10 @@ __global__ void rk4(float *c, float *k1, float *k2, float *k3, float *k4, int n_
     int idx = blockDim.x * blockIdx.x + threadIdx.x;
 
     if (idx < n_p * num_elem) {
-        c[idx] += k1[idx]/6. + k2[idx]/3. + k3[idx]/3. + k4[idx]/6.;
+        c[num_elem * n_p * 0 + idx] += k1[idx]/6. + k2[idx]/3. + k3[idx]/3. + k4[idx]/6.;
+        c[num_elem * n_p * 1 + idx] += k1[idx]/6. + k2[idx]/3. + k3[idx]/3. + k4[idx]/6.;
+        c[num_elem * n_p * 2 + idx] += k1[idx]/6. + k2[idx]/3. + k3[idx]/3. + k4[idx]/6.;
+        c[num_elem * n_p * 3 + idx] += k1[idx]/6. + k2[idx]/3. + k3[idx]/3. + k4[idx]/6.;
     }
 }
 
