@@ -128,6 +128,8 @@ int main(int argc, char *argv[]) {
     // find the min jacobian. do it on the gpu if there are at least 256 elements
     if (num_elem >= 256) {
         min_jacobian<<<n_blocks_jacobian, 256>>>(d_J, d_min_J, num_elem);
+        cudaThreadSynchronize();
+        checkCudaError("error after min_jacobian.");
 
         // each block finds the smallest value, so need to sort through n_blocks_jacobian
         min_J = (float *) malloc(n_blocks_jacobian * sizeof(float));

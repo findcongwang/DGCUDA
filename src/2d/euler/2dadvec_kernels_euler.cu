@@ -262,7 +262,7 @@ __global__ void init_conditions(float *c, float *J,
 __global__ void min_jacobian(float *J, float *min_J, int num_elem) {
     int idx = blockDim.x * blockIdx.x + threadIdx.x;
     int tid = threadIdx.x;
-    int i   = blockDim.x * (blockIdx.x * 256 * 2) + threadIdx.x;
+    int i   = (blockIdx.x * 256 * 2) + threadIdx.x;
 
     __shared__ float s_min[256];
 
@@ -273,8 +273,8 @@ __global__ void min_jacobian(float *J, float *min_J, int num_elem) {
 
         // test a few
         while (i < num_elem) {
-            s_min[tid] = (s_min[tid] < s_min[i]) ? s_min[tid] : s_min[i];
-            s_min[tid] = (s_min[tid] < s_min[i + 256]) ? s_min[tid] : s_min[i];
+            s_min[tid] = (s_min[tid] < J[i]) ? s_min[tid] : J[i];
+            s_min[tid] = (s_min[tid] < J[i + 256]) ? s_min[tid] : J[i];
             i += gridDim.x * 256 * 2;
             __syncthreads();
         }
