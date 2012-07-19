@@ -50,6 +50,7 @@ int main(int argc, char *argv[]) {
         return 1;
     }
 
+    // TODO: this should be cleaner, obviously
     rho_out_filename = "output/uniform_rho.out";
     u_out_filename = "output/uniform_u.out";
     v_out_filename = "output/uniform_v.out";

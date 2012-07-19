@@ -173,16 +173,16 @@ __device__ float pressure(float rho, float u, float v, float E) {
  * returns the value of the intial condition at point x
  */
 __device__ float rho0(float x, float y) {
-    return x;
+    return x + 1;
 }
 __device__ float u0(float x, float y) {
-    return 0.;
-}
-__device__ float v0(float x, float y) {
     return 1.;
 }
-__device__ float E0(float x, float y) {
+__device__ float v0(float x, float y) {
     return 0.;
+}
+__device__ float E0(float x, float y) {
+    return 1.;
 }
 
 /* boundary exact
@@ -190,16 +190,16 @@ __device__ float E0(float x, float y) {
  * returns the exact boundary conditions
  */
 __device__ float boundary_exact_rho(float x, float y, float t) {
-    return 0;
+    return rho0(x, y);
 }
 __device__ float boundary_exact_u(float x, float y, float t) {
-    return 0;
+    return u0(x, y);
 }
 __device__ float boundary_exact_v(float x, float y, float t) {
-    return 1;
+    return v0(x, y);
 }
 __device__ float boundary_exact_E(float x, float y, float t) {
-    return 0;
+    return E0(x, y);
 }
 
 /* u exact
@@ -530,6 +530,10 @@ __device__ void eval_riemann(float *c_rho_left, float *c_rho_right,
         E_left   += c_E_left[i]   * basis_side[left_side * n_p * n_quad1d + i * n_quad1d + j];
     }
 
+    // since we have rho * u and rho * v
+    u_left = u_left / rho_left;
+    v_left = v_left / rho_left;
+
     // make all threads in the first warps be boundary sides
     if (right_idx == -1) {
         float r1_eval, r2_eval;
@@ -569,12 +573,16 @@ __device__ void eval_riemann(float *c_rho_left, float *c_rho_right,
             v_right   += c_v_right[i]   * basis_side[left_side * n_p * n_quad1d + i * n_quad1d + j];
             E_right   += c_E_right[i]   * basis_side[left_side * n_p * n_quad1d + i * n_quad1d + j];
         }
+
+        // since we have rho * u and rho * v
+        u_right = u_right / rho_right;
+        v_right = v_right / rho_right;
     }
 
     *rho =  riemann(rho_left, rho_right);
-    *u   =  riemann(rho_left, rho_right);
-    *v   =  riemann(rho_left, rho_right);
-    *E   =  riemann(rho_left, rho_right);
+    *u   =  riemann(u_left, u_right);
+    *v   =  riemann(v_left, v_right);
+    *E   =  riemann(E_left, E_right);
 }
 
 /* surface integral evaluation
@@ -594,8 +602,12 @@ __device__ void eval_flux(float rho, float u, float v, float E,
                      float *flux_x2, float *flux_y2,
                      float *flux_x3, float *flux_y3,
                      float *flux_x4, float *flux_y4) {
-    // evaluate pressure
 
+    // since we have u * rho, v * rho
+    u = u / rho;
+    v = v / rho;
+
+    // evaluate pressure
     float p = pressure(rho, u, v, E);
 
     // flux_1 
@@ -699,11 +711,6 @@ __device__ void eval_surface(float *rho_left, float *u_left, float *v_left, floa
         right_riemann_rhs[num_elem * n_p * 3 + i * num_sides + idx] =  len / 2 * right_sum4;
     }
 }
-/* flux boundary evaluation 
- *
- * evaulates the flux at the boundaries by handling them somehow.
- * THREADS: num_boundary
- */
 
 /* volume integrals
  *
@@ -741,6 +748,10 @@ __device__ void eval_volume(float *c_rho, float *c_u,
                 v   += c_v[k]   * basis[n_quad * k + j];
                 E   += c_E[k]   * basis[n_quad * k + j];
             }
+
+            // since we have u * rho, v * rho
+            u = u / rho;
+            v = v / rho;
 
             // evaluate flux
             eval_flux(rho, u, v, E,
