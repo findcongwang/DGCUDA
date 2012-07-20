@@ -124,6 +124,8 @@ int main(int argc, char *argv[]) {
 
     // pre computations
     preval_jacobian<<<n_blocks_elem, n_threads>>>(d_J, d_V1x, d_V1y, d_V2x, d_V2y, d_V3x, d_V3y, num_elem); 
+    printf("%i, %i\n", n_blocks_elem, n_threads);
+    checkCudaError("error after preval_jacobian.");
     cudaThreadSynchronize();
 
     // find the min jacobian. do it on the gpu if there are at least 256 elements
@@ -251,7 +253,7 @@ int main(int argc, char *argv[]) {
     cudaMemcpy(Uv2, d_Uv2, num_elem * sizeof(float), cudaMemcpyDeviceToHost);
     cudaMemcpy(Uv3, d_Uv3, num_elem * sizeof(float), cudaMemcpyDeviceToHost);
     out_file  = fopen(rho_out_filename , "w");
-    fprintf(out_file, "View \"Exported field \" {\n");
+    fprintf(out_file, "View \"Density \" {\n");
     for (i = 0; i < num_elem; i++) {
         fprintf(out_file, "ST (%f,%f,0,%f,%f,0,%f,%f,0) {%f,%f,%f};\n", 
                                V1x[i], V1y[i], V2x[i], V2y[i], V3x[i], V3y[i],
@@ -266,7 +268,7 @@ int main(int argc, char *argv[]) {
     cudaMemcpy(Uv2, d_Uv2, num_elem * sizeof(float), cudaMemcpyDeviceToHost);
     cudaMemcpy(Uv3, d_Uv3, num_elem * sizeof(float), cudaMemcpyDeviceToHost);
     out_file  = fopen(u_out_filename , "w");
-    fprintf(out_file, "View \"Exported field \" {\n");
+    fprintf(out_file, "View \"u \" {\n");
     for (i = 0; i < num_elem; i++) {
         fprintf(out_file, "ST (%f,%f,0,%f,%f,0,%f,%f,0) {%f,%f,%f};\n", 
                                V1x[i], V1y[i], V2x[i], V2y[i], V3x[i], V3y[i],
@@ -281,7 +283,7 @@ int main(int argc, char *argv[]) {
     cudaMemcpy(Uv2, d_Uv2, num_elem * sizeof(float), cudaMemcpyDeviceToHost);
     cudaMemcpy(Uv3, d_Uv3, num_elem * sizeof(float), cudaMemcpyDeviceToHost);
     out_file  = fopen(v_out_filename , "w");
-    fprintf(out_file, "View \"Exported field \" {\n");
+    fprintf(out_file, "View \"v \" {\n");
     for (i = 0; i < num_elem; i++) {
         fprintf(out_file, "ST (%f,%f,0,%f,%f,0,%f,%f,0) {%f,%f,%f};\n", 
                                V1x[i], V1y[i], V2x[i], V2y[i], V3x[i], V3y[i],
@@ -296,7 +298,7 @@ int main(int argc, char *argv[]) {
     cudaMemcpy(Uv2, d_Uv2, num_elem * sizeof(float), cudaMemcpyDeviceToHost);
     cudaMemcpy(Uv3, d_Uv3, num_elem * sizeof(float), cudaMemcpyDeviceToHost);
     out_file  = fopen(E_out_filename , "w");
-    fprintf(out_file, "View \"Exported field \" {\n");
+    fprintf(out_file, "View \"E \" {\n");
     for (i = 0; i < num_elem; i++) {
         fprintf(out_file, "ST (%f,%f,0,%f,%f,0,%f,%f,0) {%f,%f,%f};\n", 
                                V1x[i], V1y[i], V2x[i], V2y[i], V3x[i], V3y[i],

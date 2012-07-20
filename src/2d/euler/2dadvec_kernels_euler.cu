@@ -173,7 +173,7 @@ __device__ float pressure(float rho, float u, float v, float E) {
  * returns the value of the intial condition at point x
  */
 __device__ float rho0(float x, float y) {
-    return x + 1;
+    return 2 + sinf(2 * PI * x);
 }
 __device__ float u0(float x, float y) {
     return 1.;
@@ -182,7 +182,7 @@ __device__ float v0(float x, float y) {
     return 0.;
 }
 __device__ float E0(float x, float y) {
-    return 1.;
+    return 1. / (GAMMA - 1) + (powf(u0(x, y), 2) + powf(v0(x, y), 2)) / 2. * rho0(x, y);
 }
 
 /* boundary exact
@@ -239,18 +239,14 @@ __global__ void init_conditions(float *c, float *J,
 
                 // evaluate rho, u, v, E there
                 rho += w[j] * rho0(x, y) * basis[i * n_quad + j];
-                u   += w[j] * u0(x, y)   * basis[i * n_quad + j];
-                v   += w[j] * v0(x, y)   * basis[i * n_quad + j];
-                E   += w[j] * E0(x, y)   * basis[i * n_quad + j];
+                u   += w[j] * u0(x, y) * rho0(x, y) * basis[i * n_quad + j];
+                v   += w[j] * v0(x, y) * rho0(x, y) * basis[i * n_quad + j];
+                E   += w[j] * E0(x, y) * basis[i * n_quad + j];
             }
 
-            // since we need to actually store u * rho, v * rho
-            u = u * rho;
-            v = v * rho;
-
             c[num_elem * n_p * 0 + i * num_elem + idx] = rho;
-            c[num_elem * n_p * 1 + i * num_elem + idx] = u;
-            c[num_elem * n_p * 2 + i * num_elem + idx] = v;
+            c[num_elem * n_p * 1 + i * num_elem + idx] = u; // we actually calculate and store rho * u
+            c[num_elem * n_p * 2 + i * num_elem + idx] = v; // we actually calculate and store rho * v
             c[num_elem * n_p * 3 + i * num_elem + idx] = E;
         } 
     }
@@ -500,44 +496,44 @@ __global__ void preval_partials(float *V1x, float *V1y,
  * device function to solve the riemann problem.
  */
 __device__ void eval_riemann(float *c_rho_left, float *c_rho_right,
-                              float *c_u_left,   float *c_u_right,
-                              float *c_v_left,   float *c_v_right,
-                              float *c_E_left,   float *c_E_right,
-                              float v1x, float v1y,
-                              float v2x, float v2y,
-                              float v3x, float v3y,
-                              int j, // j, as usual, is the index of the integration point
-                              int left_side, int right_side,
-                              int left_idx, int right_idx,
-                              int n_p, int n_quad1d,
-                              int num_sides, float t, 
-                              float *rho, float *u, float *v, float *E) {
+                             float *c_u_left,   float *c_u_right,
+                             float *c_v_left,   float *c_v_right,
+                             float *c_E_left,   float *c_E_right,
+                             float rho_left, float u_left, float v_left, float E_left,
+                             float rho_right, float u_right, float v_right, float E_right,
+                             float v1x, float v1y,
+                             float v2x, float v2y,
+                             float v3x, float v3y,
+                             int j, // j, as usual, is the index of the integration point
+                             int left_side, int right_side,
+                             int left_idx, int right_idx,
+                             int n_p, int n_quad1d,
+                             int num_sides, float t, 
+                             float *rho, float *u, float *v, float *E) {
 
     int i;
 
-    float rho_left, u_left, v_left, E_left;
-    float rho_right, u_right, v_right, E_right;
 
     // evaluate rho, u, v, E at the integration points
-    rho_left = 0.;
-    u_left   = 0.;
-    v_left   = 0.;
-    E_left   = 0.;
-    rho_right = 0.;
-    u_right   = 0.;
-    v_right   = 0.;
-    E_right   = 0.;
+    *rho_left = 0.;
+    *u_left   = 0.;
+    *v_left   = 0.;
+    *E_left   = 0.;
+    *rho_right = 0.;
+    *u_right   = 0.;
+    *v_right   = 0.;
+    *E_right   = 0.;
     
     for (i = 0; i < n_p; i++) {
-        rho_left += c_rho_left[i] * basis_side[left_side * n_p * n_quad1d + i * n_quad1d + j];
-        u_left   += c_u_left[i]   * basis_side[left_side * n_p * n_quad1d + i * n_quad1d + j];
-        v_left   += c_v_left[i]   * basis_side[left_side * n_p * n_quad1d + i * n_quad1d + j];
-        E_left   += c_E_left[i]   * basis_side[left_side * n_p * n_quad1d + i * n_quad1d + j];
+        *rho_left += c_rho_left[i] * basis_side[left_side * n_p * n_quad1d + i * n_quad1d + j];
+        *u_left   += c_u_left[i]   * basis_side[left_side * n_p * n_quad1d + i * n_quad1d + j];
+        *v_left   += c_v_left[i]   * basis_side[left_side * n_p * n_quad1d + i * n_quad1d + j];
+        *E_left   += c_E_left[i]   * basis_side[left_side * n_p * n_quad1d + i * n_quad1d + j];
     }
 
     // since we actually have coefficients for rho * u and rho * v
-    u_left = u_left / rho_left;
-    v_left = v_left / rho_left;
+    *u_left = u_left / rho_left;
+    *v_left = v_left / rho_left;
 
     // make all threads in the first warps be boundary sides
     if (right_idx == -1) {
@@ -565,29 +561,29 @@ __device__ void eval_riemann(float *c_rho_left, float *c_rho_right,
         y = v2y * r1_eval + v3y * r2_eval + v1y * (1 - r1_eval - r2_eval);
             
         // deal with the boundary element here
-        rho_right = boundary_exact_rho(x, y, t);
-        u_right   = boundary_exact_u(x, y, t);
-        v_right   = boundary_exact_v(x, y, t);
-        E_right   = boundary_exact_E(x, y, t);
+        *rho_right = boundary_exact_rho(x, y, t);
+        *u_right   = boundary_exact_u(x, y, t);
+        *v_right   = boundary_exact_v(x, y, t);
+        *E_right   = boundary_exact_E(x, y, t);
 
     } else {
         // evaluate the right side at the integration point
         for (i = 0; i < n_p; i++) {
-            rho_right += c_rho_right[i] * basis_side[left_side * n_p * n_quad1d + i * n_quad1d + j];
-            u_right   += c_u_right[i]   * basis_side[left_side * n_p * n_quad1d + i * n_quad1d + j];
-            v_right   += c_v_right[i]   * basis_side[left_side * n_p * n_quad1d + i * n_quad1d + j];
-            E_right   += c_E_right[i]   * basis_side[left_side * n_p * n_quad1d + i * n_quad1d + j];
+            *rho_right += c_rho_right[i] * basis_side[right_side * n_p * n_quad1d + i * n_quad1d + n_quad1d - 1 - j];
+            *u_right   += c_u_right[i]   * basis_side[right_side * n_p * n_quad1d + i * n_quad1d + n_quad1d - 1 - j];
+            *v_right   += c_v_right[i]   * basis_side[right_side * n_p * n_quad1d + i * n_quad1d + n_quad1d - 1 - j];
+            *E_right   += c_E_right[i]   * basis_side[right_side * n_p * n_quad1d + i * n_quad1d + n_quad1d - 1 - j];
         }
 
         // again, since we have coefficients for rho * u and rho * v
-        u_right = u_right / rho_right;
-        v_right = v_right / rho_right;
+        *u_right = u_right / rho_right;
+        *v_right = v_right / rho_right;
     }
 
-    *rho =  riemann(rho_left, rho_right);
-    *u   =  riemann(u_left, u_right);
-    *v   =  riemann(v_left, v_right);
-    *E   =  0;//riemann(E_left, E_right);
+    //*rho =  riemann(rho_left, rho_right);
+    //*u   =  riemann(u_left, u_right);
+    //*v   =  riemann(v_left, v_right);
+    //*E   =  riemann(E_left, E_right);
 }
 
 /* surface integral evaluation
@@ -602,6 +598,16 @@ __device__ void eval_riemann(float *c_rho_left, float *c_rho_right,
  * d_t [    E    ] + d_x [ u * ( E +  p ) ] + d_y [ v * ( E +  p ) ] = 0
  */
 
+__device__ eval_lambda(float *c_rho_left, float *c_rho_right,
+                       float *c_u_left,   float *c_u_right,
+                       float *c_u_left,   float *c_u_right,
+                       float *c_u_left,   float *c_u_right,
+                       int n_p) {
+    float rho_left, rho_right;
+    for (i = 0; i < n_p; i++) {
+        rho_left += c_rho_left
+
+}
 /* evaluate flux
  *
  * takes the actual values of rho, u, v, and E and returns the flux 
@@ -634,8 +640,8 @@ __device__ void eval_flux(float rho, float u, float v, float E,
     *flux_y4 = v * (E + p);
 }
 
-__device__ void eval_surface(float *rho_left, float *u_left, float *v_left, float *E_left,
-                             float *rho_right, float *u_right, float *v_right, float *E_right,
+__device__ void eval_surface(float *c_rho_left, float *c_u_left, float *c_v_left, float *c_E_left,
+                             float *c_rho_right, float *c_u_right, float *c_v_right, float *c_E_right,
                              float *left_riemann_rhs, float *right_riemann_rhs, 
                              float len,
                              float v1x, float v1y,
@@ -648,10 +654,16 @@ __device__ void eval_surface(float *rho_left, float *u_left, float *v_left, floa
                              int num_elem, float t, int idx) {
     int i, j;
     float rho, u, v, E;
-    float left_sum1, right_sum1, flux_x1, flux_y1;
-    float left_sum2, right_sum2, flux_x2, flux_y2;
-    float left_sum3, right_sum3, flux_x3, flux_y3;
-    float left_sum4, right_sum4, flux_x4, flux_y4;
+    float s;
+    float lambda_rho, lambda_u, lambda_v, lambda_E;
+    float left_sum1, right_sum1;
+    float left_sum2, right_sum2;
+    float left_sum3, right_sum3;
+    float left_sum4, right_sum4;
+    float flux_x1_l, flux_x2_l, flux_x3_l, flux_x4_l;
+    float flux_x1_r, flux_x2_r, flux_x3_r, flux_x4_r;
+    float rho_left, u_left, v_left, E_left;
+    float rho_right, u_right, v_right, E_right;
 
     // multiply across by the i'th basis function
     for (i = 0; i < n_p; i++) {
@@ -668,54 +680,93 @@ __device__ void eval_surface(float *rho_left, float *u_left, float *v_left, floa
         for (j = 0; j < n_quad1d; j++) {
 
             // calculate the riemann problems
-            eval_riemann(rho_left, rho_right,
-                         u_left,   u_right,
-                         v_left,   v_right,
-                         E_left,   E_right,
+            eval_riemann(c_rho_left, c_rho_right,
+                         c_u_left,   c_u_right,
+                         c_v_left,   c_v_right,
+                         c_E_left,   c_E_right,
+                         &rho_left, &u_left, &v_left, &E_left;
+                         &rho_right, &u_right, &v_right, &E_right;
                          v1x, v1y, v2x, v2y, v3x, v3y,
                          j, left_side, right_side,
                          left_idx, right_idx,
                          n_p, n_quad1d, num_sides, t,
                          &rho, &u, &v, &E);
 
-            // calculate the fluxes
-            eval_flux(rho, u, v, E,
-                 &flux_x1, &flux_y1, &flux_x2, &flux_y2,
-                 &flux_x3, &flux_y3, &flux_x4, &flux_y4);
 
+            // calculate the left fluxes
+            eval_flux(rho_left, u_left, v_left, E_left,
+                 &flux_x1_l, &flux_y1_l, &flux_x2_l, &flux_y2_l,
+                 &flux_x3_l, &flux_y3_l, &flux_x4_l, &flux_y4_l);
+
+            // calculate the right fluxes
+            eval_flux(rho_right, u_right, v_left, E_right,
+                 &flux_x1_r, &flux_y1_r, &flux_x2_r, &flux_y2_r,
+                 &flux_x3_r, &flux_y3_r, &flux_x4_r, &flux_y4_r);
+
+            // need these local max values
+            eval_lambda(c_rho_left, c_rho_right, 
+                        c_u_left, c_u_right, 
+                        c_v_left, c_v_right, 
+                        c_E_left, c_E_right,
+                        &lambda_rho, &lambda_u, &lambda_v, &lambda_E,
+                        n_p);
+            
             // 1st row
-            left_sum1  += (nx * flux_x1 + ny * flux_y1) * w_oned[j] * 
-                           basis_side[left_side * n_p * n_quad1d + i * n_quad1d + j];
-            right_sum1 += (nx * flux_x1 + ny * flux_y1) * w_oned[j] * 
-                           basis_side[right_side * n_p * n_quad1d + i * n_quad1d + n_quad1d - 1 - j];
+            s = 0.5 * ((flux_x1_l + flux_x1_r) * nx + (flux_y1_l + flux_y1_r) * ny 
+                        - lambda_rho * (rho_left - rho_right));
+            left_sum1  += w_oned[j] * s * basis_side[left_side * n_p * n_quad1d + i * n_quad1d + j];
+            right_sum1 += w_oned[j] * s * basis_side[right_side * n_p * n_quad1d + i * n_quad1d + n_quad1d - 1 - j];
+
             // 2nd row
-            left_sum2  += (nx * flux_x2 + ny * flux_y2) * w_oned[j] * 
-                           basis_side[left_side * n_p * n_quad1d + i * n_quad1d + j];
-            right_sum2 += (nx * flux_x2 + ny * flux_y2) * w_oned[j] * 
-                           basis_side[right_side * n_p * n_quad1d + i * n_quad1d + n_quad1d - 1 - j];
+            s = 0.5 * ((flux_x2_l + flux_x2_r) * nx + (flux_y2_l + flux_y2_r) * ny 
+                        - lambda_u * (u_left - u_right));
+            left_sum2  += w_oned[j] * s * basis_side[left_side * n_p * n_quad1d + i * n_quad1d + j];
+            right_sum2 += w_oned[j] * s * basis_side[right_side * n_p * n_quad1d + i * n_quad1d + n_quad1d - 1 - j];
 
             // 3rd row
-            left_sum3  += (nx * flux_x3 + ny * flux_y3) * w_oned[j] * 
-                           basis_side[left_side * n_p * n_quad1d + i * n_quad1d + j];
-            right_sum3 += (nx * flux_x3 + ny * flux_y3) * w_oned[j] * 
-                           basis_side[right_side * n_p * n_quad1d + i * n_quad1d + n_quad1d - 1 - j];
+            s = 0.5 * ((flux_x3_l + flux_x3_r) * nx + (flux_y3_l + flux_y3_r) * ny 
+                        - lambda_v * (v_left - v_right));
+            left_sum3  += w_oned[j] * s * basis_side[left_side * n_p * n_quad1d + i * n_quad1d + j];
+            right_sum3 += w_oned[j] * s * basis_side[right_side * n_p * n_quad1d + i * n_quad1d + n_quad1d - 1 - j];
 
             // 4th row
-            left_sum4  += (nx * flux_x4 + ny * flux_y4) * w_oned[j] * 
-                           basis_side[left_side * n_p * n_quad1d + i * n_quad1d + j];
-            right_sum4 += (nx * flux_x4 + ny * flux_y4) * w_oned[j] * 
-                           basis_side[right_side * n_p * n_quad1d + i * n_quad1d + n_quad1d - 1 - j];
+            s = 0.5 * ((flux_x4_l + flux_x4_r) * nx + (flux_y4_l + flux_y4_r) * ny 
+                        - lambda_E * (E_left - E_right));
+            left_sum4  += w_oned[j] * s * basis_side[left_side * n_p * n_quad1d + i * n_quad1d + j];
+            right_sum4 += w_oned[j] * s * basis_side[right_side * n_p * n_quad1d + i * n_quad1d + n_quad1d - 1 - j];
+
+            //left_sum1  += (nx * flux_x1 + ny * flux_y1) * w_oned[j] * 
+                           //basis_side[left_side * n_p * n_quad1d + i * n_quad1d + j];
+            //right_sum1 += (nx * flux_x1 + ny * flux_y1) * w_oned[j] * 
+                           //basis_side[right_side * n_p * n_quad1d + i * n_quad1d + n_quad1d - 1 - j];
+            //// 2nd row
+            //left_sum2  += (nx * flux_x2 + ny * flux_y2) * w_oned[j] * 
+                           //basis_side[left_side * n_p * n_quad1d + i * n_quad1d + j];
+            //right_sum2 += (nx * flux_x2 + ny * flux_y2) * w_oned[j] * 
+                           //basis_side[right_side * n_p * n_quad1d + i * n_quad1d + n_quad1d - 1 - j];
+//
+            //// 3rd row
+            //left_sum3  += (nx * flux_x3 + ny * flux_y3) * w_oned[j] * 
+                           //basis_side[left_side * n_p * n_quad1d + i * n_quad1d + j];
+            //right_sum3 += (nx * flux_x3 + ny * flux_y3) * w_oned[j] * 
+                           //basis_side[right_side * n_p * n_quad1d + i * n_quad1d + n_quad1d - 1 - j];
+//
+            //// 4th row
+            //left_sum4  += (nx * flux_x4 + ny * flux_y4) * w_oned[j] * 
+                           //basis_side[left_side * n_p * n_quad1d + i * n_quad1d + j];
+            //right_sum4 += (nx * flux_x4 + ny * flux_y4) * w_oned[j] * 
+                           //basis_side[right_side * n_p * n_quad1d + i * n_quad1d + n_quad1d - 1 - j];
         }
 
         // store this side's contribution in the riemann rhs vectors
-        left_riemann_rhs[num_elem * n_p * 0 + i * num_sides + idx]  = -len / 2 * left_sum1;
-        left_riemann_rhs[num_elem * n_p * 1 + i * num_sides + idx]  = -len / 2 * left_sum2;
-        left_riemann_rhs[num_elem * n_p * 2 + i * num_sides + idx]  = -len / 2 * left_sum3;
-        left_riemann_rhs[num_elem * n_p * 3 + i * num_sides + idx]  = -len / 2 * left_sum4;
-        right_riemann_rhs[num_elem * n_p * 0 + i * num_sides + idx] =  len / 2 * right_sum1;
-        right_riemann_rhs[num_elem * n_p * 1 + i * num_sides + idx] =  len / 2 * right_sum2;
-        right_riemann_rhs[num_elem * n_p * 2 + i * num_sides + idx] =  len / 2 * right_sum3;
-        right_riemann_rhs[num_elem * n_p * 3 + i * num_sides + idx] =  len / 2 * right_sum4;
+        left_riemann_rhs[num_sides * n_p * 0 + i * num_sides + idx]  = -len / 2 * left_sum1;
+        left_riemann_rhs[num_sides * n_p * 1 + i * num_sides + idx]  = -len / 2 * left_sum2;
+        left_riemann_rhs[num_sides * n_p * 2 + i * num_sides + idx]  = -len / 2 * left_sum3;
+        left_riemann_rhs[num_sides * n_p * 3 + i * num_sides + idx]  = -len / 2 * left_sum4;
+        right_riemann_rhs[num_sides * n_p * 0 + i * num_sides + idx] =  len / 2 * right_sum1;
+        right_riemann_rhs[num_sides * n_p * 1 + i * num_sides + idx] =  len / 2 * right_sum2;
+        right_riemann_rhs[num_sides * n_p * 2 + i * num_sides + idx] =  len / 2 * right_sum3;
+        right_riemann_rhs[num_sides * n_p * 3 + i * num_sides + idx] =  len / 2 * right_sum4;
     }
 }
 
