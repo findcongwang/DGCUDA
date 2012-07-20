@@ -19,7 +19,7 @@
  *
  ***********************/
 /* These are always prefixed with d_ for "device" */
-float *d_c;                 // coefficients for [rho, u, v, E]
+float *d_c;                 // coefficients for [rho, rho * u, rho * v, E]
 float *d_quad_rhs;          // the right hand side containing the quadrature contributions
 float *d_left_riemann_rhs;  // the right hand side containing the left riemann contributions
 float *d_right_riemann_rhs; // the right hand side containing the right riemann contributions
@@ -243,6 +243,10 @@ __global__ void init_conditions(float *c, float *J,
                 v   += w[j] * v0(x, y)   * basis[i * n_quad + j];
                 E   += w[j] * E0(x, y)   * basis[i * n_quad + j];
             }
+
+            // since we need to actually store u * rho, v * rho
+            u = u * rho;
+            v = v * rho;
 
             c[num_elem * n_p * 0 + i * num_elem + idx] = rho;
             c[num_elem * n_p * 1 + i * num_elem + idx] = u;
@@ -514,6 +518,7 @@ __device__ void eval_riemann(float *c_rho_left, float *c_rho_right,
     float rho_left, u_left, v_left, E_left;
     float rho_right, u_right, v_right, E_right;
 
+    // evaluate rho, u, v, E at the integration points
     rho_left = 0.;
     u_left   = 0.;
     v_left   = 0.;
@@ -530,7 +535,7 @@ __device__ void eval_riemann(float *c_rho_left, float *c_rho_right,
         E_left   += c_E_left[i]   * basis_side[left_side * n_p * n_quad1d + i * n_quad1d + j];
     }
 
-    // since we have rho * u and rho * v
+    // since we actually have coefficients for rho * u and rho * v
     u_left = u_left / rho_left;
     v_left = v_left / rho_left;
 
@@ -574,7 +579,7 @@ __device__ void eval_riemann(float *c_rho_left, float *c_rho_right,
             E_right   += c_E_right[i]   * basis_side[left_side * n_p * n_quad1d + i * n_quad1d + j];
         }
 
-        // since we have rho * u and rho * v
+        // again, since we have coefficients for rho * u and rho * v
         u_right = u_right / rho_right;
         v_right = v_right / rho_right;
     }
@@ -582,7 +587,7 @@ __device__ void eval_riemann(float *c_rho_left, float *c_rho_right,
     *rho =  riemann(rho_left, rho_right);
     *u   =  riemann(u_left, u_right);
     *v   =  riemann(v_left, v_right);
-    *E   =  riemann(E_left, E_right);
+    *E   =  0;//riemann(E_left, E_right);
 }
 
 /* surface integral evaluation
@@ -597,15 +602,17 @@ __device__ void eval_riemann(float *c_rho_left, float *c_rho_right,
  * d_t [    E    ] + d_x [ u * ( E +  p ) ] + d_y [ v * ( E +  p ) ] = 0
  */
 
+/* evaluate flux
+ *
+ * takes the actual values of rho, u, v, and E and returns the flux 
+ * x and y components. 
+ * NOTE: this needs the ACTUAL values for u and v, NOT rho * u, rho * v.
+ */
 __device__ void eval_flux(float rho, float u, float v, float E, 
                      float *flux_x1, float *flux_y1,
                      float *flux_x2, float *flux_y2,
                      float *flux_x3, float *flux_y3,
                      float *flux_x4, float *flux_y4) {
-
-    // since we have u * rho, v * rho
-    u = u / rho;
-    v = v / rho;
 
     // evaluate pressure
     float p = pressure(rho, u, v, E);
@@ -749,7 +756,7 @@ __device__ void eval_volume(float *c_rho, float *c_u,
                 E   += c_E[k]   * basis[n_quad * k + j];
             }
 
-            // since we have u * rho, v * rho
+            // since we actually have coefficients for rho * u, rho * v
             u = u / rho;
             v = v / rho;
 

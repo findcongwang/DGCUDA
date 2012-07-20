@@ -50,7 +50,11 @@ __global__ void eval_rhs_rk4(float *c, float *quad_rhs, float *left_riemann_rhs,
                          int *left_elem, float *J, 
                          float dt, int n_p, int num_sides, int num_elem) {
     int idx = blockDim.x * blockIdx.x + threadIdx.x;
-    float s1, s2, s3, register_J;
+    float s1_eqn1, s2_eqn1, s3_eqn1;
+    float s1_eqn2, s2_eqn2, s3_eqn2;
+    float s1_eqn3, s2_eqn3, s3_eqn3;
+    float s1_eqn4, s2_eqn4, s3_eqn4;
+    float register_J;
     int i, s1_idx, s2_idx, s3_idx;
 
     if (idx < num_elem) {
@@ -66,25 +70,46 @@ __global__ void eval_rhs_rk4(float *c, float *quad_rhs, float *left_riemann_rhs,
 
             // determine left or right pointing
             if (idx == left_elem[s1_idx]) {
-                s1 = left_riemann_rhs[i * num_sides + s1_idx];
+                s1_eqn1 = left_riemann_rhs[num_sides * n_p * 0 + i * num_sides + s1_idx];
+                s1_eqn2 = left_riemann_rhs[num_sides * n_p * 1 + i * num_sides + s1_idx];
+                s1_eqn3 = left_riemann_rhs[num_sides * n_p * 2 + i * num_sides + s1_idx];
+                s1_eqn4 = left_riemann_rhs[num_sides * n_p * 3 + i * num_sides + s1_idx];
             } else {
-                s1 = right_riemann_rhs[i * num_sides + s1_idx];
+                s1_eqn1 = right_riemann_rhs[num_sides * n_p * 0 + i * num_sides + s1_idx];
+                s1_eqn2 = right_riemann_rhs[num_sides * n_p * 1 + i * num_sides + s1_idx];
+                s1_eqn3 = right_riemann_rhs[num_sides * n_p * 2 + i * num_sides + s1_idx];
+                s1_eqn4 = right_riemann_rhs[num_sides * n_p * 3 + i * num_sides + s1_idx];
             }
 
             if (idx == left_elem[s2_idx]) {
-                s2 = left_riemann_rhs[i * num_sides + s2_idx];
+                s2_eqn1 = left_riemann_rhs[num_sides * n_p * 0 + i * num_sides + s2_idx];
+                s2_eqn2 = left_riemann_rhs[num_sides * n_p * 1 + i * num_sides + s2_idx];
+                s2_eqn3 = left_riemann_rhs[num_sides * n_p * 2 + i * num_sides + s2_idx];
+                s2_eqn4 = left_riemann_rhs[num_sides * n_p * 3 + i * num_sides + s2_idx];
             } else {
-                s2 = right_riemann_rhs[i * num_sides + s2_idx];
+                s2_eqn1 = right_riemann_rhs[num_sides * n_p * 0 + i * num_sides + s2_idx];
+                s2_eqn2 = right_riemann_rhs[num_sides * n_p * 1 + i * num_sides + s2_idx];
+                s2_eqn3 = right_riemann_rhs[num_sides * n_p * 2 + i * num_sides + s2_idx];
+                s2_eqn4 = right_riemann_rhs[num_sides * n_p * 3 + i * num_sides + s2_idx];
             }
 
             if (idx == left_elem[s3_idx]) {
-                s3 = left_riemann_rhs[i * num_sides + s3_idx];
+                s3_eqn1 = left_riemann_rhs[num_sides * n_p * 0 + i * num_sides + s3_idx];
+                s3_eqn2 = left_riemann_rhs[num_sides * n_p * 1 + i * num_sides + s3_idx];
+                s3_eqn3 = left_riemann_rhs[num_sides * n_p * 2 + i * num_sides + s3_idx];
+                s3_eqn4 = left_riemann_rhs[num_sides * n_p * 3 + i * num_sides + s3_idx];
             } else {
-                s3 = right_riemann_rhs[i * num_sides + s3_idx];
+                s3_eqn1 = right_riemann_rhs[num_sides * n_p * 0 + i * num_sides + s3_idx];
+                s3_eqn2 = right_riemann_rhs[num_sides * n_p * 1 + i * num_sides + s3_idx];
+                s3_eqn3 = right_riemann_rhs[num_sides * n_p * 2 + i * num_sides + s3_idx];
+                s3_eqn4 = right_riemann_rhs[num_sides * n_p * 3 + i * num_sides + s3_idx];
             }
 
             // calculate the coefficient c
-            c[i * num_elem + idx] = 1. / register_J * dt * (quad_rhs[i * num_elem + idx] + s1 + s2 + s3);
+            c[num_elem * n_p * 0 + i * num_elem + idx] = 1. / register_J * dt * (quad_rhs[i * num_elem + idx] + s1_eqn1 + s2_eqn1 + s3_eqn1);
+            c[num_elem * n_p * 1 + i * num_elem + idx] = 1. / register_J * dt * (quad_rhs[i * num_elem + idx] + s1_eqn2 + s2_eqn2 + s3_eqn2);
+            c[num_elem * n_p * 2 + i * num_elem + idx] = 1. / register_J * dt * (quad_rhs[i * num_elem + idx] + s1_eqn3 + s2_eqn3 + s3_eqn3);
+            c[num_elem * n_p * 3 + i * num_elem + idx] = 1. / register_J * dt * (quad_rhs[i * num_elem + idx] + s1_eqn4 + s2_eqn4 + s3_eqn4);
         }
     }
 }
@@ -269,7 +294,11 @@ __global__ void eval_rhs_fe(float *c, float *quad_rhs, float *left_riemann_rhs, 
                          int *left_elem, float *J, 
                          float dt, int n_p, int num_sides, int num_elem) {
     int idx = blockDim.x * blockIdx.x + threadIdx.x;
-    float s1, s2, s3, register_J;
+    float s1_eqn1, s2_eqn1, s3_eqn1;
+    float s1_eqn2, s2_eqn2, s3_eqn2;
+    float s1_eqn3, s2_eqn3, s3_eqn3;
+    float s1_eqn4, s2_eqn4, s3_eqn4;
+    float register_J;
     int i, s1_idx, s2_idx, s3_idx;
 
     if (idx < num_elem) {
@@ -285,25 +314,46 @@ __global__ void eval_rhs_fe(float *c, float *quad_rhs, float *left_riemann_rhs, 
 
             // determine left or right pointing
             if (idx == left_elem[s1_idx]) {
-                s1 = left_riemann_rhs[i * num_sides + s1_idx];
+                s1_eqn1 = left_riemann_rhs[num_sides * n_p * 0 + i * num_sides + s1_idx];
+                s1_eqn2 = left_riemann_rhs[num_sides * n_p * 1 + i * num_sides + s1_idx];
+                s1_eqn3 = left_riemann_rhs[num_sides * n_p * 2 + i * num_sides + s1_idx];
+                s1_eqn4 = left_riemann_rhs[num_sides * n_p * 3 + i * num_sides + s1_idx];
             } else {
-                s1 = right_riemann_rhs[i * num_sides + s1_idx];
+                s1_eqn1 = right_riemann_rhs[num_sides * n_p * 0 + i * num_sides + s1_idx];
+                s1_eqn2 = right_riemann_rhs[num_sides * n_p * 1 + i * num_sides + s1_idx];
+                s1_eqn3 = right_riemann_rhs[num_sides * n_p * 2 + i * num_sides + s1_idx];
+                s1_eqn4 = right_riemann_rhs[num_sides * n_p * 3 + i * num_sides + s1_idx];
             }
 
             if (idx == left_elem[s2_idx]) {
-                s2 = left_riemann_rhs[i * num_sides + s2_idx];
+                s2_eqn1 = left_riemann_rhs[num_sides * n_p * 0 + i * num_sides + s2_idx];
+                s2_eqn2 = left_riemann_rhs[num_sides * n_p * 1 + i * num_sides + s2_idx];
+                s2_eqn3 = left_riemann_rhs[num_sides * n_p * 2 + i * num_sides + s2_idx];
+                s2_eqn4 = left_riemann_rhs[num_sides * n_p * 3 + i * num_sides + s2_idx];
             } else {
-                s2 = right_riemann_rhs[i * num_sides + s2_idx];
+                s2_eqn1 = right_riemann_rhs[num_sides * n_p * 0 + i * num_sides + s2_idx];
+                s2_eqn2 = right_riemann_rhs[num_sides * n_p * 1 + i * num_sides + s2_idx];
+                s2_eqn3 = right_riemann_rhs[num_sides * n_p * 2 + i * num_sides + s2_idx];
+                s2_eqn4 = right_riemann_rhs[num_sides * n_p * 3 + i * num_sides + s2_idx];
             }
 
             if (idx == left_elem[s3_idx]) {
-                s3 = left_riemann_rhs[i * num_sides + s3_idx];
+                s3_eqn1 = left_riemann_rhs[num_sides * n_p * 0 + i * num_sides + s3_idx];
+                s3_eqn2 = left_riemann_rhs[num_sides * n_p * 1 + i * num_sides + s3_idx];
+                s3_eqn3 = left_riemann_rhs[num_sides * n_p * 2 + i * num_sides + s3_idx];
+                s3_eqn4 = left_riemann_rhs[num_sides * n_p * 3 + i * num_sides + s3_idx];
             } else {
-                s3 = right_riemann_rhs[i * num_sides + s3_idx];
+                s3_eqn1 = right_riemann_rhs[num_sides * n_p * 0 + i * num_sides + s3_idx];
+                s3_eqn2 = right_riemann_rhs[num_sides * n_p * 1 + i * num_sides + s3_idx];
+                s3_eqn3 = right_riemann_rhs[num_sides * n_p * 2 + i * num_sides + s3_idx];
+                s3_eqn4 = right_riemann_rhs[num_sides * n_p * 3 + i * num_sides + s3_idx];
             }
 
             // calculate the coefficient c
-            c[i * num_elem + idx] += 1. / register_J * dt * (quad_rhs[i * num_elem + idx] + s1 + s2 + s3);
+            c[num_elem * n_p * 0 + i * num_elem + idx] += 1. / register_J * dt * (quad_rhs[num_elem * n_p * 0 + i * num_elem + idx] + s1_eqn1 + s2_eqn1 + s3_eqn1);
+            c[num_elem * n_p * 1 + i * num_elem + idx] += 1. / register_J * dt * (quad_rhs[num_elem * n_p * 1 + i * num_elem + idx] + s1_eqn2 + s2_eqn2 + s3_eqn2);
+            c[num_elem * n_p * 2 + i * num_elem + idx] += 1. / register_J * dt * (quad_rhs[num_elem * n_p * 2 + i * num_elem + idx] + s1_eqn3 + s2_eqn3 + s3_eqn3);
+            c[num_elem * n_p * 3 + i * num_elem + idx] += 1. / register_J * dt * (quad_rhs[num_elem * n_p * 3 + i * num_elem + idx] + s1_eqn4 + s2_eqn4 + s3_eqn4);
         }
     }
 }
