@@ -499,8 +499,8 @@ __device__ void eval_riemann(float *c_rho_left, float *c_rho_right,
                              float *c_u_left,   float *c_u_right,
                              float *c_v_left,   float *c_v_right,
                              float *c_E_left,   float *c_E_right,
-                             float rho_left, float u_left, float v_left, float E_left,
-                             float rho_right, float u_right, float v_right, float E_right,
+                             float *rho_left, float *u_left, float *v_left, float *E_left,
+                             float *rho_right, float *u_right, float *v_right, float *E_right,
                              float v1x, float v1y,
                              float v2x, float v2y,
                              float v3x, float v3y,
@@ -512,7 +512,6 @@ __device__ void eval_riemann(float *c_rho_left, float *c_rho_right,
                              float *rho, float *u, float *v, float *E) {
 
     int i;
-
 
     // evaluate rho, u, v, E at the integration points
     *rho_left = 0.;
@@ -598,14 +597,15 @@ __device__ void eval_riemann(float *c_rho_left, float *c_rho_right,
  * d_t [    E    ] + d_x [ u * ( E +  p ) ] + d_y [ v * ( E +  p ) ] = 0
  */
 
-__device__ eval_lambda(float *c_rho_left, float *c_rho_right,
+__device__ float eval_lambda(float *c_rho_left, float *c_rho_right,
                        float *c_u_left,   float *c_u_right,
                        float *c_u_left,   float *c_u_right,
                        float *c_u_left,   float *c_u_right,
                        int n_p) {
-    float rho_left, rho_right;
-    for (i = 0; i < n_p; i++) {
-        rho_left += c_rho_left
+    //for (i = 0; i < n_p; i++) {
+         
+    //}
+    return 1.;
 
 }
 /* evaluate flux
@@ -704,34 +704,33 @@ __device__ void eval_surface(float *c_rho_left, float *c_u_left, float *c_v_left
                  &flux_x3_r, &flux_y3_r, &flux_x4_r, &flux_y4_r);
 
             // need these local max values
-            eval_lambda(c_rho_left, c_rho_right, 
+            lambda = eval_lambda(c_rho_left, c_rho_right, 
                         c_u_left, c_u_right, 
                         c_v_left, c_v_right, 
                         c_E_left, c_E_right,
-                        &lambda_rho, &lambda_u, &lambda_v, &lambda_E,
                         n_p);
             
             // 1st row
             s = 0.5 * ((flux_x1_l + flux_x1_r) * nx + (flux_y1_l + flux_y1_r) * ny 
-                        - lambda_rho * (rho_left - rho_right));
+                        - lambda * (rho_left - rho_right));
             left_sum1  += w_oned[j] * s * basis_side[left_side * n_p * n_quad1d + i * n_quad1d + j];
             right_sum1 += w_oned[j] * s * basis_side[right_side * n_p * n_quad1d + i * n_quad1d + n_quad1d - 1 - j];
 
             // 2nd row
             s = 0.5 * ((flux_x2_l + flux_x2_r) * nx + (flux_y2_l + flux_y2_r) * ny 
-                        - lambda_u * (u_left - u_right));
+                        - lambda * (u_left - u_right));
             left_sum2  += w_oned[j] * s * basis_side[left_side * n_p * n_quad1d + i * n_quad1d + j];
             right_sum2 += w_oned[j] * s * basis_side[right_side * n_p * n_quad1d + i * n_quad1d + n_quad1d - 1 - j];
 
             // 3rd row
             s = 0.5 * ((flux_x3_l + flux_x3_r) * nx + (flux_y3_l + flux_y3_r) * ny 
-                        - lambda_v * (v_left - v_right));
+                        - lambda * (v_left - v_right));
             left_sum3  += w_oned[j] * s * basis_side[left_side * n_p * n_quad1d + i * n_quad1d + j];
             right_sum3 += w_oned[j] * s * basis_side[right_side * n_p * n_quad1d + i * n_quad1d + n_quad1d - 1 - j];
 
             // 4th row
             s = 0.5 * ((flux_x4_l + flux_x4_r) * nx + (flux_y4_l + flux_y4_r) * ny 
-                        - lambda_E * (E_left - E_right));
+                        - lambda * (E_left - E_right));
             left_sum4  += w_oned[j] * s * basis_side[left_side * n_p * n_quad1d + i * n_quad1d + j];
             right_sum4 += w_oned[j] * s * basis_side[right_side * n_p * n_quad1d + i * n_quad1d + n_quad1d - 1 - j];
 
