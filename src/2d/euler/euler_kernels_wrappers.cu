@@ -4,7 +4,7 @@
  * THREADS: num_sides
  */
 __global__ void eval_surface_wrapper0(double *c, double *left_riemann_rhs, double *right_riemann_rhs, 
-                                      double *s_length, 
+                                      double *s_length, double *J,
                                       double *V1x, double *V1y,
                                       double *V2x, double *V2y,
                                       double *V3x, double *V3y,
@@ -42,7 +42,7 @@ __global__ void eval_surface_wrapper0(double *c, double *left_riemann_rhs, doubl
         eval_surface(rho_left, u_left, v_left, E_left,
                      rho_right, u_right, v_right, E_right,
                      left_riemann_rhs, right_riemann_rhs,
-                     s_length[idx],
+                     s_length[idx], J[left_elem[idx]],
                      V1x[left_elem[idx]], V1y[left_elem[idx]],
                      V2x[left_elem[idx]], V2y[left_elem[idx]],
                      V3x[left_elem[idx]], V3y[left_elem[idx]],
@@ -60,7 +60,7 @@ __global__ void eval_surface_wrapper0(double *c, double *left_riemann_rhs, doubl
  * THREADS: num_sides
  */
 __global__ void eval_surface_wrapper1(double *c, double *left_riemann_rhs, double *right_riemann_rhs, 
-                                      double *s_length, 
+                                      double *s_length, double *J,
                                       double *V1x, double *V1y,
                                       double *V2x, double *V2y,
                                       double *V3x, double *V3y,
@@ -103,7 +103,7 @@ __global__ void eval_surface_wrapper1(double *c, double *left_riemann_rhs, doubl
         eval_surface(rho_left, u_left, v_left, E_left,
                      rho_right, u_right, v_right, E_right,
                      left_riemann_rhs, right_riemann_rhs,
-                     s_length[idx],
+                     s_length[idx], J[left_elem[idx]],
                      V1x[left_elem[idx]], V1y[left_elem[idx]],
                      V2x[left_elem[idx]], V2y[left_elem[idx]],
                      V3x[left_elem[idx]], V3y[left_elem[idx]],
@@ -121,7 +121,7 @@ __global__ void eval_surface_wrapper1(double *c, double *left_riemann_rhs, doubl
  * THREADS: num_sides
  */
 __global__ void eval_surface_wrapper2(double *c, double *left_riemann_rhs, double *right_riemann_rhs, 
-                                      double *s_length, 
+                                      double *s_length, double *J,
                                       double *V1x, double *V1y,
                                       double *V2x, double *V2y,
                                       double *V3x, double *V3y,
@@ -164,7 +164,7 @@ __global__ void eval_surface_wrapper2(double *c, double *left_riemann_rhs, doubl
         eval_surface(rho_left, u_left, v_left, E_left,
                      rho_right, u_right, v_right, E_right,
                      left_riemann_rhs, right_riemann_rhs,
-                     s_length[idx],
+                     s_length[idx], J[left_elem[idx]],
                      V1x[left_elem[idx]], V1y[left_elem[idx]],
                      V2x[left_elem[idx]], V2y[left_elem[idx]],
                      V3x[left_elem[idx]], V3y[left_elem[idx]],
@@ -182,7 +182,7 @@ __global__ void eval_surface_wrapper2(double *c, double *left_riemann_rhs, doubl
  * THREADS: num_sides
  */
 __global__ void eval_surface_wrapper3(double *c, double *left_riemann_rhs, double *right_riemann_rhs, 
-                                      double *s_length, 
+                                      double *s_length, double *J,
                                       double *V1x, double *V1y,
                                       double *V2x, double *V2y,
                                       double *V3x, double *V3y,
@@ -225,7 +225,7 @@ __global__ void eval_surface_wrapper3(double *c, double *left_riemann_rhs, doubl
         eval_surface(rho_left, u_left, v_left, E_left,
                      rho_right, u_right, v_right, E_right,
                      left_riemann_rhs, right_riemann_rhs,
-                     s_length[idx],
+                     s_length[idx], J[left_elem[idx]],
                      V1x[left_elem[idx]], V1y[left_elem[idx]],
                      V2x[left_elem[idx]], V2y[left_elem[idx]],
                      V3x[left_elem[idx]], V3y[left_elem[idx]],
@@ -243,7 +243,7 @@ __global__ void eval_surface_wrapper3(double *c, double *left_riemann_rhs, doubl
  * THREADS: num_sides
  */
 __global__ void eval_surface_wrapper4(double *c, double *left_riemann_rhs, double *right_riemann_rhs, 
-                                      double *s_length, 
+                                      double *s_length, double *J,
                                       double *V1x, double *V1y,
                                       double *V2x, double *V2y,
                                       double *V3x, double *V3y,
@@ -286,7 +286,7 @@ __global__ void eval_surface_wrapper4(double *c, double *left_riemann_rhs, doubl
         eval_surface(rho_left, u_left, v_left, E_left,
                      rho_right, u_right, v_right, E_right,
                      left_riemann_rhs, right_riemann_rhs,
-                     s_length[idx],
+                     s_length[idx], J[left_elem[idx]],
                      V1x[left_elem[idx]], V1y[left_elem[idx]],
                      V2x[left_elem[idx]], V2y[left_elem[idx]],
                      V3x[left_elem[idx]], V3y[left_elem[idx]],
@@ -304,7 +304,7 @@ __global__ void eval_surface_wrapper4(double *c, double *left_riemann_rhs, doubl
  * THREADS: num_sides
  */
 __global__ void eval_surface_wrapper5(double *c, double *left_riemann_rhs, double *right_riemann_rhs, 
-                                      double *s_length, 
+                                      double *s_length, double *J,
                                       double *V1x, double *V1y,
                                       double *V2x, double *V2y,
                                       double *V3x, double *V3y,
@@ -347,7 +347,7 @@ __global__ void eval_surface_wrapper5(double *c, double *left_riemann_rhs, doubl
         eval_surface(rho_left, u_left, v_left, E_left,
                      rho_right, u_right, v_right, E_right,
                      left_riemann_rhs, right_riemann_rhs,
-                     s_length[idx],
+                     s_length[idx], J[left_elem[idx]],
                      V1x[left_elem[idx]], V1y[left_elem[idx]],
                      V2x[left_elem[idx]], V2y[left_elem[idx]],
                      V3x[left_elem[idx]], V3y[left_elem[idx]],

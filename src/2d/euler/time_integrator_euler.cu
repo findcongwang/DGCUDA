@@ -106,17 +106,17 @@ __global__ void eval_rhs_rk4(double *c, double *quad_rhs, double *left_riemann_r
             }
 
             // calculate the coefficient c
-            c[num_elem * n_p * 0 + i * num_elem + idx] = 1. / register_J * dt * (quad_rhs[i * num_elem + idx] + s1_eqn1 + s2_eqn1 + s3_eqn1);
-            c[num_elem * n_p * 1 + i * num_elem + idx] = 1. / register_J * dt * (quad_rhs[i * num_elem + idx] + s1_eqn2 + s2_eqn2 + s3_eqn2);
-            c[num_elem * n_p * 2 + i * num_elem + idx] = 1. / register_J * dt * (quad_rhs[i * num_elem + idx] + s1_eqn3 + s2_eqn3 + s3_eqn3);
-            c[num_elem * n_p * 3 + i * num_elem + idx] = 1. / register_J * dt * (quad_rhs[i * num_elem + idx] + s1_eqn4 + s2_eqn4 + s3_eqn4);
+            c[num_elem * n_p * 0 + i * num_elem + idx] = 1. / register_J * dt * (quad_rhs[num_elem * n_p * 0 + i * num_elem + idx] + s1_eqn1 + s2_eqn1 + s3_eqn1);
+            c[num_elem * n_p * 1 + i * num_elem + idx] = 1. / register_J * dt * (quad_rhs[num_elem * n_p * 1 + i * num_elem + idx] + s1_eqn2 + s2_eqn2 + s3_eqn2);
+            c[num_elem * n_p * 2 + i * num_elem + idx] = 1. / register_J * dt * (quad_rhs[num_elem * n_p * 2 + i * num_elem + idx] + s1_eqn3 + s2_eqn3 + s3_eqn3);
+            c[num_elem * n_p * 3 + i * num_elem + idx] = 1. / register_J * dt * (quad_rhs[num_elem * n_p * 3 + i * num_elem + idx] + s1_eqn4 + s2_eqn4 + s3_eqn4);
         }
     }
 }
 
 void time_integrate_rk4(double dt, int n_quad, int n_quad1d, int n_p, int n, 
                     int num_elem, int num_sides, int timesteps) {
-    int n_threads = 128;
+    int n_threads = 256;
     int i;
     double t;
 
@@ -125,7 +125,7 @@ void time_integrate_rk4(double dt, int n_quad, int n_quad1d, int n_p, int n,
     int n_blocks_rk4     = ((n_p * num_elem) / n_threads) + (((n_p * num_elem) % n_threads) ? 1 : 0);
 
     void (*eval_surface_ftn)(double*, double*, double*, 
-                         double*,
+                         double*, double*,
                          double*, double*,
                          double*, double*,
                          double*, double*,
@@ -169,7 +169,7 @@ void time_integrate_rk4(double dt, int n_quad, int n_quad1d, int n_p, int n,
         checkCudaError("error before stage 1: eval_surface_ftn");
         eval_surface_ftn<<<n_blocks_sides, n_threads>>>
                         (d_c, d_left_riemann_rhs, d_right_riemann_rhs, 
-                         d_s_length, 
+                         d_s_length, d_J,
                          d_V1x, d_V1y,
                          d_V2x, d_V2y,
                          d_V3x, d_V3y,
@@ -199,7 +199,7 @@ void time_integrate_rk4(double dt, int n_quad, int n_quad1d, int n_p, int n,
         // stage 2
         eval_surface_ftn<<<n_blocks_sides, n_threads>>>
                         (d_kstar, d_left_riemann_rhs, d_right_riemann_rhs, 
-                         d_s_length,
+                         d_s_length, d_J,
                          d_V1x, d_V1y,
                          d_V2x, d_V2y,
                          d_V3x, d_V3y,
@@ -227,7 +227,7 @@ void time_integrate_rk4(double dt, int n_quad, int n_quad1d, int n_p, int n,
         // stage 3
         eval_surface_ftn<<<n_blocks_sides, n_threads>>>
                         (d_kstar, d_left_riemann_rhs, d_right_riemann_rhs, 
-                         d_s_length,
+                         d_s_length, d_J,
                          d_V1x, d_V1y,
                          d_V2x, d_V2y,
                          d_V3x, d_V3y,
@@ -255,7 +255,7 @@ void time_integrate_rk4(double dt, int n_quad, int n_quad1d, int n_p, int n,
         // stage 4
         eval_surface_ftn<<<n_blocks_sides, n_threads>>>
                         (d_kstar, d_left_riemann_rhs, d_right_riemann_rhs, 
-                         d_s_length,
+                         d_s_length, d_J,
                          d_V1x, d_V1y,
                          d_V2x, d_V2y,
                          d_V3x, d_V3y,
@@ -369,7 +369,7 @@ void time_integrate_fe(double dt, int n_quad, int n_quad1d, int n_p, int n,
     int n_blocks_sides   = (num_sides / n_threads) + ((num_sides % n_threads) ? 1 : 0);
 
     void (*eval_surface_ftn)(double*, double*, double*, 
-                         double*,
+                         double*, double*,
                          double*, double*,
                          double*, double*,
                          double*, double*,
@@ -410,7 +410,7 @@ void time_integrate_fe(double dt, int n_quad, int n_quad1d, int n_p, int n,
         t = i * dt;
         eval_surface_ftn<<<n_blocks_sides, n_threads>>>
                         (d_c, d_left_riemann_rhs, d_right_riemann_rhs, 
-                         d_s_length, 
+                         d_s_length, d_J,
                          d_V1x, d_V1y,
                          d_V2x, d_V2y,
                          d_V3x, d_V3y,

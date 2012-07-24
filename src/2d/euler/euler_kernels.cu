@@ -176,10 +176,10 @@ __device__ double rho0(double x, double y) {
     return 2 + x;
 }
 __device__ double u0(double x, double y) {
-    return 1.;
+    return 0.;
 }
 __device__ double v0(double x, double y) {
-    return 1.;
+    return 0.;
 }
 __device__ double E0(double x, double y) {
     return 1. / (GAMMA - 1) + (powf(u0(x, y), 2) + powf(v0(x, y), 2)) / 2. * rho0(x, y);
@@ -559,10 +559,14 @@ __device__ void eval_riemann(double *c_rho_left, double *c_rho_right,
         y = v2y * r1_eval + v3y * r2_eval + v1y * (1 - r1_eval - r2_eval);
             
         // deal with the boundary element here
-        *rho_right = boundary_exact_rho(x, y, t);
-        *u_right   = boundary_exact_u(x, y, t);
-        *v_right   = boundary_exact_v(x, y, t);
-        *E_right   = boundary_exact_E(x, y, t);
+        *rho_right = *rho_left;
+        *u_right   = *u_left;
+        *v_right   = *v_left;
+        *E_right   = *E_left;
+        //*rho_right = boundary_exact_rho(x, y, t);
+        //*u_right   = boundary_exact_u(x, y, t);
+        //*v_right   = boundary_exact_v(x, y, t);
+        //*E_right   = boundary_exact_E(x, y, t);
 
     } else {
         // evaluate the right side at the integration point
@@ -608,7 +612,7 @@ __device__ double eval_lambda(double *c_rho_left, double *c_rho_right,
                              double *c_u_left,   double *c_u_right,
                              double *c_v_left,   double *c_v_right,
                              double *c_E_left,   double *c_E_right,
-                             int n_p, int n_quad) {
+                             double J, int n_p, int n_quad) {
     double sum1_l, sum2_l, sum3_l;
     double sum1_r, sum2_r, sum3_r;
     double max;
@@ -765,9 +769,9 @@ __device__ double eval_lambda(double *c_rho_left, double *c_rho_right,
         max = sum3_r;
     }
 
-    return max;
-
+    return 0;//max / 2;
 }
+
 /* evaluate flux
  *
  * takes the actual values of rho, u, v, and E and returns the flux 
@@ -803,7 +807,7 @@ __device__ void eval_flux(double rho, double u, double v, double E,
 __device__ void eval_surface(double *c_rho_left, double *c_u_left, double *c_v_left, double *c_E_left,
                              double *c_rho_right, double *c_u_right, double *c_v_right, double *c_E_right,
                              double *left_riemann_rhs, double *right_riemann_rhs, 
-                             double len,
+                             double len, double J,
                              double v1x, double v1y,
                              double v2x, double v2y,
                              double v3x, double v3y,
@@ -867,7 +871,7 @@ __device__ void eval_surface(double *c_rho_left, double *c_u_left, double *c_v_l
                                  c_u_left, c_u_right, 
                                  c_v_left, c_v_right, 
                                  c_E_left, c_E_right,
-                                 n_p, n_quad);
+                                 J, n_p, n_quad);
             
             // 1st row
             s = 0.5 * ((flux_x1_l + flux_x1_r) * nx + (flux_y1_l + flux_y1_r) * ny 
@@ -892,28 +896,6 @@ __device__ void eval_surface(double *c_rho_left, double *c_u_left, double *c_v_l
                         - lambda * (E_left - E_right));
             left_sum4  += w_oned[j] * s * basis_side[left_side * n_p * n_quad1d + i * n_quad1d + j];
             right_sum4 += w_oned[j] * s * basis_side[right_side * n_p * n_quad1d + i * n_quad1d + n_quad1d - 1 - j];
-
-            //left_sum1  += (nx * flux_x1 + ny * flux_y1) * w_oned[j] * 
-                           //basis_side[left_side * n_p * n_quad1d + i * n_quad1d + j];
-            //right_sum1 += (nx * flux_x1 + ny * flux_y1) * w_oned[j] * 
-                           //basis_side[right_side * n_p * n_quad1d + i * n_quad1d + n_quad1d - 1 - j];
-            //// 2nd row
-            //left_sum2  += (nx * flux_x2 + ny * flux_y2) * w_oned[j] * 
-                           //basis_side[left_side * n_p * n_quad1d + i * n_quad1d + j];
-            //right_sum2 += (nx * flux_x2 + ny * flux_y2) * w_oned[j] * 
-                           //basis_side[right_side * n_p * n_quad1d + i * n_quad1d + n_quad1d - 1 - j];
-//
-            //// 3rd row
-            //left_sum3  += (nx * flux_x3 + ny * flux_y3) * w_oned[j] * 
-                           //basis_side[left_side * n_p * n_quad1d + i * n_quad1d + j];
-            //right_sum3 += (nx * flux_x3 + ny * flux_y3) * w_oned[j] * 
-                           //basis_side[right_side * n_p * n_quad1d + i * n_quad1d + n_quad1d - 1 - j];
-//
-            //// 4th row
-            //left_sum4  += (nx * flux_x4 + ny * flux_y4) * w_oned[j] * 
-                           //basis_side[left_side * n_p * n_quad1d + i * n_quad1d + j];
-            //right_sum4 += (nx * flux_x4 + ny * flux_y4) * w_oned[j] * 
-                           //basis_side[right_side * n_p * n_quad1d + i * n_quad1d + n_quad1d - 1 - j];
         }
 
         // store this side's contribution in the riemann rhs vectors
