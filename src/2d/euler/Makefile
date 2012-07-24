@@ -1,5 +1,5 @@
 all: dgeuler
 
-dgeuler: euler.cu 2dadvec_euler.cu 2dadvec_kernels_euler.cu 2dadvec_kernels_wrappers_euler.cu time_integrator_euler.cu ../quadrature.cu ../basis.cu 
-	nvcc -arch=sm_13 euler.cu -o dgeuler
+dgeuler: main.cu euler.cu euler_kernels.cu euler_kernels_wrappers.cu time_integrator_euler.cu ../quadrature.cu ../basis.cu 
+	nvcc -arch=sm_13 main.cu -o dgeuler
 

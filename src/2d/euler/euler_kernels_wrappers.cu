@@ -3,20 +3,20 @@
  * wrapper function for the eval_surface device function.
  * THREADS: num_sides
  */
-__global__ void eval_surface_wrapper0(float *c, float *left_riemann_rhs, float *right_riemann_rhs, 
-                                      float *s_length, 
-                                      float *V1x, float *V1y,
-                                      float *V2x, float *V2y,
-                                      float *V3x, float *V3y,
+__global__ void eval_surface_wrapper0(double *c, double *left_riemann_rhs, double *right_riemann_rhs, 
+                                      double *s_length, 
+                                      double *V1x, double *V1y,
+                                      double *V2x, double *V2y,
+                                      double *V3x, double *V3y,
                                       int *left_elem, int *right_elem,
                                       int *left_side_number, int *right_side_number, 
-                                      float *Nx, float *Ny, 
-                                      int n_quad1d, int n_p, int num_sides, int num_elem, float t) {
+                                      double *Nx, double *Ny, 
+                                      int n_quad1d, int n_quad, int n_p, int num_sides, int num_elem, double t) {
     int idx = blockDim.x * blockIdx.x + threadIdx.x;
 
     if (idx < num_sides) {
-        register float rho_left[1], u_left[1], v_left[1], E_left[1];
-        register float rho_right[1], u_right[1], v_right[1], E_right[1];
+        register double rho_left[1], u_left[1], v_left[1], E_left[1];
+        register double rho_right[1], u_right[1], v_right[1], E_right[1];
 
         // grab the coefficients for the left & right elements
         // TODO: group all the boundary sides together so they are in the same warp;
@@ -49,7 +49,7 @@ __global__ void eval_surface_wrapper0(float *c, float *left_riemann_rhs, float *
                      left_elem[idx], right_elem[idx],
                      left_side_number[idx], right_side_number[idx],
                      Nx[idx], Ny[idx],
-                     n_quad1d, n_p, num_sides, num_elem, t, idx);
+                     n_quad1d, n_quad, n_p, num_sides, num_elem, t, idx);
     }
 }
 
@@ -59,20 +59,20 @@ __global__ void eval_surface_wrapper0(float *c, float *left_riemann_rhs, float *
  * wrapper function for the eval_surface device function.
  * THREADS: num_sides
  */
-__global__ void eval_surface_wrapper1(float *c, float *left_riemann_rhs, float *right_riemann_rhs, 
-                                      float *s_length, 
-                                      float *V1x, float *V1y,
-                                      float *V2x, float *V2y,
-                                      float *V3x, float *V3y,
+__global__ void eval_surface_wrapper1(double *c, double *left_riemann_rhs, double *right_riemann_rhs, 
+                                      double *s_length, 
+                                      double *V1x, double *V1y,
+                                      double *V2x, double *V2y,
+                                      double *V3x, double *V3y,
                                       int *left_elem, int *right_elem,
                                       int *left_side_number, int *right_side_number, 
-                                      float *Nx, float *Ny, 
-                                      int n_quad1d, int n_p, int num_sides, int num_elem, float t) {
+                                      double *Nx, double *Ny, 
+                                      int n_quad1d, int n_quad, int n_p, int num_sides, int num_elem, double t) {
     int idx = blockDim.x * blockIdx.x + threadIdx.x;
 
     if (idx < num_sides) {
-        register float rho_left[3], u_left[3], v_left[3], E_left[3];
-        register float rho_right[3], u_right[3], v_right[3], E_right[3];
+        register double rho_left[3], u_left[3], v_left[3], E_left[3];
+        register double rho_right[3], u_right[3], v_right[3], E_right[3];
         int i;
 
         // grab the coefficients for the left & right elements
@@ -110,7 +110,7 @@ __global__ void eval_surface_wrapper1(float *c, float *left_riemann_rhs, float *
                      left_elem[idx], right_elem[idx],
                      left_side_number[idx], right_side_number[idx],
                      Nx[idx], Ny[idx],
-                     n_quad1d, n_p, num_sides, num_elem, t, idx);
+                     n_quad1d, n_quad, n_p, num_sides, num_elem, t, idx);
     }
 }
 
@@ -120,20 +120,20 @@ __global__ void eval_surface_wrapper1(float *c, float *left_riemann_rhs, float *
  * wrapper function for the eval_surface device function.
  * THREADS: num_sides
  */
-__global__ void eval_surface_wrapper2(float *c, float *left_riemann_rhs, float *right_riemann_rhs, 
-                                      float *s_length, 
-                                      float *V1x, float *V1y,
-                                      float *V2x, float *V2y,
-                                      float *V3x, float *V3y,
+__global__ void eval_surface_wrapper2(double *c, double *left_riemann_rhs, double *right_riemann_rhs, 
+                                      double *s_length, 
+                                      double *V1x, double *V1y,
+                                      double *V2x, double *V2y,
+                                      double *V3x, double *V3y,
                                       int *left_elem, int *right_elem,
                                       int *left_side_number, int *right_side_number, 
-                                      float *Nx, float *Ny, 
-                                      int n_quad1d, int n_p, int num_sides, int num_elem, float t) {
+                                      double *Nx, double *Ny, 
+                                      int n_quad1d, int n_quad, int n_p, int num_sides, int num_elem, double t) {
     int idx = blockDim.x * blockIdx.x + threadIdx.x;
 
     if (idx < num_sides) {
-        register float rho_left[6], u_left[6], v_left[6], E_left[6];
-        register float rho_right[6], u_right[6], v_right[6], E_right[6];
+        register double rho_left[6], u_left[6], v_left[6], E_left[6];
+        register double rho_right[6], u_right[6], v_right[6], E_right[6];
         int i;
 
         // grab the coefficients for the left & right elements
@@ -171,7 +171,7 @@ __global__ void eval_surface_wrapper2(float *c, float *left_riemann_rhs, float *
                      left_elem[idx], right_elem[idx],
                      left_side_number[idx], right_side_number[idx],
                      Nx[idx], Ny[idx],
-                     n_quad1d, n_p, num_sides, num_elem, t, idx);
+                     n_quad1d, n_quad, n_p, num_sides, num_elem, t, idx);
     }
 }
 
@@ -181,20 +181,20 @@ __global__ void eval_surface_wrapper2(float *c, float *left_riemann_rhs, float *
  * wrapper function for the eval_surface device function.
  * THREADS: num_sides
  */
-__global__ void eval_surface_wrapper3(float *c, float *left_riemann_rhs, float *right_riemann_rhs, 
-                                      float *s_length, 
-                                      float *V1x, float *V1y,
-                                      float *V2x, float *V2y,
-                                      float *V3x, float *V3y,
+__global__ void eval_surface_wrapper3(double *c, double *left_riemann_rhs, double *right_riemann_rhs, 
+                                      double *s_length, 
+                                      double *V1x, double *V1y,
+                                      double *V2x, double *V2y,
+                                      double *V3x, double *V3y,
                                       int *left_elem, int *right_elem,
                                       int *left_side_number, int *right_side_number, 
-                                      float *Nx, float *Ny, 
-                                      int n_quad1d, int n_p, int num_sides, int num_elem, float t) {
+                                      double *Nx, double *Ny, 
+                                      int n_quad1d, int n_quad, int n_p, int num_sides, int num_elem, double t) {
     int idx = blockDim.x * blockIdx.x + threadIdx.x;
 
     if (idx < num_sides) {
-        register float rho_left[10], u_left[10], v_left[10], E_left[10];
-        register float rho_right[10], u_right[10], v_right[10], E_right[10];
+        register double rho_left[10], u_left[10], v_left[10], E_left[10];
+        register double rho_right[10], u_right[10], v_right[10], E_right[10];
         int i;
 
         // grab the coefficients for the left & right elements
@@ -232,7 +232,7 @@ __global__ void eval_surface_wrapper3(float *c, float *left_riemann_rhs, float *
                      left_elem[idx], right_elem[idx],
                      left_side_number[idx], right_side_number[idx],
                      Nx[idx], Ny[idx],
-                     n_quad1d, n_p, num_sides, num_elem, t, idx);
+                     n_quad1d, n_quad, n_p, num_sides, num_elem, t, idx);
     }
 }
 
@@ -242,20 +242,20 @@ __global__ void eval_surface_wrapper3(float *c, float *left_riemann_rhs, float *
  * wrapper function for the eval_surface device function.
  * THREADS: num_sides
  */
-__global__ void eval_surface_wrapper4(float *c, float *left_riemann_rhs, float *right_riemann_rhs, 
-                                      float *s_length, 
-                                      float *V1x, float *V1y,
-                                      float *V2x, float *V2y,
-                                      float *V3x, float *V3y,
+__global__ void eval_surface_wrapper4(double *c, double *left_riemann_rhs, double *right_riemann_rhs, 
+                                      double *s_length, 
+                                      double *V1x, double *V1y,
+                                      double *V2x, double *V2y,
+                                      double *V3x, double *V3y,
                                       int *left_elem, int *right_elem,
                                       int *left_side_number, int *right_side_number, 
-                                      float *Nx, float *Ny, 
-                                      int n_quad1d, int n_p, int num_sides, int num_elem, float t) {
+                                      double *Nx, double *Ny, 
+                                      int n_quad1d, int n_quad, int n_p, int num_sides, int num_elem, double t) {
     int idx = blockDim.x * blockIdx.x + threadIdx.x;
 
     if (idx < num_sides) {
-        register float rho_left[15], u_left[15], v_left[15], E_left[15];
-        register float rho_right[15], u_right[15], v_right[15], E_right[15];
+        register double rho_left[15], u_left[15], v_left[15], E_left[15];
+        register double rho_right[15], u_right[15], v_right[15], E_right[15];
         int i;
 
         // grab the coefficients for the left & right elements
@@ -293,7 +293,7 @@ __global__ void eval_surface_wrapper4(float *c, float *left_riemann_rhs, float *
                      left_elem[idx], right_elem[idx],
                      left_side_number[idx], right_side_number[idx],
                      Nx[idx], Ny[idx],
-                     n_quad1d, n_p, num_sides, num_elem, t, idx);
+                     n_quad1d, n_quad, n_p, num_sides, num_elem, t, idx);
     }
 }
 
@@ -303,20 +303,20 @@ __global__ void eval_surface_wrapper4(float *c, float *left_riemann_rhs, float *
  * wrapper function for the eval_surface device function.
  * THREADS: num_sides
  */
-__global__ void eval_surface_wrapper5(float *c, float *left_riemann_rhs, float *right_riemann_rhs, 
-                                      float *s_length, 
-                                      float *V1x, float *V1y,
-                                      float *V2x, float *V2y,
-                                      float *V3x, float *V3y,
+__global__ void eval_surface_wrapper5(double *c, double *left_riemann_rhs, double *right_riemann_rhs, 
+                                      double *s_length, 
+                                      double *V1x, double *V1y,
+                                      double *V2x, double *V2y,
+                                      double *V3x, double *V3y,
                                       int *left_elem, int *right_elem,
                                       int *left_side_number, int *right_side_number, 
-                                      float *Nx, float *Ny, 
-                                      int n_quad1d, int n_p, int num_sides, int num_elem, float t) {
+                                      double *Nx, double *Ny, 
+                                      int n_quad1d, int n_quad, int n_p, int num_sides, int num_elem, double t) {
     int idx = blockDim.x * blockIdx.x + threadIdx.x;
 
     if (idx < num_sides) {
-        register float rho_left[21], u_left[21], v_left[21], E_left[21];
-        register float rho_right[21], u_right[21], v_right[21], E_right[21];
+        register double rho_left[21], u_left[21], v_left[21], E_left[21];
+        register double rho_right[21], u_right[21], v_right[21], E_right[21];
         int i;
 
         // grab the coefficients for the left & right elements
@@ -354,7 +354,7 @@ __global__ void eval_surface_wrapper5(float *c, float *left_riemann_rhs, float *
                      left_elem[idx], right_elem[idx],
                      left_side_number[idx], right_side_number[idx],
                      Nx[idx], Ny[idx],
-                     n_quad1d, n_p, num_sides, num_elem, t, idx);
+                     n_quad1d, n_quad, n_p, num_sides, num_elem, t, idx);
     }
 }
 
@@ -363,14 +363,14 @@ __global__ void eval_surface_wrapper5(float *c, float *left_riemann_rhs, float *
 //*
 //* wrapper function for the eval_volume device function.
 //* THREADS: num_sides
- __global__ void eval_volume_wrapper0(float *c, float *quad_rhs, 
-                                      float *xr, float *yr,
-                                      float *xs, float *ys,
+ __global__ void eval_volume_wrapper0(double *c, double *quad_rhs, 
+                                      double *xr, double *yr,
+                                      double *xs, double *ys,
                                       int n_quad, int n_p, int num_elem) {
     int idx = blockDim.x * blockIdx.x + threadIdx.x;
 
     if (idx < num_elem) {
-        float rho[1], u[1], v[1], E[1];
+        double rho[1], u[1], v[1], E[1];
 
         // get the coefficients for this element
         rho[0] = c[num_elem * n_p * 0 + idx];
@@ -389,14 +389,14 @@ __global__ void eval_surface_wrapper5(float *c, float *left_riemann_rhs, float *
 //*
 //* wrapper function for the eval_volume device function.
 //* THREADS: num_sides
- __global__ void eval_volume_wrapper1(float *c, float *quad_rhs, 
-                                      float *xr, float *yr,
-                                      float *xs, float *ys,
+ __global__ void eval_volume_wrapper1(double *c, double *quad_rhs, 
+                                      double *xr, double *yr,
+                                      double *xs, double *ys,
                                       int n_quad, int n_p, int num_elem) {
     int idx = blockDim.x * blockIdx.x + threadIdx.x;
 
     if (idx < num_elem) {
-        float rho[3], u[3], v[3], E[3];
+        double rho[3], u[3], v[3], E[3];
         int i;
 
         // get the coefficients for this element
@@ -419,14 +419,14 @@ __global__ void eval_surface_wrapper5(float *c, float *left_riemann_rhs, float *
 //*
 //* wrapper function for the eval_volume device function.
 //* THREADS: num_sides
- __global__ void eval_volume_wrapper2(float *c, float *quad_rhs, 
-                                      float *xr, float *yr,
-                                      float *xs, float *ys,
+ __global__ void eval_volume_wrapper2(double *c, double *quad_rhs, 
+                                      double *xr, double *yr,
+                                      double *xs, double *ys,
                                       int n_quad, int n_p, int num_elem) {
     int idx = blockDim.x * blockIdx.x + threadIdx.x;
 
     if (idx < num_elem) {
-        float rho[6], u[6], v[6], E[6];
+        double rho[6], u[6], v[6], E[6];
         int i;
 
         // get the coefficients for this element
@@ -448,14 +448,14 @@ __global__ void eval_surface_wrapper5(float *c, float *left_riemann_rhs, float *
 //*
 //* wrapper function for the eval_volume device function.
 //* THREADS: num_sides
- __global__ void eval_volume_wrapper3(float *c, float *quad_rhs, 
-                                      float *xr, float *yr,
-                                      float *xs, float *ys,
+ __global__ void eval_volume_wrapper3(double *c, double *quad_rhs, 
+                                      double *xr, double *yr,
+                                      double *xs, double *ys,
                                       int n_quad, int n_p, int num_elem) {
     int idx = blockDim.x * blockIdx.x + threadIdx.x;
         
     if (idx < num_elem) {
-        float rho[10], u[10], v[10], E[10];
+        double rho[10], u[10], v[10], E[10];
         int i;
 
         // get the coefficients for this element
@@ -478,14 +478,14 @@ __global__ void eval_surface_wrapper5(float *c, float *left_riemann_rhs, float *
 //* wrapper function for the eval_volume device function.
 //* THREADS: num_sides
  
- __global__ void eval_volume_wrapper4(float *c, float *quad_rhs, 
-                                      float *xr, float *yr,
-                                      float *xs, float *ys,
+ __global__ void eval_volume_wrapper4(double *c, double *quad_rhs, 
+                                      double *xr, double *yr,
+                                      double *xs, double *ys,
                                       int n_quad, int n_p, int num_elem) {
     int idx = blockDim.x * blockIdx.x + threadIdx.x;
 
     if (idx < num_elem) {
-        float rho[15], u[15], v[15], E[15];
+        double rho[15], u[15], v[15], E[15];
         int i;
 
         // get the coefficients for this element
@@ -507,14 +507,14 @@ __global__ void eval_surface_wrapper5(float *c, float *left_riemann_rhs, float *
 //*
 //* wrapper function for the eval_volume device function.
 //* THREADS: num_sides
- __global__ void eval_volume_wrapper5(float *c, float *quad_rhs, 
-                                      float *xr, float *yr,
-                                      float *xs, float *ys,
+ __global__ void eval_volume_wrapper5(double *c, double *quad_rhs, 
+                                      double *xr, double *yr,
+                                      double *xs, double *ys,
                                       int n_quad, int n_p, int num_elem) {
     int idx = blockDim.x * blockIdx.x + threadIdx.x;
 
     if (idx < num_elem) {
-        float rho[15], u[15], v[15], E[15];
+        double rho[15], u[15], v[15], E[15];
         int i;
 
         // get the coefficients for this element
@@ -536,13 +536,13 @@ __global__ void eval_surface_wrapper5(float *c, float *left_riemann_rhs, float *
 //*
 //* wrapper function for the eval_u device function.
 //* THREADS: num_sides
-__global__ void eval_rho_wrapper0(float *c,
-                       float *Uv1, float *Uv2, float *Uv3,
+__global__ void eval_rho_wrapper0(double *c,
+                       double *Uv1, double *Uv2, double *Uv3,
                        int num_elem, int n_p) {
     int idx = blockDim.x * blockIdx.x + threadIdx.x;
 
     if (idx < num_elem) {
-        float r_c[1];
+        double r_c[1];
 
         // get the coefficients for this element
         r_c[0] = c[idx];
@@ -555,13 +555,13 @@ __global__ void eval_rho_wrapper0(float *c,
 //*
 //* wrapper function for the eval_u device function.
 //* THREADS: num_sides
-__global__ void eval_rho_wrapper1(float *c,
-                       float *Uv1, float *Uv2, float *Uv3,
+__global__ void eval_rho_wrapper1(double *c,
+                       double *Uv1, double *Uv2, double *Uv3,
                        int num_elem, int n_p) {
     int idx = blockDim.x * blockIdx.x + threadIdx.x;
 
     if (idx < num_elem) {
-        float r_c[3];
+        double r_c[3];
 
         // get the coefficients for this element
         r_c[0] = c[idx];
@@ -576,13 +576,13 @@ __global__ void eval_rho_wrapper1(float *c,
 //*
 //* wrapper function for the eval_u device function.
 //* THREADS: num_sides
-__global__ void eval_rho_wrapper2(float *c,
-                       float *Uv1, float *Uv2, float *Uv3,
+__global__ void eval_rho_wrapper2(double *c,
+                       double *Uv1, double *Uv2, double *Uv3,
                        int num_elem, int n_p) {
     int idx = blockDim.x * blockIdx.x + threadIdx.x;
 
     if (idx < num_elem) {
-        float r_c[6];
+        double r_c[6];
 
         // get the coefficients for this element
         r_c[0] = c[idx];
@@ -601,13 +601,13 @@ __global__ void eval_rho_wrapper2(float *c,
 //*
 //* wrapper function for the eval_u device function.
 //* THREADS: num_sides
-__global__ void eval_rho_wrapper3(float *c,
-                       float *Uv1, float *Uv2, float *Uv3,
+__global__ void eval_rho_wrapper3(double *c,
+                       double *Uv1, double *Uv2, double *Uv3,
                        int num_elem, int n_p) {
     int idx = blockDim.x * blockIdx.x + threadIdx.x;
 
     if (idx < num_elem) {
-        float r_c[10];
+        double r_c[10];
 
         // get the coefficients for this element
         r_c[0] = c[idx];
@@ -631,13 +631,13 @@ __global__ void eval_rho_wrapper3(float *c,
 //* wrapper function for the eval_u device function.
 //* THREADS: num_sides
  
-__global__ void eval_rho_wrapper4(float *c, 
-                       float *Uv1, float *Uv2, float *Uv3,
+__global__ void eval_rho_wrapper4(double *c, 
+                       double *Uv1, double *Uv2, double *Uv3,
                        int num_elem, int n_p) {
     int idx = blockDim.x * blockIdx.x + threadIdx.x;
 
     if (idx < num_elem) {
-        float r_c[15];
+        double r_c[15];
 
         // get the coefficients for this element
         r_c[0] = c[idx];
@@ -665,13 +665,13 @@ __global__ void eval_rho_wrapper4(float *c,
 //*
 //* wrapper function for the eval_u device function.
 //* THREADS: num_sides
-__global__ void eval_rho_wrapper5(float *c,
-                       float *Uv1, float *Uv2, float *Uv3,
+__global__ void eval_rho_wrapper5(double *c,
+                       double *Uv1, double *Uv2, double *Uv3,
                        int num_elem, int n_p) {
     int idx = blockDim.x * blockIdx.x + threadIdx.x;
 
     if (idx < num_elem) {
-        float r_c[21];
+        double r_c[21];
 
         // get the coefficients for this element
         r_c[0] = c[idx];
@@ -703,13 +703,13 @@ __global__ void eval_rho_wrapper5(float *c,
     }
 }
 
-__global__ void eval_u_wrapper0(float *c,
-                       float *Uv1, float *Uv2, float *Uv3,
+__global__ void eval_u_wrapper0(double *c,
+                       double *Uv1, double *Uv2, double *Uv3,
                        int num_elem, int n_p) {
     int idx = blockDim.x * blockIdx.x + threadIdx.x;
 
     if (idx < num_elem) {
-        float r_c[1];
+        double r_c[1];
 
         // get the coefficients for this element
         r_c[0] = c[n_p * num_elem + idx];
@@ -722,13 +722,13 @@ __global__ void eval_u_wrapper0(float *c,
 //*
 //* wrapper function for the eval_u device function.
 //* THREADS: num_sides
-__global__ void eval_u_wrapper1(float *c,
-                       float *Uv1, float *Uv2, float *Uv3,
+__global__ void eval_u_wrapper1(double *c,
+                       double *Uv1, double *Uv2, double *Uv3,
                        int num_elem, int n_p) {
     int idx = blockDim.x * blockIdx.x + threadIdx.x;
 
     if (idx < num_elem) {
-        float r_c[3];
+        double r_c[3];
 
         // get the coefficients for this element
         r_c[0] = c[n_p * num_elem + idx];
@@ -743,14 +743,14 @@ __global__ void eval_u_wrapper1(float *c,
 //*
 //* wrapper function for the eval_u device function.
 //* THREADS: num_sides
-__global__ void eval_u_wrapper2(float *c,
-                       float *Uv1, float *Uv2, float *Uv3,
+__global__ void eval_u_wrapper2(double *c,
+                       double *Uv1, double *Uv2, double *Uv3,
                        int num_elem, int n_p) {
     int idx = blockDim.x * blockIdx.x + threadIdx.x;
 
     if (idx < num_elem) {
         int i;
-        float r_c[6];
+        double r_c[6];
 
         // get the coefficients for this element
         for (i = 0; i < 6; i++) {
@@ -766,14 +766,14 @@ __global__ void eval_u_wrapper2(float *c,
 //*
 //* wrapper function for the eval_u device function.
 //* THREADS: num_sides
-__global__ void eval_u_wrapper3(float *c,
-                       float *Uv1, float *Uv2, float *Uv3,
+__global__ void eval_u_wrapper3(double *c,
+                       double *Uv1, double *Uv2, double *Uv3,
                        int num_elem, int n_p) {
     int idx = blockDim.x * blockIdx.x + threadIdx.x;
 
     if (idx < num_elem) {
         int i;
-        float r_c[10];
+        double r_c[10];
 
         // get the coefficients for this element
         for (i = 0; i < 10; i++) {
@@ -790,14 +790,14 @@ __global__ void eval_u_wrapper3(float *c,
 //* wrapper function for the eval_u device function.
 //* THREADS: num_sides
  
-__global__ void eval_u_wrapper4(float *c, 
-                       float *Uv1, float *Uv2, float *Uv3,
+__global__ void eval_u_wrapper4(double *c, 
+                       double *Uv1, double *Uv2, double *Uv3,
                        int num_elem, int n_p) {
     int idx = blockDim.x * blockIdx.x + threadIdx.x;
 
     if (idx < num_elem) {
         int i;
-        float r_c[15];
+        double r_c[15];
 
         // get the coefficients for this element
         for (i = 0; i < 15; i++) {
@@ -812,14 +812,14 @@ __global__ void eval_u_wrapper4(float *c,
 //*
 //* wrapper function for the eval_u device function.
 //* THREADS: num_sides
-__global__ void eval_u_wrapper5(float *c,
-                       float *Uv1, float *Uv2, float *Uv3,
+__global__ void eval_u_wrapper5(double *c,
+                       double *Uv1, double *Uv2, double *Uv3,
                        int num_elem, int n_p) {
     int idx = blockDim.x * blockIdx.x + threadIdx.x;
 
     if (idx < num_elem) {
         int i;
-        float r_c[21];
+        double r_c[21];
 
         // get the coefficients for this element
         for (i = 0; i < 21; i++) {
@@ -835,13 +835,13 @@ __global__ void eval_u_wrapper5(float *c,
 //*
 //* wrapper function for the eval_u device function.
 //* THREADS: num_sides
-__global__ void eval_v_wrapper0(float *c,
-                       float *Uv1, float *Uv2, float *Uv3,
+__global__ void eval_v_wrapper0(double *c,
+                       double *Uv1, double *Uv2, double *Uv3,
                        int num_elem, int n_p) {
     int idx = blockDim.x * blockIdx.x + threadIdx.x;
 
     if (idx < num_elem) {
-        float r_c[1];
+        double r_c[1];
 
         // get the coefficients for this element
         r_c[0] = c[num_elem * n_p * 2 + idx];
@@ -854,13 +854,13 @@ __global__ void eval_v_wrapper0(float *c,
 //*
 //* wrapper function for the eval_u device function.
 //* THREADS: num_sides
-__global__ void eval_v_wrapper1(float *c,
-                       float *Uv1, float *Uv2, float *Uv3,
+__global__ void eval_v_wrapper1(double *c,
+                       double *Uv1, double *Uv2, double *Uv3,
                        int num_elem, int n_p) {
     int idx = blockDim.x * blockIdx.x + threadIdx.x;
 
     if (idx < num_elem) {
-        float r_c[3];
+        double r_c[3];
 
         // get the coefficients for this element
         r_c[0] = c[num_elem * n_p * 2 + idx];
@@ -875,14 +875,14 @@ __global__ void eval_v_wrapper1(float *c,
 //*
 //* wrapper function for the eval_u device function.
 //* THREADS: num_sides
-__global__ void eval_v_wrapper2(float *c,
-                       float *Uv1, float *Uv2, float *Uv3,
+__global__ void eval_v_wrapper2(double *c,
+                       double *Uv1, double *Uv2, double *Uv3,
                        int num_elem, int n_p) {
     int idx = blockDim.x * blockIdx.x + threadIdx.x;
 
     if (idx < num_elem) {
         int i;
-        float r_c[6];
+        double r_c[6];
 
         // get the coefficients for this element
         for (i = 0; i < 6; i++) {
@@ -898,14 +898,14 @@ __global__ void eval_v_wrapper2(float *c,
 //*
 //* wrapper function for the eval_u device function.
 //* THREADS: num_sides
-__global__ void eval_v_wrapper3(float *c,
-                       float *Uv1, float *Uv2, float *Uv3,
+__global__ void eval_v_wrapper3(double *c,
+                       double *Uv1, double *Uv2, double *Uv3,
                        int num_elem, int n_p) {
     int idx = blockDim.x * blockIdx.x + threadIdx.x;
 
     if (idx < num_elem) {
         int i;
-        float r_c[10];
+        double r_c[10];
 
         // get the coefficients for this element
         for (i = 0; i < 6; i++) {
@@ -922,14 +922,14 @@ __global__ void eval_v_wrapper3(float *c,
 //* wrapper function for the eval_u device function.
 //* THREADS: num_sides
  
-__global__ void eval_v_wrapper4(float *c, 
-                       float *Uv1, float *Uv2, float *Uv3,
+__global__ void eval_v_wrapper4(double *c, 
+                       double *Uv1, double *Uv2, double *Uv3,
                        int num_elem, int n_p) {
     int idx = blockDim.x * blockIdx.x + threadIdx.x;
 
     if (idx < num_elem) {
         int i;
-        float r_c[15];
+        double r_c[15];
 
         // get the coefficients for this element
         for (i = 0; i < 6; i++) {
@@ -944,14 +944,14 @@ __global__ void eval_v_wrapper4(float *c,
 //*
 //* wrapper function for the eval_u device function.
 //* THREADS: num_sides
-__global__ void eval_v_wrapper5(float *c,
-                       float *Uv1, float *Uv2, float *Uv3,
+__global__ void eval_v_wrapper5(double *c,
+                       double *Uv1, double *Uv2, double *Uv3,
                        int num_elem, int n_p) {
     int idx = blockDim.x * blockIdx.x + threadIdx.x;
 
     if (idx < num_elem) {
         int i;
-        float r_c[21];
+        double r_c[21];
 
         // get the coefficients for this element
         for (i = 0; i < 21; i++) {
@@ -967,13 +967,13 @@ __global__ void eval_v_wrapper5(float *c,
 //*
 //* wrapper function for the eval_u device function.
 //* THREADS: num_sides
-__global__ void eval_E_wrapper0(float *c,
-                       float *Uv1, float *Uv2, float *Uv3,
+__global__ void eval_E_wrapper0(double *c,
+                       double *Uv1, double *Uv2, double *Uv3,
                        int num_elem, int n_p) {
     int idx = blockDim.x * blockIdx.x + threadIdx.x;
 
     if (idx < num_elem) {
-        float r_c[1];
+        double r_c[1];
 
         // get the coefficients for this element
         r_c[0] = c[num_elem * n_p * 3 + idx];
@@ -986,13 +986,13 @@ __global__ void eval_E_wrapper0(float *c,
 //*
 //* wrapper function for the eval_u device function.
 //* THREADS: num_sides
-__global__ void eval_E_wrapper1(float *c,
-                       float *Uv1, float *Uv2, float *Uv3,
+__global__ void eval_E_wrapper1(double *c,
+                       double *Uv1, double *Uv2, double *Uv3,
                        int num_elem, int n_p) {
     int idx = blockDim.x * blockIdx.x + threadIdx.x;
 
     if (idx < num_elem) {
-        float r_c[3];
+        double r_c[3];
 
         // get the coefficients for this element
         r_c[0] = c[num_elem * n_p * 3 + idx];
@@ -1007,14 +1007,14 @@ __global__ void eval_E_wrapper1(float *c,
 //*
 //* wrapper function for the eval_u device function.
 //* THREADS: num_sides
-__global__ void eval_E_wrapper2(float *c,
-                       float *Uv1, float *Uv2, float *Uv3,
+__global__ void eval_E_wrapper2(double *c,
+                       double *Uv1, double *Uv2, double *Uv3,
                        int num_elem, int n_p) {
     int idx = blockDim.x * blockIdx.x + threadIdx.x;
 
     if (idx < num_elem) {
         int i;
-        float r_c[6];
+        double r_c[6];
 
         // get the coefficients for this element
         for (i = 0; i < 6; i++) {
@@ -1030,14 +1030,14 @@ __global__ void eval_E_wrapper2(float *c,
 //*
 //* wrapper function for the eval_u device function.
 //* THREADS: num_sides
-__global__ void eval_E_wrapper3(float *c,
-                       float *Uv1, float *Uv2, float *Uv3,
+__global__ void eval_E_wrapper3(double *c,
+                       double *Uv1, double *Uv2, double *Uv3,
                        int num_elem, int n_p) {
     int idx = blockDim.x * blockIdx.x + threadIdx.x;
 
     if (idx < num_elem) {
         int i;
-        float r_c[10];
+        double r_c[10];
 
         // get the coefficients for this element
         for (i = 0; i < 10; i++) {
@@ -1054,14 +1054,14 @@ __global__ void eval_E_wrapper3(float *c,
 //* wrapper function for the eval_u device function.
 //* THREADS: num_sides
  
-__global__ void eval_E_wrapper4(float *c, 
-                       float *Uv1, float *Uv2, float *Uv3,
+__global__ void eval_E_wrapper4(double *c, 
+                       double *Uv1, double *Uv2, double *Uv3,
                        int num_elem, int n_p) {
     int idx = blockDim.x * blockIdx.x + threadIdx.x;
 
     if (idx < num_elem) {
         int i;
-        float r_c[15];
+        double r_c[15];
 
         // get the coefficients for this element
         for (i = 0; i < 15; i++) {
@@ -1076,14 +1076,14 @@ __global__ void eval_E_wrapper4(float *c,
 //*
 //* wrapper function for the eval_u device function.
 //* THREADS: num_sides
-__global__ void eval_E_wrapper5(float *c,
-                       float *Uv1, float *Uv2, float *Uv3,
+__global__ void eval_E_wrapper5(double *c,
+                       double *Uv1, double *Uv2, double *Uv3,
                        int num_elem, int n_p) {
     int idx = blockDim.x * blockIdx.x + threadIdx.x;
 
     if (idx < num_elem) {
         int i;
-        float r_c[21];
+        double r_c[21];
 
         // get the coefficients for this element
         for (i = 0; i < 21; i++) {
@@ -1099,16 +1099,16 @@ __global__ void eval_E_wrapper5(float *c,
 //*
 //* wrapper function for the eval_error device function.
 //* THREADS: num_sides
-__global__ void eval_error_wrapper0(float *c,
-                       float *V1x, float *V1y,
-                       float *V2x, float *V2y,
-                       float *V3x, float *V3y,
-                       float *Uv1, float *Uv2, float *Uv3,
-                       int num_elem, int n_p, float t) {
+__global__ void eval_error_wrapper0(double *c,
+                       double *V1x, double *V1y,
+                       double *V2x, double *V2y,
+                       double *V3x, double *V3y,
+                       double *Uv1, double *Uv2, double *Uv3,
+                       int num_elem, int n_p, double t) {
     int idx = blockDim.x * blockIdx.x + threadIdx.x;
 
     if (idx < num_elem) {
-        float r_c[1];
+        double r_c[1];
 
         // get the coefficients for this element
         r_c[0] = c[idx];
@@ -1123,16 +1123,16 @@ __global__ void eval_error_wrapper0(float *c,
 //*
 //* wrapper function for the eval_error device function.
 //* THREADS: num_sides
-__global__ void eval_error_wrapper1(float *c,
-                       float *V1x, float *V1y,
-                       float *V2x, float *V2y,
-                       float *V3x, float *V3y,
-                       float *Uv1, float *Uv2, float *Uv3,
-                       int num_elem, int n_p, float t) {
+__global__ void eval_error_wrapper1(double *c,
+                       double *V1x, double *V1y,
+                       double *V2x, double *V2y,
+                       double *V3x, double *V3y,
+                       double *Uv1, double *Uv2, double *Uv3,
+                       int num_elem, int n_p, double t) {
     int idx = blockDim.x * blockIdx.x + threadIdx.x;
 
     if (idx < num_elem) {
-        float r_c[3];
+        double r_c[3];
 
         // get the coefficients for this element
         r_c[0] = c[idx];
@@ -1149,16 +1149,16 @@ __global__ void eval_error_wrapper1(float *c,
 //*
 //* wrapper function for the eval_error device function.
 //* THREADS: num_sides
-__global__ void eval_error_wrapper2(float *c,
-                       float *V1x, float *V1y,
-                       float *V2x, float *V2y,
-                       float *V3x, float *V3y,
-                       float *Uv1, float *Uv2, float *Uv3,
-                       int num_elem, int n_p, float t) {
+__global__ void eval_error_wrapper2(double *c,
+                       double *V1x, double *V1y,
+                       double *V2x, double *V2y,
+                       double *V3x, double *V3y,
+                       double *Uv1, double *Uv2, double *Uv3,
+                       int num_elem, int n_p, double t) {
     int idx = blockDim.x * blockIdx.x + threadIdx.x;
 
     if (idx < num_elem) {
-        float r_c[6];
+        double r_c[6];
 
         // get the coefficients for this element
         r_c[0] = c[idx];
@@ -1179,16 +1179,16 @@ __global__ void eval_error_wrapper2(float *c,
 //*
 //* wrapper function for the eval_error device function.
 //* THREADS: num_sides
-__global__ void eval_error_wrapper3(float *c,
-                       float *V1x, float *V1y,
-                       float *V2x, float *V2y,
-                       float *V3x, float *V3y,
-                       float *Uv1, float *Uv2, float *Uv3,
-                       int num_elem, int n_p, float t) {
+__global__ void eval_error_wrapper3(double *c,
+                       double *V1x, double *V1y,
+                       double *V2x, double *V2y,
+                       double *V3x, double *V3y,
+                       double *Uv1, double *Uv2, double *Uv3,
+                       int num_elem, int n_p, double t) {
     int idx = blockDim.x * blockIdx.x + threadIdx.x;
 
     if (idx < num_elem) {
-        float r_c[10];
+        double r_c[10];
 
         // get the coefficients for this element
         r_c[0] = c[idx];
@@ -1214,16 +1214,16 @@ __global__ void eval_error_wrapper3(float *c,
 //* wrapper function for the eval_error device function.
 //* THREADS: num_sides
  
-__global__ void eval_error_wrapper4(float *c, 
-                       float *V1x, float *V1y,
-                       float *V2x, float *V2y,
-                       float *V3x, float *V3y,
-                       float *Uv1, float *Uv2, float *Uv3,
-                       int num_elem, int n_p, float t) {
+__global__ void eval_error_wrapper4(double *c, 
+                       double *V1x, double *V1y,
+                       double *V2x, double *V2y,
+                       double *V3x, double *V3y,
+                       double *Uv1, double *Uv2, double *Uv3,
+                       int num_elem, int n_p, double t) {
     int idx = blockDim.x * blockIdx.x + threadIdx.x;
 
     if (idx < num_elem) {
-        float r_c[15];
+        double r_c[15];
 
         // get the coefficients for this element
         r_c[0] = c[idx];
@@ -1253,16 +1253,16 @@ __global__ void eval_error_wrapper4(float *c,
 //*
 //* wrapper function for the eval_error device function.
 //* THREADS: num_sides
-__global__ void eval_error_wrapper5(float *c,
-                       float *V1x, float *V1y,
-                       float *V2x, float *V2y,
-                       float *V3x, float *V3y,
-                       float *Uv1, float *Uv2, float *Uv3,
-                       int num_elem, int n_p, float t) {
+__global__ void eval_error_wrapper5(double *c,
+                       double *V1x, double *V1y,
+                       double *V2x, double *V2y,
+                       double *V3x, double *V3y,
+                       double *Uv1, double *Uv2, double *Uv3,
+                       int num_elem, int n_p, double t) {
     int idx = blockDim.x * blockIdx.x + threadIdx.x;
 
     if (idx < num_elem) {
-        float r_c[21];
+        double r_c[21];
 
         // get the coefficients for this element
         r_c[0] = c[idx];
@@ -1300,16 +1300,16 @@ __global__ void eval_error_wrapper5(float *c,
 //*
 //* wrapper function for the eval_error device function.
 //* THREADS: num_sides
-__global__ void eval_error_wrapper6(float *c,
-                       float *V1x, float *V1y,
-                       float *V2x, float *V2y,
-                       float *V3x, float *V3y,
-                       float *Uv1, float *Uv2, float *Uv3,
-                       int num_elem, int n_p, float t) {
+__global__ void eval_error_wrapper6(double *c,
+                       double *V1x, double *V1y,
+                       double *V2x, double *V2y,
+                       double *V3x, double *V3y,
+                       double *Uv1, double *Uv2, double *Uv3,
+                       int num_elem, int n_p, double t) {
     int idx = blockDim.x * blockIdx.x + threadIdx.x;
 
     if (idx < num_elem) {
-        float r_c[28];
+        double r_c[28];
 
         // get the coefficients for this element
         r_c[0] = c[idx];
@@ -1353,16 +1353,16 @@ __global__ void eval_error_wrapper6(float *c,
 //*
 //* wrapper function for the eval_error device function.
 //* THREADS: num_sides
-__global__ void eval_error_wrapper7(float *c,
-                       float *V1x, float *V1y,
-                       float *V2x, float *V2y,
-                       float *V3x, float *V3y,
-                       float *Uv1, float *Uv2, float *Uv3,
-                       int num_elem, int n_p, float t) {
+__global__ void eval_error_wrapper7(double *c,
+                       double *V1x, double *V1y,
+                       double *V2x, double *V2y,
+                       double *V3x, double *V3y,
+                       double *Uv1, double *Uv2, double *Uv3,
+                       int num_elem, int n_p, double t) {
     int idx = blockDim.x * blockIdx.x + threadIdx.x;
 
     if (idx < num_elem) {
-        float r_c[36];
+        double r_c[36];
 
         // get the coefficients for this element
         r_c[0] = c[idx];

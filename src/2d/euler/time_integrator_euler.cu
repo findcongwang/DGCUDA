@@ -15,7 +15,7 @@ void checkCudaError(const char*);
  * 
  * I need to store u + alpha * k_i into some temporary variable called k*.
  */
-__global__ void rk4_tempstorage(float *c, float *kstar, float*k, float alpha, int n_p, int num_elem) {
+__global__ void rk4_tempstorage(double *c, double *kstar, double*k, double alpha, int n_p, int num_elem) {
     int idx = blockDim.x * blockIdx.x + threadIdx.x;
 
     if (idx < n_p * num_elem) {
@@ -28,7 +28,7 @@ __global__ void rk4_tempstorage(float *c, float *kstar, float*k, float alpha, in
  * computes the runge-kutta solution 
  * u_n+1 = u_n + k1/6 + k2/3 + k3/3 + k4/6
  */
-__global__ void rk4(float *c, float *k1, float *k2, float *k3, float *k4, int n_p, int num_elem) {
+__global__ void rk4(double *c, double *k1, double *k2, double *k3, double *k4, int n_p, int num_elem) {
     int idx = blockDim.x * blockIdx.x + threadIdx.x;
 
     if (idx < n_p * num_elem) {
@@ -45,16 +45,16 @@ __global__ void rk4(float *c, float *k1, float *k2, float *k3, float *k4, int n_
  * coefficients for each element
  * THREADS: num_elem
  */
-__global__ void eval_rhs_rk4(float *c, float *quad_rhs, float *left_riemann_rhs, float *right_riemann_rhs, 
+__global__ void eval_rhs_rk4(double *c, double *quad_rhs, double *left_riemann_rhs, double *right_riemann_rhs, 
                          int *elem_s1, int *elem_s2, int *elem_s3,
-                         int *left_elem, float *J, 
-                         float dt, int n_p, int num_sides, int num_elem) {
+                         int *left_elem, double *J, 
+                         double dt, int n_p, int num_sides, int num_elem) {
     int idx = blockDim.x * blockIdx.x + threadIdx.x;
-    float s1_eqn1, s2_eqn1, s3_eqn1;
-    float s1_eqn2, s2_eqn2, s3_eqn2;
-    float s1_eqn3, s2_eqn3, s3_eqn3;
-    float s1_eqn4, s2_eqn4, s3_eqn4;
-    float register_J;
+    double s1_eqn1, s2_eqn1, s3_eqn1;
+    double s1_eqn2, s2_eqn2, s3_eqn2;
+    double s1_eqn3, s2_eqn3, s3_eqn3;
+    double s1_eqn4, s2_eqn4, s3_eqn4;
+    double register_J;
     int i, s1_idx, s2_idx, s3_idx;
 
     if (idx < num_elem) {
@@ -114,28 +114,28 @@ __global__ void eval_rhs_rk4(float *c, float *quad_rhs, float *left_riemann_rhs,
     }
 }
 
-void time_integrate_rk4(float dt, int n_quad, int n_quad1d, int n_p, int n, 
+void time_integrate_rk4(double dt, int n_quad, int n_quad1d, int n_p, int n, 
                     int num_elem, int num_sides, int timesteps) {
     int n_threads = 128;
     int i;
-    float t;
+    double t;
 
     int n_blocks_elem    = (num_elem  / n_threads) + ((num_elem  % n_threads) ? 1 : 0);
     int n_blocks_sides   = (num_sides / n_threads) + ((num_sides % n_threads) ? 1 : 0);
     int n_blocks_rk4     = ((n_p * num_elem) / n_threads) + (((n_p * num_elem) % n_threads) ? 1 : 0);
 
-    void (*eval_surface_ftn)(float*, float*, float*, 
-                         float*,
-                         float*, float*,
-                         float*, float*,
-                         float*, float*,
+    void (*eval_surface_ftn)(double*, double*, double*, 
+                         double*,
+                         double*, double*,
+                         double*, double*,
+                         double*, double*,
                          int*, int*,
                          int*, int*,
-                         float*, float*,
-                         int, int, int, int, float) = NULL;
-    void (*eval_volume_ftn)(float*, float*, 
-                        float*, float*, 
-                        float*, float*,
+                         double*, double*,
+                         int, int, int, int, int, double) = NULL;
+    void (*eval_volume_ftn)(double*, double*, 
+                        double*, double*, 
+                        double*, double*,
                         int, int, int) = NULL;
     switch (n) {
         case 0: eval_surface_ftn = eval_surface_wrapper0;
@@ -176,7 +176,7 @@ void time_integrate_rk4(float dt, int n_quad, int n_quad1d, int n_p, int n,
                          d_left_elem, d_right_elem,
                          d_left_side_number, d_right_side_number,
                          d_Nx, d_Ny, 
-                         n_quad1d, n_p, num_sides, num_elem, t);
+                         n_quad1d, n_quad, n_p, num_sides, num_elem, t);
 
         checkCudaError("error after stage 1: eval_surface_ftn");
 
@@ -206,7 +206,7 @@ void time_integrate_rk4(float dt, int n_quad, int n_quad1d, int n_p, int n,
                          d_left_elem, d_right_elem,
                          d_left_side_number, d_right_side_number,
                          d_Nx, d_Ny, 
-                         n_quad1d, n_p, num_sides, num_elem, t);
+                         n_quad1d, n_quad, n_p, num_sides, num_elem, t);
 
         eval_volume_ftn<<<n_blocks_elem, n_threads>>>
                         (d_kstar, d_quad_rhs, 
@@ -234,7 +234,7 @@ void time_integrate_rk4(float dt, int n_quad, int n_quad1d, int n_p, int n,
                          d_left_elem, d_right_elem,
                          d_left_side_number, d_right_side_number,
                          d_Nx, d_Ny, 
-                         n_quad1d, n_p, num_sides, num_elem, t);
+                         n_quad1d, n_quad, n_p, num_sides, num_elem, t);
 
         eval_volume_ftn<<<n_blocks_elem, n_threads>>>
                         (d_kstar, d_quad_rhs, 
@@ -262,7 +262,7 @@ void time_integrate_rk4(float dt, int n_quad, int n_quad1d, int n_p, int n,
                          d_left_elem, d_right_elem,
                          d_left_side_number, d_right_side_number,
                          d_Nx, d_Ny, 
-                         n_quad1d, n_p, num_sides, num_elem, t);
+                         n_quad1d, n_quad, n_p, num_sides, num_elem, t);
 
         eval_volume_ftn<<<n_blocks_elem, n_threads>>>
                         (d_kstar, d_quad_rhs, 
@@ -289,16 +289,16 @@ void time_integrate_rk4(float dt, int n_quad, int n_quad1d, int n_p, int n,
  * FORWARD EULER
  ***********************/
 
-__global__ void eval_rhs_fe(float *c, float *quad_rhs, float *left_riemann_rhs, float *right_riemann_rhs, 
+__global__ void eval_rhs_fe(double *c, double *quad_rhs, double *left_riemann_rhs, double *right_riemann_rhs, 
                          int *elem_s1, int *elem_s2, int *elem_s3,
-                         int *left_elem, float *J, 
-                         float dt, int n_p, int num_sides, int num_elem) {
+                         int *left_elem, double *J, 
+                         double dt, int n_p, int num_sides, int num_elem) {
     int idx = blockDim.x * blockIdx.x + threadIdx.x;
-    float s1_eqn1, s2_eqn1, s3_eqn1;
-    float s1_eqn2, s2_eqn2, s3_eqn2;
-    float s1_eqn3, s2_eqn3, s3_eqn3;
-    float s1_eqn4, s2_eqn4, s3_eqn4;
-    float register_J;
+    double s1_eqn1, s2_eqn1, s3_eqn1;
+    double s1_eqn2, s2_eqn2, s3_eqn2;
+    double s1_eqn3, s2_eqn3, s3_eqn3;
+    double s1_eqn4, s2_eqn4, s3_eqn4;
+    double register_J;
     int i, s1_idx, s2_idx, s3_idx;
 
     if (idx < num_elem) {
@@ -359,27 +359,27 @@ __global__ void eval_rhs_fe(float *c, float *quad_rhs, float *left_riemann_rhs, 
 }
 
 // forward eulers
-void time_integrate_fe(float dt, int n_quad, int n_quad1d, int n_p, int n, 
+void time_integrate_fe(double dt, int n_quad, int n_quad1d, int n_p, int n, 
               int num_elem, int num_sides, int timesteps) {
     int n_threads = 128;
     int i;
-    float t;
+    double t;
 
     int n_blocks_elem    = (num_elem  / n_threads) + ((num_elem  % n_threads) ? 1 : 0);
     int n_blocks_sides   = (num_sides / n_threads) + ((num_sides % n_threads) ? 1 : 0);
 
-    void (*eval_surface_ftn)(float*, float*, float*, 
-                         float*,
-                         float*, float*,
-                         float*, float*,
-                         float*, float*,
+    void (*eval_surface_ftn)(double*, double*, double*, 
+                         double*,
+                         double*, double*,
+                         double*, double*,
+                         double*, double*,
                          int*, int*,
                          int*, int*,
-                         float*, float*,
-                         int, int, int, int, float) = NULL;
-    void (*eval_volume_ftn)(float*, float*, 
-                        float*, float*, 
-                        float*, float*,
+                         double*, double*,
+                         int, int, int, int, int, double) = NULL;
+    void (*eval_volume_ftn)(double*, double*, 
+                        double*, double*, 
+                        double*, double*,
                         int, int, int) = NULL;
     switch (n) {
         case 0: eval_surface_ftn = eval_surface_wrapper0;
@@ -417,7 +417,7 @@ void time_integrate_fe(float dt, int n_quad, int n_quad1d, int n_p, int n,
                          d_left_elem, d_right_elem,
                          d_left_side_number, d_right_side_number,
                          d_Nx, d_Ny, 
-                         n_quad1d, n_p, num_sides, num_elem, t);
+                         n_quad1d, n_quad, n_p, num_sides, num_elem, t);
         cudaThreadSynchronize();
 
         checkCudaError("error after eval_surface_ftn");
