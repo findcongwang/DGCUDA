@@ -533,6 +533,7 @@ __device__ void eval_left_right(double *c_rho_left, double *c_rho_right,
     *u_left = *u_left / *rho_left;
     *v_left = *v_left / *rho_left;
 
+    __syncthreads();
     // make all threads in the first warps be boundary sides
     if (right_idx == -1) {
         double r1_eval, r2_eval;
@@ -642,7 +643,7 @@ __device__ double eval_lambda(double *c_rho_left, double *c_rho_right,
         // evaluate c at the integration point
         c = eval_c(rho, u, v, E);
 
-        sum1_l += w[j] * (u - c);
+        sum1_l += w[j] * (sqrtf(u*u + v*v) - c);
     }
     sum1_l = abs(sum1_l);
 
@@ -651,12 +652,15 @@ __device__ double eval_lambda(double *c_rho_left, double *c_rho_right,
     for (j = 0; j < n_quad; j++) {
         // evaluate u at the integration point
         u   = 0.;
+        v   = 0.;
         for (i = 0; i < n_p; i++) {
             u   += c_u_left[i]   * basis[n_quad * i + j];
+            v   += c_v_left[i]   * basis[n_quad * i + j];
         }
         u = u / rho;
+        v = v / rho;
 
-        sum2_l += w[j] * u;
+        sum2_l += w[j] * sqrtf(u*u + v*v);
     }
 
     sum2_l = abs(sum2_l);
@@ -680,7 +684,7 @@ __device__ double eval_lambda(double *c_rho_left, double *c_rho_right,
         // evaluate c at the integration point
         c = eval_c(rho, u, v, E);
 
-        sum3_l += w[j] * (u + c);
+        sum3_l += w[j] * (sqrtf(u*u + v*v) + c);
     }
     sum3_l = abs(sum3_l);
 
@@ -707,7 +711,7 @@ __device__ double eval_lambda(double *c_rho_left, double *c_rho_right,
         // evaluate c at the integration point
         c = eval_c(rho, u, v, E);
 
-        sum1_r += w[j] * (u - c);
+        sum1_r += w[j] * (sqrtf(u*u + v*v) - c);
     }
     sum1_r = abs(sum1_r);
 
@@ -716,12 +720,15 @@ __device__ double eval_lambda(double *c_rho_left, double *c_rho_right,
     for (j = 0; j < n_quad; j++) {
         // evaluate u at the integration point
         u   = 0.;
+        v   = 0.;
         for (i = 0; i < n_p; i++) {
             u   += c_u_right[i]   * basis[n_quad * i + j];
+            v   += c_v_right[i]   * basis[n_quad * i + j];
         }
         u = u / rho;
+        v = v / rho;
 
-        sum2_r += w[j] * u;
+        sum2_r += w[j] * sqrtf(u*u + v*v);
     }
 
     sum2_r = abs(sum2_r);
@@ -745,7 +752,7 @@ __device__ double eval_lambda(double *c_rho_left, double *c_rho_right,
         // evaluate c at the integration point
         c = eval_c(rho, u, v, E);
 
-        sum3_r += w[j] * (u + c);
+        sum3_r += w[j] * (sqrtf(u*u + v*v) + c);
     }
     sum3_r = abs(sum3_r);
 
