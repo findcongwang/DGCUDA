@@ -362,7 +362,7 @@ __global__ void eval_rhs_fe(double *c, double *quad_rhs, double *left_riemann_rh
 // forward eulers
 void time_integrate_fe(double dt, int n_quad, int n_quad1d, int n_p, int n, 
               int num_elem, int num_sides, int timesteps) {
-    int n_threads = 128;
+    int n_threads = 256;
     int i;
     double t;
 

@@ -125,7 +125,6 @@ int main(int argc, char *argv[]) {
 
     // pre computations
     preval_jacobian<<<n_blocks_elem, n_threads>>>(d_J, d_V1x, d_V1y, d_V2x, d_V2y, d_V3x, d_V3y, num_elem); 
-    printf("%i, %i\n", n_blocks_elem, n_threads);
     checkCudaError("error after preval_jacobian.");
     cudaThreadSynchronize();
 
@@ -156,7 +155,7 @@ int main(int argc, char *argv[]) {
     }
 
     // choose dt to make this scheme stable
-    dt  = 0.01 * min_j / 2. / (2. * n + 1.) * sqrt(2.);
+    dt  = 0.7 * min_j / 2. / (2. * n + 1.) * sqrt(2.);
     if (endtime != -1) {
         timesteps = endtime / dt;
     }
@@ -210,7 +209,7 @@ int main(int argc, char *argv[]) {
 
     checkCudaError("error before time integration.");
 
-    time_integrate_fe(dt, n_quad, n_quad1d, n_p, n, num_elem, num_sides, timesteps);
+    time_integrate_rk4(dt, n_quad, n_quad1d, n_p, n, num_elem, num_sides, timesteps);
     t = timesteps * dt;
 
     // evaluate at the vertex points and copy over data

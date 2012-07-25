@@ -875,25 +875,25 @@ __device__ void eval_surface(double *c_rho_left, double *c_u_left, double *c_v_l
             
             // 1st equation
             s = 0.5 * ((flux_x1_l + flux_x1_r) * nx + (flux_y1_l + flux_y1_r) * ny 
-                        - lambda * (rho_left - rho_right));
+                        + lambda * (rho_left - rho_right));
             left_sum1  += w_oned[j] * s * basis_side[left_side * n_p * n_quad1d + i * n_quad1d + j];
             right_sum1 += w_oned[j] * s * basis_side[right_side * n_p * n_quad1d + i * n_quad1d + n_quad1d - 1 - j];
 
             // 2nd equation
             s = 0.5 * ((flux_x2_l + flux_x2_r) * nx + (flux_y2_l + flux_y2_r) * ny 
-                        - lambda * (u_left - u_right));
+                        + lambda * (u_left - u_right));
             left_sum2  += w_oned[j] * s * basis_side[left_side * n_p * n_quad1d + i * n_quad1d + j];
             right_sum2 += w_oned[j] * s * basis_side[right_side * n_p * n_quad1d + i * n_quad1d + n_quad1d - 1 - j];
 
             // 3rd equation
             s = 0.5 * ((flux_x3_l + flux_x3_r) * nx + (flux_y3_l + flux_y3_r) * ny 
-                        - lambda * (v_left - v_right));
+                        + lambda * (v_left - v_right));
             left_sum3  += w_oned[j] * s * basis_side[left_side * n_p * n_quad1d + i * n_quad1d + j];
             right_sum3 += w_oned[j] * s * basis_side[right_side * n_p * n_quad1d + i * n_quad1d + n_quad1d - 1 - j];
 
             // 4th equation
             s = 0.5 * ((flux_x4_l + flux_x4_r) * nx + (flux_y4_l + flux_y4_r) * ny 
-                        - lambda * (E_left - E_right));
+                        + lambda * (E_left - E_right));
             left_sum4  += w_oned[j] * s * basis_side[left_side * n_p * n_quad1d + i * n_quad1d + j];
             right_sum4 += w_oned[j] * s * basis_side[right_side * n_p * n_quad1d + i * n_quad1d + n_quad1d - 1 - j];
         }
