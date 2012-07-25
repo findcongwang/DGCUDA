@@ -120,9 +120,10 @@ void time_integrate_rk4(double dt, int n_quad, int n_quad1d, int n_p, int n,
     int i;
     double t;
 
-    int n_blocks_elem    = (num_elem  / n_threads) + ((num_elem  % n_threads) ? 1 : 0);
-    int n_blocks_sides   = (num_sides / n_threads) + ((num_sides % n_threads) ? 1 : 0);
-    int n_blocks_rk4     = ((n_p * num_elem) / n_threads) + (((n_p * num_elem) % n_threads) ? 1 : 0);
+    int n_blocks_elem     = (num_elem  / n_threads) + ((num_elem  % n_threads) ? 1 : 0);
+    int n_blocks_sides    = (num_sides / n_threads) + ((num_sides % n_threads) ? 1 : 0);
+    int n_blocks_rk4      = ((n_p * num_elem) / n_threads) + (((n_p * num_elem) % n_threads) ? 1 : 0);
+    int n_blocks_rk4_temp = ((4 * n_p * num_elem) / n_threads) + (((4 * n_p * num_elem) % n_threads) ? 1 : 0);
 
     void (*eval_surface_ftn)(double*, double*, double*, 
                          double*, double*,
@@ -191,7 +192,7 @@ void time_integrate_rk4(double dt, int n_quad, int n_quad1d, int n_p, int n,
                                               d_left_elem, d_J, dt, n_p, num_sides, num_elem);
         cudaThreadSynchronize();
 
-        rk4_tempstorage<<<n_blocks_rk4, n_threads>>>(d_c, d_kstar, d_k1, 0.5, n_p, num_elem);
+        rk4_tempstorage<<<n_blocks_rk4_temp, n_threads>>>(d_c, d_kstar, d_k1, 0.5, n_p, num_elem);
         cudaThreadSynchronize();
 
         checkCudaError("error after stage 1.");
@@ -219,7 +220,7 @@ void time_integrate_rk4(double dt, int n_quad, int n_quad1d, int n_p, int n,
                                               d_left_elem, d_J, dt, n_p, num_sides, num_elem);
         cudaThreadSynchronize();
 
-        rk4_tempstorage<<<n_blocks_rk4, n_threads>>>(d_c, d_kstar, d_k2, 0.5, n_p, num_elem);
+        rk4_tempstorage<<<n_blocks_rk4_temp, n_threads>>>(d_c, d_kstar, d_k2, 0.5, n_p, num_elem);
         cudaThreadSynchronize();
 
         checkCudaError("error after stage 2.");
@@ -247,7 +248,7 @@ void time_integrate_rk4(double dt, int n_quad, int n_quad1d, int n_p, int n,
                                               d_left_elem, d_J, dt, n_p, num_sides, num_elem);
         cudaThreadSynchronize();
 
-        rk4_tempstorage<<<n_blocks_rk4, n_threads>>>(d_c, d_kstar, d_k3, 1.0, n_p, num_elem);
+        rk4_tempstorage<<<n_blocks_rk4_temp, n_threads>>>(d_c, d_kstar, d_k3, 1.0, n_p, num_elem);
         cudaThreadSynchronize();
 
         checkCudaError("error after stage 3.");

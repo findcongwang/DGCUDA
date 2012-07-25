@@ -6,7 +6,7 @@ int main(int argc, char *argv[]) {
     int n_threads, n_blocks_elem, n_blocks_jacobian, n_blocks_sides;
     int i, n, n_p, timesteps, n_quad, n_quad1d;
 
-    double dt, t;
+    double dt, t, endtime;
     double *min_J, min_j;
     double *V1x, *V1y, *V2x, *V2y, *V3x, *V3y;
     double *sides_x1, *sides_x2;
@@ -46,7 +46,8 @@ int main(int argc, char *argv[]) {
                        int, int, double, int) = NULL;
 
     // get input 
-    if (get_input(argc, argv, &n, &timesteps, &mesh_filename, &out_filename)) {
+    endtime = -1;
+    if (get_input(argc, argv, &n, &timesteps, &endtime, &mesh_filename, &out_filename)) {
         return 1;
     }
 
@@ -155,11 +156,14 @@ int main(int argc, char *argv[]) {
     }
 
     // choose dt to make this scheme stable
-    dt  = min_j / 2. / (2. * n + 1.) * sqrt(2.);
+    dt  = 0.01 * min_j / 2. / (2. * n + 1.) * sqrt(2.);
+    if (endtime != -1) {
+        timesteps = endtime / dt;
+    }
 
     preval_side_length<<<n_blocks_sides, n_threads>>>(d_s_length, d_s_V1x, d_s_V1y, d_s_V2x, d_s_V2y, 
                                                       num_sides); 
-    cudaThreadSynchronize();
+    //cudaThreadSynchronize();
     preval_normals<<<n_blocks_sides, n_threads>>>(d_Nx, d_Ny, 
                                                   d_s_V1x, d_s_V1y, d_s_V2x, d_s_V2y,
                                                   d_V1x, d_V1y, 
@@ -206,7 +210,7 @@ int main(int argc, char *argv[]) {
 
     checkCudaError("error before time integration.");
 
-    time_integrate_rk4(dt, n_quad, n_quad1d, n_p, n, num_elem, num_sides, timesteps);
+    time_integrate_fe(dt, n_quad, n_quad1d, n_p, n, num_elem, num_sides, timesteps);
     t = timesteps * dt;
 
     // evaluate at the vertex points and copy over data

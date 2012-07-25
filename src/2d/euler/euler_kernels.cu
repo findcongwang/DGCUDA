@@ -173,13 +173,13 @@ __device__ double pressure(double rho, double u, double v, double E) {
  * returns the value of the intial condition at point x
  */
 __device__ double rho0(double x, double y) {
-    return 2 + x;
+    return 2. + x ;
 }
 __device__ double u0(double x, double y) {
-    return 0.;
+    return 1.;
 }
 __device__ double v0(double x, double y) {
-    return 0.;
+    return 1.;
 }
 __device__ double E0(double x, double y) {
     return 1. / (GAMMA - 1) + (powf(u0(x, y), 2) + powf(v0(x, y), 2)) / 2. * rho0(x, y);
@@ -495,7 +495,7 @@ __global__ void preval_partials(double *V1x, double *V1y,
  *
  * device function to solve the riemann problem.
  */
-__device__ void eval_riemann(double *c_rho_left, double *c_rho_right,
+__device__ void eval_left_right(double *c_rho_left, double *c_rho_right,
                              double *c_u_left,   double *c_u_right,
                              double *c_v_left,   double *c_v_right,
                              double *c_E_left,   double *c_E_right,
@@ -769,7 +769,7 @@ __device__ double eval_lambda(double *c_rho_left, double *c_rho_right,
         max = sum3_r;
     }
 
-    return 0;//max / 2;
+    return max / 2 * J;
 }
 
 /* evaluate flux
@@ -844,27 +844,27 @@ __device__ void eval_surface(double *c_rho_left, double *c_u_left, double *c_v_l
 
         for (j = 0; j < n_quad1d; j++) {
 
-            // calculate the riemann problems
-            eval_riemann(c_rho_left, c_rho_right,
-                         c_u_left,   c_u_right,
-                         c_v_left,   c_v_right,
-                         c_E_left,   c_E_right,
-                         &rho_left, &u_left, &v_left, &E_left,
-                         &rho_right, &u_right, &v_right, &E_right,
-                         v1x, v1y, v2x, v2y, v3x, v3y,
-                         j, left_side, right_side,
-                         left_idx, right_idx,
-                         n_p, n_quad1d, num_sides, t);
+            // calculate the left and right values along the surface
+            eval_left_right(c_rho_left, c_rho_right,
+                            c_u_left,   c_u_right,
+                            c_v_left,   c_v_right,
+                            c_E_left,   c_E_right,
+                            &rho_left, &u_left, &v_left, &E_left,
+                            &rho_right, &u_right, &v_right, &E_right,
+                            v1x, v1y, v2x, v2y, v3x, v3y,
+                            j, left_side, right_side,
+                            left_idx, right_idx,
+                            n_p, n_quad1d, num_sides, t);
 
             // calculate the left fluxes
             eval_flux(rho_left, u_left, v_left, E_left,
-                 &flux_x1_l, &flux_y1_l, &flux_x2_l, &flux_y2_l,
-                 &flux_x3_l, &flux_y3_l, &flux_x4_l, &flux_y4_l);
+                      &flux_x1_l, &flux_y1_l, &flux_x2_l, &flux_y2_l,
+                      &flux_x3_l, &flux_y3_l, &flux_x4_l, &flux_y4_l);
 
             // calculate the right fluxes
-            eval_flux(rho_right, u_right, v_left, E_right,
-                 &flux_x1_r, &flux_y1_r, &flux_x2_r, &flux_y2_r,
-                 &flux_x3_r, &flux_y3_r, &flux_x4_r, &flux_y4_r);
+            eval_flux(rho_right, u_right, v_right, E_right,
+                      &flux_x1_r, &flux_y1_r, &flux_x2_r, &flux_y2_r,
+                      &flux_x3_r, &flux_y3_r, &flux_x4_r, &flux_y4_r);
 
             // need these local max values
             lambda = eval_lambda(c_rho_left, c_rho_right,
@@ -873,25 +873,25 @@ __device__ void eval_surface(double *c_rho_left, double *c_u_left, double *c_v_l
                                  c_E_left, c_E_right,
                                  J, n_p, n_quad);
             
-            // 1st row
+            // 1st equation
             s = 0.5 * ((flux_x1_l + flux_x1_r) * nx + (flux_y1_l + flux_y1_r) * ny 
                         - lambda * (rho_left - rho_right));
             left_sum1  += w_oned[j] * s * basis_side[left_side * n_p * n_quad1d + i * n_quad1d + j];
             right_sum1 += w_oned[j] * s * basis_side[right_side * n_p * n_quad1d + i * n_quad1d + n_quad1d - 1 - j];
 
-            // 2nd row
+            // 2nd equation
             s = 0.5 * ((flux_x2_l + flux_x2_r) * nx + (flux_y2_l + flux_y2_r) * ny 
                         - lambda * (u_left - u_right));
             left_sum2  += w_oned[j] * s * basis_side[left_side * n_p * n_quad1d + i * n_quad1d + j];
             right_sum2 += w_oned[j] * s * basis_side[right_side * n_p * n_quad1d + i * n_quad1d + n_quad1d - 1 - j];
 
-            // 3rd row
+            // 3rd equation
             s = 0.5 * ((flux_x3_l + flux_x3_r) * nx + (flux_y3_l + flux_y3_r) * ny 
                         - lambda * (v_left - v_right));
             left_sum3  += w_oned[j] * s * basis_side[left_side * n_p * n_quad1d + i * n_quad1d + j];
             right_sum3 += w_oned[j] * s * basis_side[right_side * n_p * n_quad1d + i * n_quad1d + n_quad1d - 1 - j];
 
-            // 4th row
+            // 4th equation
             s = 0.5 * ((flux_x4_l + flux_x4_r) * nx + (flux_y4_l + flux_y4_r) * ny 
                         - lambda * (E_left - E_right));
             left_sum4  += w_oned[j] * s * basis_side[left_side * n_p * n_quad1d + i * n_quad1d + j];
@@ -1017,7 +1017,7 @@ __device__ void eval_error(double *c,
 
 /* evaluate u
  * 
- * evaluates u at the three vertex points for output
+ * evaluates rho and E at the three vertex points for output
  * THREADS: num_elem
  */
 __device__ void eval_u(double *c, 
@@ -1035,6 +1035,46 @@ __device__ void eval_u(double *c,
         uv2 += c[i] * basis_vertex[i * 3 + 1];
         uv3 += c[i] * basis_vertex[i * 3 + 2];
     }
+
+    // store result
+    Uv1[idx] = uv1;
+    Uv2[idx] = uv2;
+    Uv3[idx] = uv3;
+}
+/* evaluate u velocity
+ * 
+ * evaluates u and v at the three vertex points for output
+ * THREADS: num_elem
+ */
+__device__ void eval_u_velocity(double *c, double *c_rho,
+                       double *Uv1, double *Uv2, double *Uv3,
+                       int num_elem, int n_p, int idx) {
+    int i;
+    double uv1, uv2, uv3;
+    double rhov1, rhov2, rhov3;
+
+    // calculate values at the integration points
+    rhov1 = 0.;
+    rhov2 = 0.;
+    rhov3 = 0.;
+    for (i = 0; i < n_p; i++) {
+        rhov1 += c_rho[i] * basis_vertex[i * 3 + 0];
+        rhov2 += c_rho[i] * basis_vertex[i * 3 + 1];
+        rhov3 += c_rho[i] * basis_vertex[i * 3 + 2];
+    }
+
+    uv1 = 0.;
+    uv2 = 0.;
+    uv3 = 0.;
+    for (i = 0; i < n_p; i++) {
+        uv1 += c[i] * basis_vertex[i * 3 + 0];
+        uv2 += c[i] * basis_vertex[i * 3 + 1];
+        uv3 += c[i] * basis_vertex[i * 3 + 2];
+    }
+
+    uv1 = uv1 / rhov1;
+    uv2 = uv2 / rhov2;
+    uv3 = uv3 / rhov3;
 
     // store result
     Uv1[idx] = uv1;

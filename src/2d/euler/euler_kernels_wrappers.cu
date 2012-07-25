@@ -542,12 +542,12 @@ __global__ void eval_rho_wrapper0(double *c,
     int idx = blockDim.x * blockIdx.x + threadIdx.x;
 
     if (idx < num_elem) {
-        double r_c[1];
+        double c_rho[1];
 
         // get the coefficients for this element
-        r_c[0] = c[idx];
+        c_rho[0] = c[idx];
 
-        eval_u(r_c, Uv1, Uv2, Uv3, num_elem, n_p, idx);
+        eval_u(c_rho, Uv1, Uv2, Uv3, num_elem, n_p, idx);
     }
 }
 
@@ -561,14 +561,14 @@ __global__ void eval_rho_wrapper1(double *c,
     int idx = blockDim.x * blockIdx.x + threadIdx.x;
 
     if (idx < num_elem) {
-        double r_c[3];
+        double c_rho[3];
 
         // get the coefficients for this element
-        r_c[0] = c[idx];
-        r_c[1] = c[num_elem + idx];
-        r_c[2] = c[2 * num_elem + idx];
+        c_rho[0] = c[idx];
+        c_rho[1] = c[num_elem + idx];
+        c_rho[2] = c[2 * num_elem + idx];
 
-        eval_u(r_c, Uv1, Uv2, Uv3, num_elem, n_p, idx);
+        eval_u(c_rho, Uv1, Uv2, Uv3, num_elem, n_p, idx);
     }
 }
 
@@ -582,17 +582,17 @@ __global__ void eval_rho_wrapper2(double *c,
     int idx = blockDim.x * blockIdx.x + threadIdx.x;
 
     if (idx < num_elem) {
-        double r_c[6];
+        double c_rho[6];
 
         // get the coefficients for this element
-        r_c[0] = c[idx];
-        r_c[1] = c[num_elem + idx];
-        r_c[2] = c[2 * num_elem + idx];
-        r_c[3] = c[3 * num_elem + idx];
-        r_c[4] = c[4 * num_elem + idx];
-        r_c[5] = c[5 * num_elem + idx];
+        c_rho[0] = c[idx];
+        c_rho[1] = c[num_elem + idx];
+        c_rho[2] = c[2 * num_elem + idx];
+        c_rho[3] = c[3 * num_elem + idx];
+        c_rho[4] = c[4 * num_elem + idx];
+        c_rho[5] = c[5 * num_elem + idx];
 
-        eval_u(r_c, Uv1, Uv2, Uv3, num_elem, n_p, idx);
+        eval_u(c_rho, Uv1, Uv2, Uv3, num_elem, n_p, idx);
          
     }
 }
@@ -607,21 +607,21 @@ __global__ void eval_rho_wrapper3(double *c,
     int idx = blockDim.x * blockIdx.x + threadIdx.x;
 
     if (idx < num_elem) {
-        double r_c[10];
+        double c_rho[10];
 
         // get the coefficients for this element
-        r_c[0] = c[idx];
-        r_c[1] = c[num_elem + idx];
-        r_c[2] = c[2 * num_elem + idx];
-        r_c[3] = c[3 * num_elem + idx];
-        r_c[4] = c[4 * num_elem + idx];
-        r_c[5] = c[5 * num_elem + idx];
-        r_c[6] = c[6 * num_elem + idx];
-        r_c[7] = c[7 * num_elem + idx];
-        r_c[8] = c[8 * num_elem + idx];
-        r_c[9] = c[9 * num_elem + idx];
+        c_rho[0] = c[idx];
+        c_rho[1] = c[num_elem + idx];
+        c_rho[2] = c[2 * num_elem + idx];
+        c_rho[3] = c[3 * num_elem + idx];
+        c_rho[4] = c[4 * num_elem + idx];
+        c_rho[5] = c[5 * num_elem + idx];
+        c_rho[6] = c[6 * num_elem + idx];
+        c_rho[7] = c[7 * num_elem + idx];
+        c_rho[8] = c[8 * num_elem + idx];
+        c_rho[9] = c[9 * num_elem + idx];
 
-        eval_u(r_c, Uv1, Uv2, Uv3, num_elem, n_p, idx);
+        eval_u(c_rho, Uv1, Uv2, Uv3, num_elem, n_p, idx);
          
     }
 }
@@ -637,27 +637,27 @@ __global__ void eval_rho_wrapper4(double *c,
     int idx = blockDim.x * blockIdx.x + threadIdx.x;
 
     if (idx < num_elem) {
-        double r_c[15];
+        double c_rho[15];
 
         // get the coefficients for this element
-        r_c[0] = c[idx];
-        r_c[1] = c[num_elem + idx];
-        r_c[2] = c[2 * num_elem + idx];
-        r_c[3] = c[3 * num_elem + idx];
-        r_c[4] = c[4 * num_elem + idx];
-        r_c[5] = c[5 * num_elem + idx];
-        r_c[6] = c[6 * num_elem + idx];
-        r_c[7] = c[7 * num_elem + idx];
-        r_c[8] = c[8 * num_elem + idx];
-        r_c[9] = c[9 * num_elem + idx];
+        c_rho[0] = c[idx];
+        c_rho[1] = c[num_elem + idx];
+        c_rho[2] = c[2 * num_elem + idx];
+        c_rho[3] = c[3 * num_elem + idx];
+        c_rho[4] = c[4 * num_elem + idx];
+        c_rho[5] = c[5 * num_elem + idx];
+        c_rho[6] = c[6 * num_elem + idx];
+        c_rho[7] = c[7 * num_elem + idx];
+        c_rho[8] = c[8 * num_elem + idx];
+        c_rho[9] = c[9 * num_elem + idx];
 
-        r_c[10] = c[10 * num_elem + idx];
-        r_c[11] = c[11 * num_elem + idx];
-        r_c[12] = c[12 * num_elem + idx];
-        r_c[13] = c[13 * num_elem + idx];
-        r_c[14] = c[14 * num_elem + idx];
+        c_rho[10] = c[10 * num_elem + idx];
+        c_rho[11] = c[11 * num_elem + idx];
+        c_rho[12] = c[12 * num_elem + idx];
+        c_rho[13] = c[13 * num_elem + idx];
+        c_rho[14] = c[14 * num_elem + idx];
 
-        eval_u(r_c, Uv1, Uv2, Uv3, num_elem, n_p, idx);
+        eval_u(c_rho, Uv1, Uv2, Uv3, num_elem, n_p, idx);
     }
 }
 
@@ -671,34 +671,34 @@ __global__ void eval_rho_wrapper5(double *c,
     int idx = blockDim.x * blockIdx.x + threadIdx.x;
 
     if (idx < num_elem) {
-        double r_c[21];
+        double c_rho[21];
 
         // get the coefficients for this element
-        r_c[0] = c[idx];
-        r_c[1] = c[num_elem + idx];
-        r_c[2] = c[2 * num_elem + idx];
-        r_c[3] = c[3 * num_elem + idx];
-        r_c[4] = c[4 * num_elem + idx];
-        r_c[5] = c[5 * num_elem + idx];
-        r_c[6] = c[6 * num_elem + idx];
-        r_c[7] = c[7 * num_elem + idx];
-        r_c[8] = c[8 * num_elem + idx];
-        r_c[9] = c[9 * num_elem + idx];
+        c_rho[0] = c[idx];
+        c_rho[1] = c[num_elem + idx];
+        c_rho[2] = c[2 * num_elem + idx];
+        c_rho[3] = c[3 * num_elem + idx];
+        c_rho[4] = c[4 * num_elem + idx];
+        c_rho[5] = c[5 * num_elem + idx];
+        c_rho[6] = c[6 * num_elem + idx];
+        c_rho[7] = c[7 * num_elem + idx];
+        c_rho[8] = c[8 * num_elem + idx];
+        c_rho[9] = c[9 * num_elem + idx];
 
-        r_c[10] = c[10 * num_elem + idx];
-        r_c[11] = c[11 * num_elem + idx];
-        r_c[12] = c[12 * num_elem + idx];
-        r_c[13] = c[13 * num_elem + idx];
-        r_c[14] = c[14 * num_elem + idx];
-        r_c[15] = c[15 * num_elem + idx];
-        r_c[16] = c[16 * num_elem + idx];
-        r_c[17] = c[17 * num_elem + idx];
-        r_c[18] = c[18 * num_elem + idx];
-        r_c[19] = c[19 * num_elem + idx];
+        c_rho[10] = c[10 * num_elem + idx];
+        c_rho[11] = c[11 * num_elem + idx];
+        c_rho[12] = c[12 * num_elem + idx];
+        c_rho[13] = c[13 * num_elem + idx];
+        c_rho[14] = c[14 * num_elem + idx];
+        c_rho[15] = c[15 * num_elem + idx];
+        c_rho[16] = c[16 * num_elem + idx];
+        c_rho[17] = c[17 * num_elem + idx];
+        c_rho[18] = c[18 * num_elem + idx];
+        c_rho[19] = c[19 * num_elem + idx];
 
-        r_c[20] = c[20 * num_elem + idx];
+        c_rho[20] = c[20 * num_elem + idx];
 
-        eval_u(r_c, Uv1, Uv2, Uv3, num_elem, n_p, idx);
+        eval_u(c_rho, Uv1, Uv2, Uv3, num_elem, n_p, idx);
          
     }
 }
@@ -709,12 +709,14 @@ __global__ void eval_u_wrapper0(double *c,
     int idx = blockDim.x * blockIdx.x + threadIdx.x;
 
     if (idx < num_elem) {
-        double r_c[1];
+        double c_u[1];
+        double c_rho[1];
 
         // get the coefficients for this element
-        r_c[0] = c[n_p * num_elem + idx];
+        c_u[0]   = c[n_p * num_elem + idx];
+        c_rho[0] = c[idx];
 
-        eval_u(r_c, Uv1, Uv2, Uv3, num_elem, n_p, idx);
+        eval_u_velocity(c_u, c_rho, Uv1, Uv2, Uv3, num_elem, n_p, idx);
     }
 }
 
@@ -728,14 +730,18 @@ __global__ void eval_u_wrapper1(double *c,
     int idx = blockDim.x * blockIdx.x + threadIdx.x;
 
     if (idx < num_elem) {
-        double r_c[3];
+        double c_u[3];
+        double c_rho[3];
 
         // get the coefficients for this element
-        r_c[0] = c[n_p * num_elem + idx];
-        r_c[1] = c[n_p * num_elem + num_elem + idx];
-        r_c[2] = c[n_p * num_elem + 2 * num_elem + idx];
+        c_u[0] = c[n_p * num_elem + idx];
+        c_u[1] = c[n_p * num_elem + num_elem + idx];
+        c_u[2] = c[n_p * num_elem + 2 * num_elem + idx];
+        c_rho[0] = c[idx];
+        c_rho[1] = c[num_elem + idx];
+        c_rho[2] = c[2 * num_elem + idx];
 
-        eval_u(r_c, Uv1, Uv2, Uv3, num_elem, n_p, idx);
+        eval_u_velocity(c_u, c_rho, Uv1, Uv2, Uv3, num_elem, n_p, idx);
     }
 }
 
@@ -750,14 +756,16 @@ __global__ void eval_u_wrapper2(double *c,
 
     if (idx < num_elem) {
         int i;
-        double r_c[6];
+        double c_u[6];
+        double c_rho[6];
 
         // get the coefficients for this element
         for (i = 0; i < 6; i++) {
-            r_c[i] = c[num_elem * n_p + i * num_elem + idx];
+            c_u[i]   = c[num_elem * n_p + i * num_elem + idx];
+            c_rho[i] = c[i * num_elem + idx];
         }
 
-        eval_u(r_c, Uv1, Uv2, Uv3, num_elem, n_p, idx);
+        eval_u_velocity(c_u, c_rho, Uv1, Uv2, Uv3, num_elem, n_p, idx);
          
     }
 }
@@ -773,14 +781,16 @@ __global__ void eval_u_wrapper3(double *c,
 
     if (idx < num_elem) {
         int i;
-        double r_c[10];
+        double c_u[10];
+        double c_rho[10];
 
         // get the coefficients for this element
         for (i = 0; i < 10; i++) {
-            r_c[i] = c[num_elem * n_p + i * num_elem + idx];
+            c_u[i] = c[num_elem * n_p + i * num_elem + idx];
+            c_rho[i] = c[i * num_elem + idx];
         }
 
-        eval_u(r_c, Uv1, Uv2, Uv3, num_elem, n_p, idx);
+        eval_u_velocity(c_u, c_rho, Uv1, Uv2, Uv3, num_elem, n_p, idx);
          
     }
 }
@@ -797,14 +807,16 @@ __global__ void eval_u_wrapper4(double *c,
 
     if (idx < num_elem) {
         int i;
-        double r_c[15];
+        double c_u[15];
+        double c_rho[15];
 
         // get the coefficients for this element
         for (i = 0; i < 15; i++) {
-            r_c[i] = c[num_elem * n_p + i * num_elem + idx];
+            c_u[i] = c[num_elem * n_p + i * num_elem + idx];
+            c_rho[i] = c[i * num_elem + idx];
         }
 
-        eval_u(r_c, Uv1, Uv2, Uv3, num_elem, n_p, idx);
+        eval_u_velocity(c_u, c_rho, Uv1, Uv2, Uv3, num_elem, n_p, idx);
     }
 }
 
@@ -819,14 +831,16 @@ __global__ void eval_u_wrapper5(double *c,
 
     if (idx < num_elem) {
         int i;
-        double r_c[21];
+        double c_u[21];
+        double c_rho[21];
 
         // get the coefficients for this element
         for (i = 0; i < 21; i++) {
-            r_c[i] = c[num_elem * n_p + i * num_elem + idx];
+            c_u[i] = c[num_elem * n_p + i * num_elem + idx];
+            c_rho[i] = c[num_elem * n_p + i * num_elem + idx];
         }
 
-        eval_u(r_c, Uv1, Uv2, Uv3, num_elem, n_p, idx);
+        eval_u_velocity(c_u, c_rho, Uv1, Uv2, Uv3, num_elem, n_p, idx);
          
     }
 }
@@ -841,12 +855,14 @@ __global__ void eval_v_wrapper0(double *c,
     int idx = blockDim.x * blockIdx.x + threadIdx.x;
 
     if (idx < num_elem) {
-        double r_c[1];
+        double c_v[1];
+        double c_rho[1];
 
         // get the coefficients for this element
-        r_c[0] = c[num_elem * n_p * 2 + idx];
+        c_v[0] = c[num_elem * n_p * 2 + idx];
+        c_rho[0] = c[idx];
 
-        eval_u(r_c, Uv1, Uv2, Uv3, num_elem, n_p, idx);
+        eval_u_velocity(c_v, c_rho, Uv1, Uv2, Uv3, num_elem, n_p, idx);
     }
 }
 
@@ -860,14 +876,18 @@ __global__ void eval_v_wrapper1(double *c,
     int idx = blockDim.x * blockIdx.x + threadIdx.x;
 
     if (idx < num_elem) {
-        double r_c[3];
+        double c_v[3];
+        double c_rho[3];
 
         // get the coefficients for this element
-        r_c[0] = c[num_elem * n_p * 2 + idx];
-        r_c[1] = c[num_elem * n_p * 2 + num_elem + idx];
-        r_c[2] = c[num_elem * n_p * 2 + 2 * num_elem + idx];
+        c_v[0] = c[num_elem * n_p * 2 + idx];
+        c_v[1] = c[num_elem * n_p * 2 + num_elem + idx];
+        c_v[2] = c[num_elem * n_p * 2 + 2 * num_elem + idx];
+        c_rho[0] = c[idx];
+        c_rho[1] = c[num_elem + idx];
+        c_rho[2] = c[2 * num_elem + idx];
 
-        eval_u(r_c, Uv1, Uv2, Uv3, num_elem, n_p, idx);
+        eval_u_velocity(c_v, c_rho, Uv1, Uv2, Uv3, num_elem, n_p, idx);
     }
 }
 
@@ -882,14 +902,16 @@ __global__ void eval_v_wrapper2(double *c,
 
     if (idx < num_elem) {
         int i;
-        double r_c[6];
+        double c_v[6];
+        double c_rho[6];
 
         // get the coefficients for this element
         for (i = 0; i < 6; i++) {
-            r_c[i] = c[num_elem * n_p * 2 + i * num_elem + idx];
+            c_v[i] = c[num_elem * n_p * 2 + i * num_elem + idx];
+            c_rho[i] = c[i * num_elem + idx];
         }
 
-        eval_u(r_c, Uv1, Uv2, Uv3, num_elem, n_p, idx);
+        eval_u_velocity(c_v, c_rho, Uv1, Uv2, Uv3, num_elem, n_p, idx);
          
     }
 }
@@ -905,14 +927,16 @@ __global__ void eval_v_wrapper3(double *c,
 
     if (idx < num_elem) {
         int i;
-        double r_c[10];
+        double c_v[10];
+        double c_rho[10];
 
         // get the coefficients for this element
         for (i = 0; i < 6; i++) {
-            r_c[i] = c[num_elem * n_p * 2 + i * num_elem + idx];
+            c_v[i] = c[num_elem * n_p * 2 + i * num_elem + idx];
+            c_rho[i] = c[i * num_elem + idx];
         }
 
-        eval_u(r_c, Uv1, Uv2, Uv3, num_elem, n_p, idx);
+        eval_u_velocity(c_v, c_rho, Uv1, Uv2, Uv3, num_elem, n_p, idx);
          
     }
 }
@@ -929,14 +953,16 @@ __global__ void eval_v_wrapper4(double *c,
 
     if (idx < num_elem) {
         int i;
-        double r_c[15];
+        double c_v[15];
+        double c_rho[15];
 
         // get the coefficients for this element
         for (i = 0; i < 6; i++) {
-            r_c[i] = c[num_elem * n_p * 2 + i * num_elem + idx];
+            c_v[i] = c[num_elem * n_p * 2 + i * num_elem + idx];
+            c_rho[i] = c[i * num_elem + idx];
         }
 
-        eval_u(r_c, Uv1, Uv2, Uv3, num_elem, n_p, idx);
+        eval_u_velocity(c_v, c_rho, Uv1, Uv2, Uv3, num_elem, n_p, idx);
     }
 }
 
@@ -951,14 +977,16 @@ __global__ void eval_v_wrapper5(double *c,
 
     if (idx < num_elem) {
         int i;
-        double r_c[21];
+        double c_v[21];
+        double c_rho[21];
 
         // get the coefficients for this element
         for (i = 0; i < 21; i++) {
-            r_c[i] = c[num_elem * n_p * 2 + i * num_elem + idx];
+            c_v[i] = c[num_elem * n_p * 2 + i * num_elem + idx];
+            c_rho[i] = c[i * num_elem + idx];
         }
 
-        eval_u(r_c, Uv1, Uv2, Uv3, num_elem, n_p, idx);
+        eval_u_velocity(c_v, c_rho, Uv1, Uv2, Uv3, num_elem, n_p, idx);
          
     }
 }
@@ -973,12 +1001,12 @@ __global__ void eval_E_wrapper0(double *c,
     int idx = blockDim.x * blockIdx.x + threadIdx.x;
 
     if (idx < num_elem) {
-        double r_c[1];
+        double c_E[1];
 
         // get the coefficients for this element
-        r_c[0] = c[num_elem * n_p * 3 + idx];
+        c_E[0] = c[num_elem * n_p * 3 + idx];
 
-        eval_u(r_c, Uv1, Uv2, Uv3, num_elem, n_p, idx);
+        eval_u(c_E, Uv1, Uv2, Uv3, num_elem, n_p, idx);
     }
 }
 
@@ -992,14 +1020,14 @@ __global__ void eval_E_wrapper1(double *c,
     int idx = blockDim.x * blockIdx.x + threadIdx.x;
 
     if (idx < num_elem) {
-        double r_c[3];
+        double c_E[3];
 
         // get the coefficients for this element
-        r_c[0] = c[num_elem * n_p * 3 + idx];
-        r_c[1] = c[num_elem * n_p * 3 + num_elem + idx];
-        r_c[2] = c[num_elem * n_p * 3 + 2 * num_elem + idx];
+        c_E[0] = c[num_elem * n_p * 3 + idx];
+        c_E[1] = c[num_elem * n_p * 3 + num_elem + idx];
+        c_E[2] = c[num_elem * n_p * 3 + 2 * num_elem + idx];
 
-        eval_u(r_c, Uv1, Uv2, Uv3, num_elem, n_p, idx);
+        eval_u(c_E, Uv1, Uv2, Uv3, num_elem, n_p, idx);
     }
 }
 
@@ -1014,14 +1042,14 @@ __global__ void eval_E_wrapper2(double *c,
 
     if (idx < num_elem) {
         int i;
-        double r_c[6];
+        double c_E[6];
 
         // get the coefficients for this element
         for (i = 0; i < 6; i++) {
-            r_c[i] = c[num_elem * n_p * 3 + i * num_elem + idx];
+            c_E[i] = c[num_elem * n_p * 3 + i * num_elem + idx];
         }
 
-        eval_u(r_c, Uv1, Uv2, Uv3, num_elem, n_p, idx);
+        eval_u(c_E, Uv1, Uv2, Uv3, num_elem, n_p, idx);
          
     }
 }
@@ -1037,14 +1065,14 @@ __global__ void eval_E_wrapper3(double *c,
 
     if (idx < num_elem) {
         int i;
-        double r_c[10];
+        double c_E[10];
 
         // get the coefficients for this element
         for (i = 0; i < 10; i++) {
-            r_c[i] = c[num_elem * n_p * 3 + i * num_elem + idx];
+            c_E[i] = c[num_elem * n_p * 3 + i * num_elem + idx];
         }
 
-        eval_u(r_c, Uv1, Uv2, Uv3, num_elem, n_p, idx);
+        eval_u(c_E, Uv1, Uv2, Uv3, num_elem, n_p, idx);
          
     }
 }
@@ -1061,14 +1089,14 @@ __global__ void eval_E_wrapper4(double *c,
 
     if (idx < num_elem) {
         int i;
-        double r_c[15];
+        double c_E[15];
 
         // get the coefficients for this element
         for (i = 0; i < 15; i++) {
-            r_c[i] = c[num_elem * n_p * 3 + i * num_elem + idx];
+            c_E[i] = c[num_elem * n_p * 3 + i * num_elem + idx];
         }
 
-        eval_u(r_c, Uv1, Uv2, Uv3, num_elem, n_p, idx);
+        eval_u(c_E, Uv1, Uv2, Uv3, num_elem, n_p, idx);
     }
 }
 
@@ -1083,14 +1111,14 @@ __global__ void eval_E_wrapper5(double *c,
 
     if (idx < num_elem) {
         int i;
-        double r_c[21];
+        double c_E[21];
 
         // get the coefficients for this element
         for (i = 0; i < 21; i++) {
-            r_c[i] = c[num_elem * n_p * 3 + i * num_elem + idx];
+            c_E[i] = c[num_elem * n_p * 3 + i * num_elem + idx];
         }
 
-        eval_u(r_c, Uv1, Uv2, Uv3, num_elem, n_p, idx);
+        eval_u(c_E, Uv1, Uv2, Uv3, num_elem, n_p, idx);
          
     }
 }

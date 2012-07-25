@@ -390,6 +390,7 @@ void usage_error() {
 
 int get_input(int argc, char *argv[],
                int *n, int *timesteps, 
+               double *endtime,
                char **mesh_filename, char **out_filename) {
 
     int i;
@@ -419,6 +420,18 @@ int get_input(int argc, char *argv[],
             if (i + 1 < argc) {
                 *timesteps = atoi(argv[i+1]);
                 if (*timesteps < 0) {
+                    usage_error();
+                    return 1;
+                }
+            } else {
+                usage_error();
+                return 1;
+            }
+        }
+        if (strcmp(argv[i], "-T") == 0) {
+            if (i + 1 < argc) {
+                *endtime = atof(argv[i+1]);
+                if (*endtime < 0) {
                     usage_error();
                     return 1;
                 }
