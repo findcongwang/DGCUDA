@@ -173,13 +173,13 @@ __device__ double pressure(double rho, double u, double v, double E) {
  * returns the value of the intial condition at point x
  */
 __device__ double rho0(double x, double y) {
-    return 2. + x ;
+    return 2.;
 }
 __device__ double u0(double x, double y) {
-    return 1.;
+    return 0.;
 }
 __device__ double v0(double x, double y) {
-    return 1.;
+    return 0.;
 }
 __device__ double E0(double x, double y) {
     return 1. / (GAMMA - 1) + (powf(u0(x, y), 2) + powf(v0(x, y), 2)) / 2. * rho0(x, y);
@@ -560,6 +560,13 @@ __device__ void eval_left_right(double *c_rho_left, double *c_rho_right,
         y = v2y * r1_eval + v3y * r2_eval + v1y * (1 - r1_eval - r2_eval);
             
         // deal with the boundary element here
+        //for (i = 0; i < n_p; i++) {
+            //c_rho_right[i] = c_rho_left[i];
+            //c_u_right[i] = c_u_left[i];
+            //c_v_right[i] = c_v_left[i];
+            //c_E_right[i] = c_E_left[i];
+        //}
+
         *rho_right = *rho_left;
         *u_right   = *u_left;
         *v_right   = *v_left;
@@ -613,7 +620,7 @@ __device__ double eval_lambda(double *c_rho_left, double *c_rho_right,
                              double *c_u_left,   double *c_u_right,
                              double *c_v_left,   double *c_v_right,
                              double *c_E_left,   double *c_E_right,
-                             double J, int n_p, int n_quad) {
+                             int right_idx, double J, int n_p, int n_quad) {
     double sum1_l, sum2_l, sum3_l;
     double sum1_r, sum2_r, sum3_r;
     double max;
@@ -625,7 +632,7 @@ __device__ double eval_lambda(double *c_rho_left, double *c_rho_right,
     ////////////////
 
     // evaluate u - c
-    sum1_l = 0;
+    sum1_l = 0.;
     for (j = 0; j < n_quad; j++) {
         // evaluate rho,u,v,E at the integration point
         rho = 0.;
@@ -648,12 +655,14 @@ __device__ double eval_lambda(double *c_rho_left, double *c_rho_right,
     sum1_l = abs(sum1_l);
 
     // evaluate u
-    sum2_l = 0;
+    sum2_l = 0.;
     for (j = 0; j < n_quad; j++) {
         // evaluate u at the integration point
+        rho = 0.;
         u   = 0.;
         v   = 0.;
         for (i = 0; i < n_p; i++) {
+            rho += c_rho_left[i] * basis[n_quad * i + j];
             u   += c_u_left[i]   * basis[n_quad * i + j];
             v   += c_v_left[i]   * basis[n_quad * i + j];
         }
@@ -691,70 +700,75 @@ __device__ double eval_lambda(double *c_rho_left, double *c_rho_right,
     ////////////////
     // right element
     ////////////////
+    // TODO: big bug here. c_*_right may not be defined if we're on a boundary element.
 
-    // evaluate u - c
-    sum1_r = 0;
-    for (j = 0; j < n_quad; j++) {
-        // evaluate rho,u,v,E at the integration point
-        rho = 0.;
-        u   = 0.;
-        v   = 0.;
-        E   = 0.;
-        for (i = 0; i < n_p; i++) {
-            rho += c_rho_right[i] * basis[n_quad * i + j];
-            u   += c_u_right[i]   * basis[n_quad * i + j];
-            v   += c_v_right[i]   * basis[n_quad * i + j];
-            E   += c_E_right[i]   * basis[n_quad * i + j];
+    if (right_idx != -1) {
+        // evaluate u - c
+        sum1_r = 0;
+        for (j = 0; j < n_quad; j++) {
+            // evaluate rho,u,v,E at the integration point
+            rho = 0.;
+            u   = 0.;
+            v   = 0.;
+            E   = 0.;
+            for (i = 0; i < n_p; i++) {
+                rho += c_rho_right[i] * basis[n_quad * i + j];
+                u   += c_u_right[i]   * basis[n_quad * i + j];
+                v   += c_v_right[i]   * basis[n_quad * i + j];
+                E   += c_E_right[i]   * basis[n_quad * i + j];
+            }
+            u = u / rho;
+            v = v / rho;
+            // evaluate c at the integration point
+            c = eval_c(rho, u, v, E);
+
+            sum1_r += w[j] * (sqrtf(u*u + v*v) - c);
         }
-        u = u / rho;
-        v = v / rho;
-        // evaluate c at the integration point
-        c = eval_c(rho, u, v, E);
+        sum1_r = abs(sum1_r);
 
-        sum1_r += w[j] * (sqrtf(u*u + v*v) - c);
-    }
-    sum1_r = abs(sum1_r);
+        // evaluate u
+        sum2_r = 0;
+        for (j = 0; j < n_quad; j++) {
+            // evaluate u at the integration point
+            rho = 0.;
+            u   = 0.;
+            v   = 0.;
+            for (i = 0; i < n_p; i++) {
+                rho += c_rho_right[i] * basis[n_quad * i + j];
+                u   += c_u_right[i]   * basis[n_quad * i + j];
+                v   += c_v_right[i]   * basis[n_quad * i + j];
+            }
+            u = u / rho;
+            v = v / rho;
 
-    // evaluate u
-    sum2_r = 0;
-    for (j = 0; j < n_quad; j++) {
-        // evaluate u at the integration point
-        u   = 0.;
-        v   = 0.;
-        for (i = 0; i < n_p; i++) {
-            u   += c_u_right[i]   * basis[n_quad * i + j];
-            v   += c_v_right[i]   * basis[n_quad * i + j];
+            sum2_r += w[j] * sqrtf(u*u + v*v);
         }
-        u = u / rho;
-        v = v / rho;
 
-        sum2_r += w[j] * sqrtf(u*u + v*v);
-    }
+        sum2_r = abs(sum2_r);
 
-    sum2_r = abs(sum2_r);
+        // evaluate u + c
+        sum3_r = 0;
+        for (j = 0; j < n_quad; j++) {
+            // evaluate rho,u,v,E at the integration point
+            rho = 0.;
+            u   = 0.;
+            v   = 0.;
+            E   = 0.;
+            for (i = 0; i < n_p; i++) {
+                rho += c_rho_right[i] * basis[n_quad * i + j];
+                u   += c_u_right[i]   * basis[n_quad * i + j];
+                v   += c_v_right[i]   * basis[n_quad * i + j];
+                E   += c_E_right[i]   * basis[n_quad * i + j];
+            }
+            u = u / rho;
+            v = v / rho;
+            // evaluate c at the integration point
+            c = eval_c(rho, u, v, E);
 
-    // evaluate u + c
-    sum3_r = 0;
-    for (j = 0; j < n_quad; j++) {
-        // evaluate rho,u,v,E at the integration point
-        rho = 0.;
-        u   = 0.;
-        v   = 0.;
-        E   = 0.;
-        for (i = 0; i < n_p; i++) {
-            rho += c_rho_right[i] * basis[n_quad * i + j];
-            u   += c_u_right[i]   * basis[n_quad * i + j];
-            v   += c_v_right[i]   * basis[n_quad * i + j];
-            E   += c_E_right[i]   * basis[n_quad * i + j];
+            sum3_r += w[j] * (sqrtf(u*u + v*v) + c);
         }
-        u = u / rho;
-        v = v / rho;
-        // evaluate c at the integration point
-        c = eval_c(rho, u, v, E);
-
-        sum3_r += w[j] * (sqrtf(u*u + v*v) + c);
+        sum3_r = abs(sum3_r);
     }
-    sum3_r = abs(sum3_r);
 
     max = 0;
     if (sum1_l > max) {
@@ -766,14 +780,17 @@ __device__ double eval_lambda(double *c_rho_left, double *c_rho_right,
     if (sum3_l > max) {
         max = sum3_l;
     }
-    if (sum1_r > max) {
-        max = sum1_r;
-    }
-    if (sum2_r > max) {
-        max = sum2_r;
-    }
-    if (sum3_r > max) {
-        max = sum3_r;
+
+    if (right_idx != -1) {
+        if (sum1_r > max) {
+            max = sum1_r;
+        }
+        if (sum2_r > max) {
+            max = sum2_r;
+        }
+        if (sum3_r > max) {
+            max = sum3_r;
+        }
     }
 
     return max / 2 * J;
@@ -878,7 +895,7 @@ __device__ void eval_surface(double *c_rho_left, double *c_u_left, double *c_v_l
                                  c_u_left, c_u_right, 
                                  c_v_left, c_v_right, 
                                  c_E_left, c_E_right,
-                                 J, n_p, n_quad);
+                                 right_idx, J, n_p, n_quad);
             
             // 1st equation
             s = 0.5 * ((flux_x1_l + flux_x1_r) * nx + (flux_y1_l + flux_y1_r) * ny 

@@ -209,7 +209,7 @@ int main(int argc, char *argv[]) {
 
     checkCudaError("error before time integration.");
 
-    time_integrate_rk4(dt, n_quad, n_quad1d, n_p, n, num_elem, num_sides, timesteps);
+    time_integrate_fe(dt, n_quad, n_quad1d, n_p, n, num_elem, num_sides, timesteps);
     t = timesteps * dt;
 
     // evaluate at the vertex points and copy over data
