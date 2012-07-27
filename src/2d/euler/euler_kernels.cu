@@ -173,13 +173,13 @@ __device__ double pressure(double rho, double u, double v, double E) {
  * returns the value of the intial condition at point x
  */
 __device__ double rho0(double x, double y) {
-    return 2.;
+    return 20. + x;
 }
 __device__ double u0(double x, double y) {
-    return 0.;
+    return 1.;
 }
 __device__ double v0(double x, double y) {
-    return 0.;
+    return 1.;
 }
 __device__ double E0(double x, double y) {
     return 1. / (GAMMA - 1) + (powf(u0(x, y), 2) + powf(v0(x, y), 2)) / 2. * rho0(x, y);
@@ -536,6 +536,7 @@ __device__ void eval_left_right(double *c_rho_left, double *c_rho_right,
     __syncthreads();
     // make all threads in the first warps be boundary sides
     if (right_idx == -1) {
+        /*
         double r1_eval, r2_eval;
         double x, y;
 
@@ -558,19 +559,14 @@ __device__ void eval_left_right(double *c_rho_left, double *c_rho_right,
         // x = x2 * r + x3 * s + x1 * (1 - r - s)
         x = v2x * r1_eval + v3x * r2_eval + v1x * (1 - r1_eval - r2_eval);
         y = v2y * r1_eval + v3y * r2_eval + v1y * (1 - r1_eval - r2_eval);
+        */
             
-        // deal with the boundary element here
-        //for (i = 0; i < n_p; i++) {
-            //c_rho_right[i] = c_rho_left[i];
-            //c_u_right[i] = c_u_left[i];
-            //c_v_right[i] = c_v_left[i];
-            //c_E_right[i] = c_E_left[i];
-        //}
-
+        // deal with the boundary sides
         *rho_right = *rho_left;
         *u_right   = *u_left;
         *v_right   = *v_left;
         *E_right   = *E_left;
+
         //*rho_right = boundary_exact_rho(x, y, t);
         //*u_right   = boundary_exact_u(x, y, t);
         //*v_right   = boundary_exact_v(x, y, t);
@@ -616,21 +612,41 @@ __device__ double eval_c(double rho, double u, double v, double E) {
  * finds the max absolute value of the jacobian for F(u).
  *  |u - c|, |u|, |u + c|
  */
-__device__ double eval_lambda(double *c_rho_left, double *c_rho_right,
-                             double *c_u_left,   double *c_u_right,
-                             double *c_v_left,   double *c_v_right,
-                             double *c_E_left,   double *c_E_right,
-                             int right_idx, double J, int n_p, int n_quad) {
-    double sum1_l, sum2_l, sum3_l;
-    double sum1_r, sum2_r, sum3_r;
-    double max;
-    double rho, u, v, E, c;
-    int i, j;
+__device__ double eval_lambda(double rho_left, double rho_right,
+                              double u_left,   double u_right,
+                              double v_left,   double v_right,
+                              double E_left,   double E_right,
+                              double nx,       double ny) {
+                              
+    double s_left, s_right;
+    double left_max, right_max;
+    double c_left, c_right;
+    
+    c_left  = eval_c(rho_left, u_left, v_left, E_left);
+    c_right = eval_c(rho_right, u_right, v_right, E_right);
+
+    s_left  = nx * u_left  + ny * v_left;
+    s_right = nx * u_right + ny * v_right; 
+    
+    if (s_left > 0.) {
+        left_max = s_left + c_left;
+    } else {
+        left_max = -s_left + c_left;
+    }
+
+    if (s_right > 0.) {
+        right_max = s_right + c_right;
+    } else {
+        right_max = -s_right + c_right;
+    }
+
+    return (left_max > right_max) ? left_max : right_max;
 
     ////////////////
     // left element 
     ////////////////
 
+    /*
     // evaluate u - c
     sum1_l = 0.;
     for (j = 0; j < n_quad; j++) {
@@ -793,7 +809,8 @@ __device__ double eval_lambda(double *c_rho_left, double *c_rho_right,
         }
     }
 
-    return max / 2 * J;
+    return max;
+    */
 }
 
 /* evaluate flux
@@ -867,7 +884,6 @@ __device__ void eval_surface(double *c_rho_left, double *c_u_left, double *c_v_l
         right_sum4 = 0.;
 
         for (j = 0; j < n_quad1d; j++) {
-
             // calculate the left and right values along the surface
             eval_left_right(c_rho_left, c_rho_right,
                             c_u_left,   c_u_right,
@@ -891,11 +907,11 @@ __device__ void eval_surface(double *c_rho_left, double *c_u_left, double *c_v_l
                       &flux_x3_r, &flux_y3_r, &flux_x4_r, &flux_y4_r);
 
             // need these local max values
-            lambda = eval_lambda(c_rho_left, c_rho_right,
-                                 c_u_left, c_u_right, 
-                                 c_v_left, c_v_right, 
-                                 c_E_left, c_E_right,
-                                 right_idx, J, n_p, n_quad);
+            lambda = eval_lambda(rho_left, rho_right,
+                                 u_left, u_right, 
+                                 v_left, v_right, 
+                                 E_left, E_right,
+                                 nx, ny);
             
             // 1st equation
             s = 0.5 * ((flux_x1_l + flux_x1_r) * nx + (flux_y1_l + flux_y1_r) * ny 
@@ -958,7 +974,6 @@ __device__ void eval_volume(double *c_rho, double *c_u,
         sum3 = 0.;
         sum4 = 0.;
         for (j = 0; j < n_quad; j++) {
-
             // evaluate rho, u, v, E at the integration point.
             rho = 0.;
             u   = 0.;
@@ -982,22 +997,30 @@ __device__ void eval_volume(double *c_rho, double *c_u,
                  
             // Add to the sum
             // [fx fy] * [y_s, -y_r; -x_s, x_r] * [phi_x phi_y]
-            sum1 += (  flux_x1 * ( basis_grad_x[n_quad * i + j] * y_s
-                                  -basis_grad_y[n_quad * i + j] * y_r)
-                     + flux_y1 * (-basis_grad_x[n_quad * i + j] * x_s 
-                                 + basis_grad_y[n_quad * i + j] * x_r));
-            sum2 += (  flux_x2 * ( basis_grad_x[n_quad * i + j] * y_s
-                                  -basis_grad_y[n_quad * i + j] * y_r)
-                     + flux_y2 * (-basis_grad_x[n_quad * i + j] * x_s 
-                                 + basis_grad_y[n_quad * i + j] * x_r));
-            sum3 += (  flux_x3 * ( basis_grad_x[n_quad * i + j] * y_s
-                                  -basis_grad_y[n_quad * i + j] * y_r)
-                     + flux_y3 * (-basis_grad_x[n_quad * i + j] * x_s 
-                                 + basis_grad_y[n_quad * i + j] * x_r));
-            sum4 += (  flux_x4 * ( basis_grad_x[n_quad * i + j] * y_s
-                                  -basis_grad_y[n_quad * i + j] * y_r)
-                     + flux_y4 * (-basis_grad_x[n_quad * i + j] * x_s 
-                                 + basis_grad_y[n_quad * i + j] * x_r));
+
+            // 1st equation
+            sum1 +=   flux_x1 * ( basis_grad_x[n_quad * i + j] * y_s
+                                 -basis_grad_y[n_quad * i + j] * y_r)
+                    + flux_y1 * (-basis_grad_x[n_quad * i + j] * x_s 
+                                + basis_grad_y[n_quad * i + j] * x_r);
+
+            // 2nd equation
+            sum2 +=   flux_x2 * ( basis_grad_x[n_quad * i + j] * y_s
+                                 -basis_grad_y[n_quad * i + j] * y_r)
+                    + flux_y2 * (-basis_grad_x[n_quad * i + j] * x_s 
+                                + basis_grad_y[n_quad * i + j] * x_r);
+
+            // 3rd equation
+            sum3 +=   flux_x3 * ( basis_grad_x[n_quad * i + j] * y_s
+                                 -basis_grad_y[n_quad * i + j] * y_r)
+                    + flux_y3 * (-basis_grad_x[n_quad * i + j] * x_s 
+                                + basis_grad_y[n_quad * i + j] * x_r);
+
+            // 4th equation
+            sum4 +=   flux_x4 * ( basis_grad_x[n_quad * i + j] * y_s
+                                 -basis_grad_y[n_quad * i + j] * y_r)
+                    + flux_y4 * (-basis_grad_x[n_quad * i + j] * x_s 
+                                + basis_grad_y[n_quad * i + j] * x_r);
         }
 
         // store the result

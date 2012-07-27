@@ -18,7 +18,7 @@ void checkCudaError(const char*);
 __global__ void rk4_tempstorage(double *c, double *kstar, double*k, double alpha, int n_p, int num_elem) {
     int idx = blockDim.x * blockIdx.x + threadIdx.x;
 
-    if (idx < n_p * num_elem) {
+    if (idx < 4 * n_p * num_elem) {
         kstar[idx] = c[idx] + alpha * k[idx];
     }
 }
