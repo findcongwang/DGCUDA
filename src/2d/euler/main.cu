@@ -3,11 +3,12 @@
 int main(int argc, char *argv[]) {
     checkCudaError("error before start.");
     int num_elem, num_sides;
-    int n_threads, n_blocks_elem, n_blocks_jacobian, n_blocks_sides;
+    int n_threads, n_blocks_elem, n_blocks_reduction, n_blocks_sides;
     int i, n, n_p, timesteps, n_quad, n_quad1d;
 
     double dt, t, endtime;
-    double *min_J, min_j;
+    double *min_radius;
+    double min_r;
     double *V1x, *V1y, *V2x, *V2y, *V3x, *V3y;
     double *sides_x1, *sides_x2;
     double *sides_y1, *sides_y2;
@@ -38,6 +39,7 @@ int main(int argc, char *argv[]) {
     void (*eval_u_ftn)(double*, double*, double*, double*, int, int) = NULL;
     void (*eval_v_ftn)(double*, double*, double*, double*, int, int) = NULL;
     void (*eval_E_ftn)(double*, double*, double*, double*, int, int) = NULL;
+    void (*eval_lambda_ftn)(double*, double*, int, int, int);
     void (*eval_error_ftn)(double*, 
                        double*, double*,
                        double*, double*,
@@ -68,6 +70,47 @@ int main(int argc, char *argv[]) {
     }
     fgets(line, 100, mesh_file);
     sscanf(line, "%i", &num_elem);
+
+    // get the correct functions for this scheme
+    switch (n) {
+        case 0: eval_rho_ftn = eval_rho_wrapper0;
+                eval_u_ftn = eval_u_wrapper0;
+                eval_v_ftn = eval_v_wrapper0;
+                eval_E_ftn = eval_E_wrapper0;
+                eval_lambda_ftn  = eval_lambda_wrapper0;
+                break;
+        case 1: eval_rho_ftn = eval_rho_wrapper1;
+                eval_u_ftn = eval_u_wrapper1;
+                eval_v_ftn = eval_v_wrapper1;
+                eval_E_ftn = eval_E_wrapper1;
+                eval_lambda_ftn  = eval_lambda_wrapper1;
+                break;
+        case 2: eval_rho_ftn = eval_rho_wrapper2;
+                eval_u_ftn = eval_u_wrapper2;
+                eval_v_ftn = eval_v_wrapper2;
+                eval_E_ftn = eval_E_wrapper2;
+                eval_lambda_ftn  = eval_lambda_wrapper2;
+                break;
+        case 3: eval_rho_ftn = eval_rho_wrapper3;
+                eval_u_ftn = eval_u_wrapper3;
+                eval_v_ftn = eval_v_wrapper3;
+                eval_E_ftn = eval_E_wrapper3;
+                eval_lambda_ftn  = eval_lambda_wrapper3;
+                break;
+        case 4: eval_rho_ftn = eval_rho_wrapper4;
+                eval_u_ftn = eval_u_wrapper4;
+                eval_v_ftn = eval_v_wrapper4;
+                eval_E_ftn = eval_E_wrapper4;
+                eval_lambda_ftn  = eval_lambda_wrapper4;
+                break;
+        case 5: eval_rho_ftn = eval_rho_wrapper5;
+                eval_u_ftn = eval_u_wrapper5;
+                eval_v_ftn = eval_v_wrapper5;
+                eval_E_ftn = eval_E_wrapper5;
+                eval_lambda_ftn  = eval_lambda_wrapper5;
+                break;
+    }
+
 
     // allocate vertex points
     V1x = (double *) malloc(num_elem * sizeof(double));
@@ -118,47 +161,49 @@ int main(int argc, char *argv[]) {
              left_elem, right_elem);
 
     checkCudaError("error after gpu init.");
-    n_threads         = 128;
-    n_blocks_elem     = (num_elem  / n_threads) + ((num_elem  % n_threads) ? 1 : 0);
-    n_blocks_sides    = (num_sides / n_threads) + ((num_sides % n_threads) ? 1 : 0);
-    n_blocks_jacobian = (num_elem  / 256) + ((num_elem  % 256) ? 1 : 0);
+    n_threads          = 256;
+    n_blocks_elem      = (num_elem  / n_threads) + ((num_elem  % n_threads) ? 1 : 0);
+    n_blocks_sides     = (num_sides / n_threads) + ((num_sides % n_threads) ? 1 : 0);
+    n_blocks_reduction = (num_elem  / 256) + ((num_elem  % 256) ? 1 : 0);
+
+    // find the min inscribed circle
+    preval_inscribed_circles<<<n_blocks_elem, n_threads>>>
+                (d_J, d_V1x, d_V1y, d_V2x, d_V2y, d_V3x, d_V3y, num_elem);
+    min_radius = (double *) malloc(num_elem * sizeof(double));
+
+    /*
+    // find the min inscribed circle. do it on the gpu if there are at least 256 elements
+    if (num_elem >= 256) {
+        //min_reduction<<<n_blocks_reduction, 256>>>(d_J, d_reduction, num_elem);
+        cudaThreadSynchronize();
+        checkCudaError("error after min_jacobian.");
+
+        // each block finds the smallest value, so need to sort through n_blocks_reduction
+        min_radius = (double *) malloc(n_blocks_reduction * sizeof(double));
+        cudaMemcpy(min_radius, d_reduction, n_blocks_reduction * sizeof(double), cudaMemcpyDeviceToHost);
+        min_r = min_radius[0];
+        for (i = 1; i < n_blocks_reduction; i++) {
+            min_r = (min_radius[i] < min_r) ? min_radius[i] : min_r;
+        }
+        free(min_radius);
+
+    } else {
+        */
+        // just grab all the radii and sort them since there are so few of them
+        min_radius = (double *) malloc(num_elem * sizeof(double));
+        cudaMemcpy(min_radius, d_J, num_elem * sizeof(double), cudaMemcpyDeviceToHost);
+        min_r = min_radius[0];
+        for (i = 1; i < num_elem; i++) {
+            min_r = (min_radius[i] < min_r) ? min_radius[i] : min_r;
+        }
+        free(min_radius);
+    //}
 
     // pre computations
     preval_jacobian<<<n_blocks_elem, n_threads>>>(d_J, d_V1x, d_V1y, d_V2x, d_V2y, d_V3x, d_V3y, num_elem); 
     checkCudaError("error after preval_jacobian.");
+
     cudaThreadSynchronize();
-
-    // find the min jacobian. do it on the gpu if there are at least 256 elements
-    if (num_elem >= 256) {
-        min_jacobian<<<n_blocks_jacobian, 256>>>(d_J, d_min_J, num_elem);
-        cudaThreadSynchronize();
-        checkCudaError("error after min_jacobian.");
-
-        // each block finds the smallest value, so need to sort through n_blocks_jacobian
-        min_J = (double *) malloc(n_blocks_jacobian * sizeof(double));
-        cudaMemcpy(min_J, d_min_J, n_blocks_jacobian * sizeof(double), cudaMemcpyDeviceToHost);
-        min_j = min_J[0];
-        for (i = 0; i < n_blocks_jacobian; i++) {
-            min_j = (min_J[i] > min_j) ? min_J[i] : min_j;
-        }
-        free(min_J);
-
-    } else {
-        // just grab all the jacobians and sort them since there are so few of them
-        min_J = (double *) malloc(num_elem * sizeof(double));
-        cudaMemcpy(min_J, d_J, num_elem * sizeof(double), cudaMemcpyDeviceToHost);
-        min_j = min_J[0];
-        for (i = 0; i < num_elem; i++) {
-            min_j = (min_J[i] > min_j) ? min_J[i] : min_j;
-        }
-        free(min_J);
-    }
-
-    // choose dt to make this scheme stable
-    dt  = 0.7 * min_j / 2. / (2. * n + 1.) * sqrt(2.);
-    if (endtime != -1) {
-        timesteps = endtime / dt;
-    }
 
     preval_side_length<<<n_blocks_sides, n_threads>>>(d_s_length, d_s_V1x, d_s_V1y, d_s_V2x, d_s_V2y, 
                                                       num_sides); 
@@ -202,53 +247,18 @@ int main(int argc, char *argv[]) {
     printf(" ? %i precomputed basis points\n", n_quad * n_p);
     printf(" ? %i elements\n", num_elem);
     printf(" ? %i sides\n", num_sides);
-    printf(" ? %i timesteps\n", timesteps);
-    printf(" ? min jacobian = %lf\n", min_j);
-    printf(" ? dt = %lf\n", dt);
-    printf(" ? endtime = %lf\n", dt * timesteps);
+    printf(" ? min radius = %lf\n", min_r);
+    printf(" ? endtime = %lf\n", endtime);
 
     checkCudaError("error before time integration.");
 
-    time_integrate_rk4(dt, n_quad, n_quad1d, n_p, n, num_elem, num_sides, timesteps);
+    time_integrate_rk4(n_quad, n_quad1d, n_p, n, num_elem, num_sides, endtime, min_r);
     t = timesteps * dt;
 
     // evaluate at the vertex points and copy over data
     Uv1 = (double *) malloc(num_elem * sizeof(double));
     Uv2 = (double *) malloc(num_elem * sizeof(double));
     Uv3 = (double *) malloc(num_elem * sizeof(double));
-
-    switch (n) {
-        case 0: eval_rho_ftn = eval_rho_wrapper0;
-                eval_u_ftn = eval_u_wrapper0;
-                eval_v_ftn = eval_v_wrapper0;
-                eval_E_ftn = eval_E_wrapper0;
-                break;
-        case 1: eval_rho_ftn = eval_rho_wrapper1;
-                eval_u_ftn = eval_u_wrapper1;
-                eval_v_ftn = eval_v_wrapper1;
-                eval_E_ftn = eval_E_wrapper1;
-                break;
-        case 2: eval_rho_ftn = eval_rho_wrapper2;
-                eval_u_ftn = eval_u_wrapper2;
-                eval_v_ftn = eval_v_wrapper2;
-                eval_E_ftn = eval_E_wrapper2;
-                break;
-        case 3: eval_rho_ftn = eval_rho_wrapper3;
-                eval_u_ftn = eval_u_wrapper3;
-                eval_v_ftn = eval_v_wrapper3;
-                eval_E_ftn = eval_E_wrapper3;
-                break;
-        case 4: eval_rho_ftn = eval_rho_wrapper4;
-                eval_u_ftn = eval_u_wrapper4;
-                eval_v_ftn = eval_v_wrapper4;
-                eval_E_ftn = eval_E_wrapper4;
-                break;
-        case 5: eval_rho_ftn = eval_rho_wrapper5;
-                eval_u_ftn = eval_u_wrapper5;
-                eval_v_ftn = eval_v_wrapper5;
-                eval_E_ftn = eval_E_wrapper5;
-                break;
-    }
 
     // evaluate rho and write to file 
     eval_rho_ftn<<<n_blocks_elem, n_threads>>>(d_c, d_Uv1, d_Uv2, d_Uv3, num_elem, n_p);

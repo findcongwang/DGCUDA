@@ -98,9 +98,10 @@ void set_r_oned(void *value, int size) {
 int *d_left_side_number;
 int *d_right_side_number;
 
-double *d_J;        // jacobian determinant 
-double *d_min_J;      // for the min sized jacobian
-double *d_s_length; // length of sides
+double *d_J;         // jacobian determinant 
+double *d_reduction; // for the min / maxes in the reductions 
+double *d_lambda;    // stores computed lambda values for each element
+double *d_s_length;  // length of sides
 
 // the num_elem values of the x and y coordinates for the two vertices defining a side
 // TODO: can i delete these after the lengths are precomputed?
@@ -162,6 +163,14 @@ __device__ double pressure(double rho, double u, double v, double E) {
     return (GAMMA - 1) * (E - (u*u + v*v) / 2 * rho);
 }
 
+/* evaluate c
+ *
+ * evaulates the speed of sound c
+ */
+__device__ double eval_c(double rho, double u, double v, double E) {
+    return sqrtf(GAMMA * pressure(rho, u, v, E) / rho);
+}    
+
 /***********************
  *
  * INITIAL CONDITIONS
@@ -173,7 +182,7 @@ __device__ double pressure(double rho, double u, double v, double E) {
  * returns the value of the intial condition at point x
  */
 __device__ double rho0(double x, double y) {
-    return 20. + x;
+    return 2.;
 }
 __device__ double u0(double x, double y) {
     return 1.;
@@ -252,14 +261,14 @@ __global__ void init_conditions(double *c, double *J,
     }
 }
 
-/* find min jacobian
+/* min reduction function
  *
- * returns the min jacobian inside of min_J. 
+ * returns the min value from the global data J and stores in min_J
  * each block computes the min jacobian inside of that block and stores it in the
  * blockIdx.x spot of the shared min_J variable.
  * NOTE: this is fixed for 256 threads.
  */
-__global__ void min_jacobian(double *J, double *min_J, int num_elem) {
+__global__ void min_reduction(double *D, double *min_D, int num_elem) {
     int idx = blockDim.x * blockIdx.x + threadIdx.x;
     int tid = threadIdx.x;
     int i   = (blockIdx.x * 256 * 2) + threadIdx.x;
@@ -267,14 +276,14 @@ __global__ void min_jacobian(double *J, double *min_J, int num_elem) {
     __shared__ double s_min[256];
 
     if (idx < num_elem) {
-        // set all of min to J[idx] initially
-        s_min[tid] = J[idx];
+        // set all of min to D[idx] initially
+        s_min[tid] = D[idx];
         __syncthreads();
 
         // test a few
         while (i < num_elem) {
-            s_min[tid] = (s_min[tid] < J[i]) ? s_min[tid] : J[i];
-            s_min[tid] = (s_min[tid] < J[i + 256]) ? s_min[tid] : J[i];
+            s_min[tid] = (s_min[tid] < D[i]) ? s_min[tid] : D[i];
+            s_min[tid] = (s_min[tid] < D[i + 256]) ? s_min[tid] : D[i];
             i += gridDim.x * 256 * 2;
             __syncthreads();
         }
@@ -316,7 +325,76 @@ __global__ void min_jacobian(double *J, double *min_J, int num_elem) {
 
         __syncthreads();
         if (tid == 0) {
-            min_J[blockIdx.x] = s_min[0];
+            min_D[blockIdx.x] = s_min[0];
+        }
+    }
+}
+
+/* max reduction function
+ *
+ * returns the max value from the global data D and stores in max
+ * each block computes the max jacobian inside of that block and stores it in the
+ * blockIdx.x spot of the shared max variable.
+ * NOTE: this is fixed for 256 threads.
+ */
+__global__ void max_reduction(double *D, double *max_D, int num_elem) {
+    int idx = blockDim.x * blockIdx.x + threadIdx.x;
+    int tid = threadIdx.x;
+    int i   = (blockIdx.x * 256 * 2) + threadIdx.x;
+
+    __shared__ double s_max[256];
+
+    if (idx < num_elem) {
+        // set all of max to D[idx] initially
+        s_max[tid] = D[idx];
+        __syncthreads();
+
+        // test a few
+        while (i + 256 < num_elem) {
+            s_max[tid] = (s_max[tid] > D[i]) ? s_max[tid] : D[i];
+            s_max[tid] = (s_max[tid] > D[i + 256]) ? s_max[tid] : D[i];
+            i += gridDim.x * 256 * 2;
+            __syncthreads();
+        }
+
+        // first half of the warps
+        __syncthreads();
+        if (tid < 128) {
+            s_max[tid] = (s_max[tid] > s_max[tid + 128]) ? s_max[tid] : s_max[tid + 128];
+        }
+
+        // first and second warps
+        __syncthreads();
+        if (tid < 64) {
+            s_max[tid] = (s_max[tid] > s_max[tid + 64]) ? s_max[tid] : s_max[tid + 64];
+        }
+
+        // unroll last warp
+        __syncthreads();
+        if (tid < 32) {
+            if (blockDim.x >= 64) {
+                s_max[tid] = (s_max[tid] > s_max[tid + 32]) ? s_max[tid] : s_max[tid + 32];
+            }
+            if (blockDim.x >= 32) {
+                s_max[tid] = (s_max[tid] > s_max[tid + 16]) ? s_max[tid] : s_max[tid + 16];
+            }
+            if (blockDim.x >= 16) {
+                s_max[tid] = (s_max[tid] > s_max[tid + 8]) ? s_max[tid] : s_max[tid + 8];
+            }
+            if (blockDim.x >= 8) {
+                s_max[tid] = (s_max[tid] > s_max[tid + 4]) ? s_max[tid] : s_max[tid + 4];
+            }
+            if (blockDim.x >= 4) {
+                s_max[tid] = (s_max[tid] > s_max[tid + 2]) ? s_max[tid] : s_max[tid + 2];
+            }
+            if (blockDim.x >= 2) {
+                s_max[tid] = (s_max[tid] > s_max[tid + 1]) ? s_max[tid] : s_max[tid + 1];
+            }
+        }
+
+        __syncthreads();
+        if (tid == 0) {
+            max_D[blockIdx.x] = s_max[0];
         }
     }
 }
@@ -340,7 +418,32 @@ __global__ void preval_side_length(double *s_length,
 
     if (idx < num_sides) {
         // compute and store the length of the side
-        s_length[idx] = sqrtf(pow(s_V1x[idx] - s_V2x[idx],2) + pow(s_V1y[idx] - s_V2y[idx],2));
+        s_length[idx] = sqrtf(powf(s_V1x[idx] - s_V2x[idx],2) + powf(s_V1y[idx] - s_V2y[idx],2));
+    }
+}
+
+/* inscribed circle radius computing
+ *
+ * computes the radius of each inscribed circle. stores in d_J to find the minumum,
+ * then we reuse d_J.
+ */
+__global__ void preval_inscribed_circles(double *J,
+                                    double *V1x, double *V1y,
+                                    double *V2x, double *V2y,
+                                    double *V3x, double *V3y,
+                                    int num_elem) {
+    int idx = blockDim.x * blockIdx.x + threadIdx.x;
+
+    if (idx < num_elem) {
+        double a, b, c, k;
+        a = sqrtf(powf(V1x[idx] - V2x[idx], 2) + powf(V1y[idx] - V2y[idx], 2));
+        b = sqrtf(powf(V2x[idx] - V3x[idx], 2) + powf(V2y[idx] - V3y[idx], 2));
+        c = sqrtf(powf(V1x[idx] - V3x[idx], 2) + powf(V1y[idx] - V3y[idx], 2));
+
+        k = 0.5 * (a + b + c);
+
+        // for the diameter, we multiply by 2
+        J[idx] = 2 * sqrtf(k * (k - a) * (k - b) * (k - c)) / k;
     }
 }
 
@@ -403,7 +506,7 @@ __global__ void preval_normals(double *Nx, double *Ny,
         y = sv2y - sv1y;
     
         // normalize
-        length = sqrtf(pow(x, 2) + pow(y, 2));
+        length = sqrtf(powf(x, 2) + powf(y, 2));
 
         // store the result
         Nx[idx] = -y / length;
@@ -490,6 +593,53 @@ __global__ void preval_partials(double *V1x, double *V1y,
  * MAIN FUNCTIONS
  *
  ***********************/
+
+/* global lambda evaluation
+ *
+ * computes the max value of |u + c|, |u|, |u - c|.
+ */
+__device__ void eval_lambda(double *c_rho, double *c_u, double *c_v, double *c_E, double *lambda,
+                            int n_quad, int n_p, int idx) {
+    int i, j;
+    double rho, u, v, E, c;
+    double sum1, sum2, sum3;
+
+    // compute the magnitude max characteristic quantity
+    for (j = 0; j < n_quad; j++) {
+        for (i = 0; i < n_p; i++) {
+            rho += c_rho[i] * basis[i * n_quad + j];
+            u   += c_u[i]   * basis[i * n_quad + j];
+            v   += c_v[i]   * basis[i * n_quad + j];
+            E   += c_E[i]   * basis[i * n_quad + j];
+        }
+
+        // since we have rho * u, rho * v
+        u = u / rho;
+        v = v / rho;
+        
+        // evaluate speed of sound
+        c = eval_c(rho, u, v, E);
+
+        // sum the three characteric quantities
+        sum1 += w[j] * abs(sqrtf(u*u + v*v) - c);
+        sum2 += w[j] * abs(sqrtf(u*u + v*v));
+        sum3 += w[j] * abs(sqrtf(u*u + v*v) + c);
+    }
+
+    // only want the magnitude
+    sum1 = abs(sum1);
+    sum2 = abs(sum2);
+    sum3 = abs(sum3);
+
+    // store the max for this element
+    if (sum1 > sum2 && sum1 > sum3) {
+        lambda[idx] = sum1;
+    } else if (sum2 > sum1 && sum2 > sum3) {
+        lambda[idx] = sum2;
+    } else {
+        lambda[idx] = sum3;
+    }
+}
 
 /* riemann evaluation
  *
@@ -599,14 +749,6 @@ __device__ void eval_left_right(double *c_rho_left, double *c_rho_right,
  * d_t [    E    ] + d_x [ u * ( E +  p ) ] + d_y [ v * ( E +  p ) ] = 0
  */
 
-/* evaluate c
- *
- * evaulates the speed of sound c
- */
-__device__ double eval_c(double rho, double u, double v, double E) {
-    return sqrtf(GAMMA * pressure(rho, u, v, E) / rho);
-}    
-
 /* evaluate lambda
  *
  * finds the max absolute value of the jacobian for F(u).
@@ -640,7 +782,7 @@ __device__ double eval_lambda(double rho_left, double rho_right,
         right_max = -s_right + c_right;
     }
 
-    return (left_max > right_max) ? left_max : right_max;
+    return (abs(left_max) > abs(right_max)) ? abs(left_max) : abs(right_max);
 
     ////////////////
     // left element 

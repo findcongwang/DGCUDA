@@ -114,16 +114,20 @@ __global__ void eval_rhs_rk4(double *c, double *quad_rhs, double *left_riemann_r
     }
 }
 
-void time_integrate_rk4(double dt, int n_quad, int n_quad1d, int n_p, int n, 
-                    int num_elem, int num_sides, int timesteps) {
+void time_integrate_rk4(int n_quad, int n_quad1d, int n_p, int n, int num_elem, int num_sides,
+                        double endtime, double min_r) {
     int n_threads = 256;
     int i;
-    double t;
+    double dt, t;
 
-    int n_blocks_elem     = (num_elem  / n_threads) + ((num_elem  % n_threads) ? 1 : 0);
-    int n_blocks_sides    = (num_sides / n_threads) + ((num_sides % n_threads) ? 1 : 0);
-    int n_blocks_rk4      = ((n_p * num_elem) / n_threads) + (((n_p * num_elem) % n_threads) ? 1 : 0);
-    int n_blocks_rk4_temp = ((4 * n_p * num_elem) / n_threads) + (((4 * n_p * num_elem) % n_threads) ? 1 : 0);
+    double *max_lambda;
+    double max_l;
+
+    int n_blocks_elem      = (num_elem  / n_threads) + ((num_elem  % n_threads) ? 1 : 0);
+    int n_blocks_sides     = (num_sides / n_threads) + ((num_sides % n_threads) ? 1 : 0);
+    int n_blocks_rk4       = ((n_p * num_elem) / n_threads) + (((n_p * num_elem) % n_threads) ? 1 : 0);
+    int n_blocks_rk4_temp  = ((4 * n_p * num_elem) / n_threads) + (((4 * n_p * num_elem) % n_threads) ? 1 : 0);
+    int n_blocks_reduction = (num_elem  / 256) + ((num_elem  % 256) ? 1 : 0);
 
     void (*eval_surface_ftn)(double*, double*, double*, 
                          double*, double*,
@@ -138,24 +142,32 @@ void time_integrate_rk4(double dt, int n_quad, int n_quad1d, int n_p, int n,
                         double*, double*, 
                         double*, double*,
                         int, int, int) = NULL;
+    void (*eval_lambda_ftn)(double*, double*, int, int, int);
+
     switch (n) {
         case 0: eval_surface_ftn = eval_surface_wrapper0;
                 eval_volume_ftn  = eval_volume_wrapper0;
+                eval_lambda_ftn  = eval_lambda_wrapper0;
                 break;
         case 1: eval_surface_ftn = eval_surface_wrapper1;
                 eval_volume_ftn  = eval_volume_wrapper1;
+                eval_lambda_ftn  = eval_lambda_wrapper1;
                 break;
         case 2: eval_surface_ftn = eval_surface_wrapper2;
                 eval_volume_ftn  = eval_volume_wrapper2;
+                eval_lambda_ftn  = eval_lambda_wrapper2;
                 break;
         case 3: eval_surface_ftn = eval_surface_wrapper3;
                 eval_volume_ftn  = eval_volume_wrapper3;
+                eval_lambda_ftn  = eval_lambda_wrapper3;
                 break;
         case 4: eval_surface_ftn = eval_surface_wrapper4;
                 eval_volume_ftn  = eval_volume_wrapper4;
+                eval_lambda_ftn  = eval_lambda_wrapper4;
                 break;
         case 5: eval_surface_ftn = eval_surface_wrapper5;
                 eval_volume_ftn  = eval_volume_wrapper5;
+                eval_lambda_ftn  = eval_lambda_wrapper5;
                 break;
     }
 
@@ -164,8 +176,45 @@ void time_integrate_rk4(double dt, int n_quad, int n_quad1d, int n_p, int n,
         exit(0);
     }
 
-    for (i = 0; i < timesteps; i++) {
-        t = i * dt;
+    t = 0;
+
+    while (t < endtime) {
+        // compute all the lambda values over each cell
+        eval_lambda_ftn<<<n_blocks_elem, n_threads>>>(d_c, d_lambda, n_quad, n_p, num_elem);
+
+        /*
+        // find the max value of lambda. do it on the gpu if there are at least 256 elements
+        if (num_elem >= 256) {
+            max_reduction<<<n_blocks_reduction, 256>>>(d_lambda, d_reduction, num_elem);
+            cudaThreadSynchronize();
+            checkCudaError("error after max_reduction.");
+
+            // each block finds the smallest value, so need to sort through n_blocks_reduction
+            // TODO:
+            max_lambda = (double *) malloc(n_blocks_reduction * sizeof(double));
+            cudaMemcpy(max_lambda, d_reduction, n_blocks_reduction * sizeof(double), cudaMemcpyDeviceToHost);
+            max_l = max_lambda[0];
+            for (i = 0; i < n_blocks_reduction-  1; i++) {
+                max_l = (max_lambda[i] > max_l) ? max_lambda[i] : max_l;
+            }
+            free(max_lambda);
+        } else {
+            */
+            // just grab all the lambdas and sort them since there are so few of them
+            max_lambda = (double *) malloc(num_elem * sizeof(double));
+            cudaMemcpy(max_lambda, d_lambda, num_elem * sizeof(double), cudaMemcpyDeviceToHost);
+            max_l = max_lambda[0];
+            for (i = 0; i < num_elem; i++) {
+                max_l = (max_lambda[i] > max_l) ? max_lambda[i] : max_l;
+            }
+            free(max_lambda);
+        //}
+
+        dt  = 0.7 * min_r / max_l /  (2. * n + 1.);
+
+        printf(" > t = %lf\n", t);
+
+        t += dt;
         // stage 1
         checkCudaError("error before stage 1: eval_surface_ftn");
         eval_surface_ftn<<<n_blocks_sides, n_threads>>>
@@ -283,6 +332,7 @@ void time_integrate_rk4(double dt, int n_quad, int n_quad1d, int n_p, int n,
         cudaThreadSynchronize();
 
         checkCudaError("error after final stage.");
+
     }
 }
 

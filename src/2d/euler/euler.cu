@@ -111,7 +111,7 @@ void read_mesh(FILE *mesh_file,
               int *elem_s1,  int *elem_s2, int *elem_s3,
               int *left_elem, int *right_elem) {
 
-    int i, j, s1, s2, s3, numsides;
+    int i, j, error, s1, s2, s3, numsides;
     double J, tmpx, tmpy;
     char line[100];
     numsides = 0;
@@ -124,7 +124,11 @@ void read_mesh(FILE *mesh_file,
     i = 0;
     while(fgets(line, sizeof(line), mesh_file) != NULL) {
         // these three vertices define the element
-        sscanf(line, "%lf %lf %lf %lf %lf %lf", &V1x[i], &V1y[i], &V2x[i], &V2y[i], &V3x[i], &V3y[i]);
+        error = sscanf(line, "%lf %lf %lf %lf %lf %lf", &V1x[i], &V1y[i], &V2x[i], &V2y[i], &V3x[i], &V3y[i]);
+        if (error != 6) {
+            printf("error (%i) reading mesh.\n", error);
+            exit(0);
+        }
 
         // determine whether we should add these three sides or not
         s1 = 1;
@@ -251,7 +255,7 @@ void init_gpu(int num_elem, int num_sides, int n_p,
               double *sides_x2, double *sides_y2,
               int *elem_s1, int *elem_s2, int *elem_s3,
               int *left_elem, int *right_elem) {
-    int min_J_size = (num_elem  / 256) + ((num_elem  % 256) ? 1 : 0);
+    int reduction_size = (num_elem  / 256) + ((num_elem  % 256) ? 1 : 0);
 
     checkCudaError("error before init.");
     cudaDeviceReset();
@@ -267,9 +271,10 @@ void init_gpu(int num_elem, int num_sides, int n_p,
     cudaMalloc((void **) &d_k3, 4 * num_elem * n_p * sizeof(double));
     cudaMalloc((void **) &d_k4, 4 * num_elem * n_p * sizeof(double));
 
-    cudaMalloc((void **) &d_J       , num_elem * sizeof(double));
-    cudaMalloc((void **) &d_min_J   , min_J_size * sizeof(double));
-    cudaMalloc((void **) &d_s_length, num_sides * sizeof(double));
+    cudaMalloc((void **) &d_J        , num_elem * sizeof(double));
+    cudaMalloc((void **) &d_lambda   , num_elem * sizeof(double));
+    cudaMalloc((void **) &d_reduction, reduction_size * sizeof(double));
+    cudaMalloc((void **) &d_s_length , num_sides * sizeof(double));
 
     cudaMalloc((void **) &d_s_V1x, num_sides * sizeof(double));
     cudaMalloc((void **) &d_s_V2x, num_sides * sizeof(double));
@@ -343,7 +348,8 @@ void free_gpu() {
     cudaFree(d_k4);
 
     cudaFree(d_J);
-    cudaFree(d_min_J);
+    cudaFree(d_lambda);
+    cudaFree(d_reduction);
     cudaFree(d_s_length);
 
     cudaFree(d_s_V1x);
