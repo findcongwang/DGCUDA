@@ -182,7 +182,7 @@ __device__ double eval_c(double rho, double u, double v, double E) {
  * returns the value of the intial condition at point x
  */
 __device__ double rho0(double x, double y) {
-    return 2.;
+    return 1.4;
 }
 __device__ double u0(double x, double y) {
     return 1.;
@@ -236,9 +236,9 @@ __global__ void init_conditions(double *c, double *J,
     if (idx < num_elem) {
         for (i = 0; i < n_p; i++) {
             rho = 0.;
-            u = 0.;
-            v = 0.;
-            E = 0.;
+            u   = 0.;
+            v   = 0.;
+            E   = 0.;
             // perform quadrature
             for (j = 0; j < n_quad; j++) {
                 // map from the canonical element to the actual point on the mesh
@@ -663,10 +663,10 @@ __device__ void eval_left_right(double *c_rho_left, double *c_rho_right,
     int i;
 
     // evaluate rho, u, v, E at the integration points
-    *rho_left = 0.;
-    *u_left   = 0.;
-    *v_left   = 0.;
-    *E_left   = 0.;
+    *rho_left  = 0.;
+    *u_left    = 0.;
+    *v_left    = 0.;
+    *E_left    = 0.;
     *rho_right = 0.;
     *u_right   = 0.;
     *v_right   = 0.;
@@ -684,9 +684,8 @@ __device__ void eval_left_right(double *c_rho_left, double *c_rho_right,
     *v_left = *v_left / *rho_left;
 
     __syncthreads();
-    // make all threads in the first warps be boundary sides
+    // TODO: make all threads in the first warps be boundary sides
     if (right_idx == -1) {
-        /*
         double r1_eval, r2_eval;
         double x, y;
 
@@ -709,19 +708,17 @@ __device__ void eval_left_right(double *c_rho_left, double *c_rho_right,
         // x = x2 * r + x3 * s + x1 * (1 - r - s)
         x = v2x * r1_eval + v3x * r2_eval + v1x * (1 - r1_eval - r2_eval);
         y = v2y * r1_eval + v3y * r2_eval + v1y * (1 - r1_eval - r2_eval);
-        */
             
         // deal with the boundary sides
-        *rho_right = *rho_left;
-        *u_right   = *u_left;
-        *v_right   = *v_left;
-        *E_right   = *E_left;
+        //*rho_right = *rho_left;
+        //*u_right   = *u_left;
+        //*v_right   = *v_left;
+        //*E_right   = *E_left;
 
-        //*rho_right = boundary_exact_rho(x, y, t);
-        //*u_right   = boundary_exact_u(x, y, t);
-        //*v_right   = boundary_exact_v(x, y, t);
-        //*E_right   = boundary_exact_E(x, y, t);
-
+        *rho_right = boundary_exact_rho(x, y, t);
+        *u_right   = boundary_exact_u(x, y, t);
+        *v_right   = boundary_exact_v(x, y, t);
+        *E_right   = boundary_exact_E(x, y, t);
     } else {
         // evaluate the right side at the integration point
         for (i = 0; i < n_p; i++) {
@@ -1058,25 +1055,25 @@ __device__ void eval_surface(double *c_rho_left, double *c_u_left, double *c_v_l
             // 1st equation
             s = 0.5 * ((flux_x1_l + flux_x1_r) * nx + (flux_y1_l + flux_y1_r) * ny 
                         + lambda * (rho_left - rho_right));
-            left_sum1  += w_oned[j] * s * basis_side[left_side * n_p * n_quad1d + i * n_quad1d + j];
+            left_sum1  += w_oned[j] * s * basis_side[left_side  * n_p * n_quad1d + i * n_quad1d + j];
             right_sum1 += w_oned[j] * s * basis_side[right_side * n_p * n_quad1d + i * n_quad1d + n_quad1d - 1 - j];
 
             // 2nd equation
             s = 0.5 * ((flux_x2_l + flux_x2_r) * nx + (flux_y2_l + flux_y2_r) * ny 
                         + lambda * (u_left - u_right));
-            left_sum2  += w_oned[j] * s * basis_side[left_side * n_p * n_quad1d + i * n_quad1d + j];
+            left_sum2  += w_oned[j] * s * basis_side[left_side  * n_p * n_quad1d + i * n_quad1d + j];
             right_sum2 += w_oned[j] * s * basis_side[right_side * n_p * n_quad1d + i * n_quad1d + n_quad1d - 1 - j];
 
             // 3rd equation
             s = 0.5 * ((flux_x3_l + flux_x3_r) * nx + (flux_y3_l + flux_y3_r) * ny 
                         + lambda * (v_left - v_right));
-            left_sum3  += w_oned[j] * s * basis_side[left_side * n_p * n_quad1d + i * n_quad1d + j];
+            left_sum3  += w_oned[j] * s * basis_side[left_side  * n_p * n_quad1d + i * n_quad1d + j];
             right_sum3 += w_oned[j] * s * basis_side[right_side * n_p * n_quad1d + i * n_quad1d + n_quad1d - 1 - j];
 
             // 4th equation
             s = 0.5 * ((flux_x4_l + flux_x4_r) * nx + (flux_y4_l + flux_y4_r) * ny 
                         + lambda * (E_left - E_right));
-            left_sum4  += w_oned[j] * s * basis_side[left_side * n_p * n_quad1d + i * n_quad1d + j];
+            left_sum4  += w_oned[j] * s * basis_side[left_side  * n_p * n_quad1d + i * n_quad1d + j];
             right_sum4 += w_oned[j] * s * basis_side[right_side * n_p * n_quad1d + i * n_quad1d + n_quad1d - 1 - j];
         }
 

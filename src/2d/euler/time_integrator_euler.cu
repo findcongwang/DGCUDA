@@ -116,7 +116,7 @@ __global__ void eval_rhs_rk4(double *c, double *quad_rhs, double *left_riemann_r
 
 void time_integrate_rk4(int n_quad, int n_quad1d, int n_p, int n, int num_elem, int num_sides,
                         double endtime, double min_r) {
-    int n_threads = 256;
+    int n_threads = 128;
     int i;
     double dt, t;
 
@@ -212,9 +212,9 @@ void time_integrate_rk4(int n_quad, int n_quad1d, int n_p, int n, int num_elem, 
 
         dt  = 0.7 * min_r / max_l /  (2. * n + 1.);
 
-        printf(" > t = %lf\n", t);
-
         t += dt;
+
+        printf(" > t = %lf\n", t);
         // stage 1
         checkCudaError("error before stage 1: eval_surface_ftn");
         eval_surface_ftn<<<n_blocks_sides, n_threads>>>
