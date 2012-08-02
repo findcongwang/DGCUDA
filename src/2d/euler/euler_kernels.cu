@@ -182,7 +182,7 @@ __device__ double eval_c(double rho, double u, double v, double E) {
  * returns the value of the intial condition at point x
  */
 __device__ double rho0(double x, double y) {
-    return 1.4;
+    return 2 + x;
 }
 __device__ double u0(double x, double y) {
     return 1.;
@@ -710,15 +710,15 @@ __device__ void eval_left_right(double *c_rho_left, double *c_rho_right,
         y = v2y * r1_eval + v3y * r2_eval + v1y * (1 - r1_eval - r2_eval);
             
         // deal with the boundary sides
-        //*rho_right = *rho_left;
-        //*u_right   = *u_left;
-        //*v_right   = *v_left;
-        //*E_right   = *E_left;
+        *rho_right = *rho_left;
+        *u_right   = *u_left;
+        *v_right   = *v_left;
+        *E_right   = *E_left;
 
-        *rho_right = boundary_exact_rho(x, y, t);
-        *u_right   = boundary_exact_u(x, y, t);
-        *v_right   = boundary_exact_v(x, y, t);
-        *E_right   = boundary_exact_E(x, y, t);
+        //*rho_right = boundary_exact_rho(x, y, t);
+        //*u_right   = boundary_exact_u(x, y, t);
+        //*v_right   = boundary_exact_v(x, y, t);
+        //*E_right   = boundary_exact_E(x, y, t);
     } else {
         // evaluate the right side at the integration point
         for (i = 0; i < n_p; i++) {
