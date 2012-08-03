@@ -142,32 +142,32 @@ void time_integrate_rk4(int n_quad, int n_quad1d, int n_p, int n, int num_elem, 
                         double*, double*, 
                         double*, double*,
                         int, int, int) = NULL;
-    void (*eval_lambda_ftn)(double*, double*, int, int, int);
+    void (*eval_global_lambda_ftn)(double*, double*, int, int, int);
 
     switch (n) {
         case 0: eval_surface_ftn = eval_surface_wrapper0;
                 eval_volume_ftn  = eval_volume_wrapper0;
-                eval_lambda_ftn  = eval_lambda_wrapper0;
+                eval_global_lambda_ftn  = eval_global_lambda_wrapper0;
                 break;
         case 1: eval_surface_ftn = eval_surface_wrapper1;
                 eval_volume_ftn  = eval_volume_wrapper1;
-                eval_lambda_ftn  = eval_lambda_wrapper1;
+                eval_global_lambda_ftn  = eval_global_lambda_wrapper1;
                 break;
         case 2: eval_surface_ftn = eval_surface_wrapper2;
                 eval_volume_ftn  = eval_volume_wrapper2;
-                eval_lambda_ftn  = eval_lambda_wrapper2;
+                eval_global_lambda_ftn  = eval_global_lambda_wrapper2;
                 break;
         case 3: eval_surface_ftn = eval_surface_wrapper3;
                 eval_volume_ftn  = eval_volume_wrapper3;
-                eval_lambda_ftn  = eval_lambda_wrapper3;
+                eval_global_lambda_ftn  = eval_global_lambda_wrapper3;
                 break;
         case 4: eval_surface_ftn = eval_surface_wrapper4;
                 eval_volume_ftn  = eval_volume_wrapper4;
-                eval_lambda_ftn  = eval_lambda_wrapper4;
+                eval_global_lambda_ftn  = eval_global_lambda_wrapper4;
                 break;
         case 5: eval_surface_ftn = eval_surface_wrapper5;
                 eval_volume_ftn  = eval_volume_wrapper5;
-                eval_lambda_ftn  = eval_lambda_wrapper5;
+                eval_global_lambda_ftn  = eval_global_lambda_wrapper5;
                 break;
     }
 
@@ -180,7 +180,7 @@ void time_integrate_rk4(int n_quad, int n_quad1d, int n_p, int n, int num_elem, 
 
     while (t < endtime) {
         // compute all the lambda values over each cell
-        eval_lambda_ftn<<<n_blocks_elem, n_threads>>>(d_c, d_lambda, n_quad, n_p, num_elem);
+        eval_global_lambda_ftn<<<n_blocks_elem, n_threads>>>(d_c, d_lambda, n_quad, n_p, num_elem);
 
         /*
         // find the max value of lambda. do it on the gpu if there are at least 256 elements
@@ -210,7 +210,7 @@ void time_integrate_rk4(int n_quad, int n_quad1d, int n_p, int n, int num_elem, 
             free(max_lambda);
         //}
 
-        dt  = 0.7 * min_r / max_l /  (2. * n + 1.);
+        dt  = 0.35 * min_r / max_l /  (2. * n + 1.);
 
         t += dt;
 

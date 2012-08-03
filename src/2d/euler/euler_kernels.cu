@@ -211,6 +211,52 @@ __device__ double boundary_exact_E(double x, double y, double t) {
     return E0(x, y);
 }
 
+__device__ void reflecting_boundary(double rho_left, double *rho_right,
+                                    double u_left,   double *u_right,
+                                    double v_left,   double *v_right,
+                                    double E_left,   double *E_right) {
+    // set the sides to reflect
+    *rho_right = rho_left;
+    *u_right   = u_left;
+    *v_right   = v_left;
+    *E_right   = E_left;
+}
+
+//__device__ void inflow_boundary(double *rho_right, double *u_right,
+                                //double *v_right, double *E_right) {
+
+    /*
+    double r1_eval, r2_eval;
+    double x, y;
+
+    // we need the mapping back to the grid space
+    switch (left_side) {
+        case 0: 
+            r1_eval = 0.5 + 0.5 * r_oned[j];
+            r2_eval = 0.;
+            break;
+        case 1: 
+            r1_eval = (1. - r_oned[j]) / 2.;
+            r2_eval = (1. + r_oned[j]) / 2.;
+            break;
+        case 2: 
+            r1_eval = 0.;
+            r2_eval = 0.5 + 0.5 * r_oned[n_quad1d - 1 - j];
+            break;
+    }
+
+    // x = x2 * r + x3 * s + x1 * (1 - r - s)
+    x = v2x * r1_eval + v3x * r2_eval + v1x * (1 - r1_eval - r2_eval);
+    y = v2y * r1_eval + v3y * r2_eval + v1y * (1 - r1_eval - r2_eval);
+        
+    */
+    // set the sides to reflect
+    //*rho_right = *rho_left;
+    //*u_right   = *u_left;
+    //*v_right   = *v_left;
+    //*E_right   = *E_left;
+//}
+
 /* u exact
  *
  * returns the exact value of u for error measurement.
@@ -598,7 +644,7 @@ __global__ void preval_partials(double *V1x, double *V1y,
  *
  * computes the max value of |u + c|, |u|, |u - c|.
  */
-__device__ void eval_lambda(double *c_rho, double *c_u, double *c_v, double *c_E, double *lambda,
+__device__ void eval_global_lambda(double *c_rho, double *c_u, double *c_v, double *c_E, double *lambda,
                             int n_quad, int n_p, int idx) {
     int i, j;
     double rho, u, v, E, c;
@@ -683,42 +729,27 @@ __device__ void eval_left_right(double *c_rho_left, double *c_rho_right,
     *u_left = *u_left / *rho_left;
     *v_left = *v_left / *rho_left;
 
-    __syncthreads();
     // TODO: make all threads in the first warps be boundary sides
+    ///////////////////////
+    // reflecting 
+    ///////////////////////
     if (right_idx == -1) {
-        double r1_eval, r2_eval;
-        double x, y;
+        reflecting_boundary(*rho_left, rho_right, 
+                            *u_left,   u_right, 
+                            *v_left,   v_right, 
+                            *E_left,   E_right);
 
-        // we need the mapping back to the grid space
-        switch (left_side) {
-            case 0: 
-                r1_eval = 0.5 + 0.5 * r_oned[j];
-                r2_eval = 0.;
-                break;
-            case 1: 
-                r1_eval = (1. - r_oned[j]) / 2.;
-                r2_eval = (1. + r_oned[j]) / 2.;
-                break;
-            case 2: 
-                r1_eval = 0.;
-                r2_eval = 0.5 + 0.5 * r_oned[n_quad1d - 1 - j];
-                break;
-        }
-
-        // x = x2 * r + x3 * s + x1 * (1 - r - s)
-        x = v2x * r1_eval + v3x * r2_eval + v1x * (1 - r1_eval - r2_eval);
-        y = v2y * r1_eval + v3y * r2_eval + v1y * (1 - r1_eval - r2_eval);
-            
-        // deal with the boundary sides
-        *rho_right = *rho_left;
-        *u_right   = *u_left;
-        *v_right   = *v_left;
-        *E_right   = *E_left;
-
-        //*rho_right = boundary_exact_rho(x, y, t);
-        //*u_right   = boundary_exact_u(x, y, t);
-        //*v_right   = boundary_exact_v(x, y, t);
-        //*E_right   = boundary_exact_E(x, y, t);
+    ///////////////////////
+    // outflow 
+    ///////////////////////
+    } else if (right_idx == -2) {
+    ///////////////////////
+    // inflow 
+    ///////////////////////
+    } else if (right_idx == -3) {
+    ///////////////////////
+    // not a boundary
+    ///////////////////////
     } else {
         // evaluate the right side at the integration point
         for (i = 0; i < n_p; i++) {
@@ -1028,7 +1059,7 @@ __device__ void eval_surface(double *c_rho_left, double *c_u_left, double *c_v_l
                             c_u_left,   c_u_right,
                             c_v_left,   c_v_right,
                             c_E_left,   c_E_right,
-                            &rho_left, &u_left, &v_left, &E_left,
+                            &rho_left,  &u_left,  &v_left,  &E_left,
                             &rho_right, &u_right, &v_right, &E_right,
                             v1x, v1y, v2x, v2y, v3x, v3y,
                             j, left_side, right_side,
@@ -1053,26 +1084,42 @@ __device__ void eval_surface(double *c_rho_left, double *c_u_left, double *c_v_l
                                  nx, ny);
             
             // 1st equation
-            s = 0.5 * ((flux_x1_l + flux_x1_r) * nx + (flux_y1_l + flux_y1_r) * ny 
-                        + lambda * (rho_left - rho_right));
+            if (right_idx == -1) {
+                s = flux_x1_l * nx + flux_y1_l * ny;
+            } else {
+                s = 0.5 * ((flux_x1_l + flux_x1_r) * nx + (flux_y1_l + flux_y1_r) * ny 
+                            + lambda * (rho_left - rho_right));
+            }
             left_sum1  += w_oned[j] * s * basis_side[left_side  * n_p * n_quad1d + i * n_quad1d + j];
             right_sum1 += w_oned[j] * s * basis_side[right_side * n_p * n_quad1d + i * n_quad1d + n_quad1d - 1 - j];
 
             // 2nd equation
-            s = 0.5 * ((flux_x2_l + flux_x2_r) * nx + (flux_y2_l + flux_y2_r) * ny 
-                        + lambda * (u_left - u_right));
+            if (right_idx == -1) {
+                s = flux_x2_l * nx + flux_y2_l * ny;
+            } else {
+                s = 0.5 * ((flux_x2_l + flux_x2_r) * nx + (flux_y2_l + flux_y2_r) * ny 
+                            + lambda * (u_left - u_right));
+            }
             left_sum2  += w_oned[j] * s * basis_side[left_side  * n_p * n_quad1d + i * n_quad1d + j];
             right_sum2 += w_oned[j] * s * basis_side[right_side * n_p * n_quad1d + i * n_quad1d + n_quad1d - 1 - j];
 
             // 3rd equation
-            s = 0.5 * ((flux_x3_l + flux_x3_r) * nx + (flux_y3_l + flux_y3_r) * ny 
-                        + lambda * (v_left - v_right));
+            if (right_idx == -1) {
+                s = flux_x3_l * nx + flux_y3_l * ny;
+            } else {
+                s = 0.5 * ((flux_x3_l + flux_x3_r) * nx + (flux_y3_l + flux_y3_r) * ny 
+                            + lambda * (v_left - v_right));
+            }
             left_sum3  += w_oned[j] * s * basis_side[left_side  * n_p * n_quad1d + i * n_quad1d + j];
             right_sum3 += w_oned[j] * s * basis_side[right_side * n_p * n_quad1d + i * n_quad1d + n_quad1d - 1 - j];
 
             // 4th equation
-            s = 0.5 * ((flux_x4_l + flux_x4_r) * nx + (flux_y4_l + flux_y4_r) * ny 
-                        + lambda * (E_left - E_right));
+            if (right_idx == -1) {
+                s = flux_x4_l * nx + flux_y4_l * ny;
+            } else {
+                s = 0.5 * ((flux_x4_l + flux_x4_r) * nx + (flux_y4_l + flux_y4_r) * ny 
+                            + lambda * (E_left - E_right));
+            }
             left_sum4  += w_oned[j] * s * basis_side[left_side  * n_p * n_quad1d + i * n_quad1d + j];
             right_sum4 += w_oned[j] * s * basis_side[right_side * n_p * n_quad1d + i * n_quad1d + n_quad1d - 1 - j];
         }
@@ -1094,11 +1141,9 @@ __device__ void eval_surface(double *c_rho_left, double *c_u_left, double *c_v_l
  * evaluates and adds the volume integral to the rhs vector
  * THREADS: num_elem
  */
-__device__ void eval_volume(double *c_rho, double *c_u,
-                            double *c_v,   double *c_E,
+__device__ void eval_volume(double *c_rho, double *c_u, double *c_v,   double *c_E,
                             double *quad_rhs, 
-                            double x_r, double y_r,
-                            double x_s, double y_s,
+                            double x_r, double y_r, double x_s, double y_s,
                             int n_quad, int n_p, int num_elem, int idx) {
     int i, j, k;
     double rho, u, v, E;
@@ -1170,37 +1215,6 @@ __device__ void eval_volume(double *c_rho, double *c_u,
     }
 }
 
-/* evaluate error
- * 
- * evaluates u at the three vertex points for output
- * THREADS: num_elem
- */
-__device__ void eval_error(double *c, 
-                       double v1x, double v1y,
-                       double v2x, double v2y,
-                       double v3x, double v3y,
-                       double *Uv1, double *Uv2, double *Uv3,
-                       int num_elem, int n_p, double t, int idx) {
-
-    int i;
-    double uv1, uv2, uv3;
-
-    // calculate values at three vertex points
-    uv1 = 0.;
-    uv2 = 0.;
-    uv3 = 0.;
-    for (i = 0; i < n_p; i++) {
-        uv1 += c[i] * basis_vertex[i * 3 + 0];
-        uv2 += c[i] * basis_vertex[i * 3 + 1];
-        uv3 += c[i] * basis_vertex[i * 3 + 2];
-    }
-
-    // store result
-    Uv1[idx] = uv1 - uexact(v1x, v1y, t);
-    Uv2[idx] = uv2 - uexact(v2x, v2y, t);
-    Uv3[idx] = uv3 - uexact(v3x, v3y, t);
-}
-
 /* evaluate u
  * 
  * evaluates rho and E at the three vertex points for output
@@ -1227,6 +1241,7 @@ __device__ void eval_u(double *c,
     Uv2[idx] = uv2;
     Uv3[idx] = uv3;
 }
+
 /* evaluate u velocity
  * 
  * evaluates u and v at the three vertex points for output
