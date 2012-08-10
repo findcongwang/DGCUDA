@@ -182,7 +182,7 @@ __device__ double eval_c(double rho, double u, double v, double E) {
  * returns the value of the intial condition at point x
  */
 __device__ double rho0(double x, double y) {
-    return 2 + x;
+    return 2.;
 }
 __device__ double u0(double x, double y) {
     return 1.;
@@ -640,6 +640,29 @@ __global__ void preval_partials(double *V1x, double *V1y,
  *
  ***********************/
 
+/* limiter
+ *
+ * the standard limiter for coefficient values
+ */
+__global__ void limit_c(double *c_inner, 
+                   double *c_s1, double *c_s2, double *c_s3,
+                   int n_p, int num_elem) {
+
+    int idx = blockIdx.x * blockDim.x + threadIdx.x;
+
+    // get cell averages
+    //avg_inner = c_inner[0];
+    //avg_s1 = c_s1[0];
+    //avg_s2 = c_s2[0];
+    //avg_s3 = c_s3[0];
+
+    // determine if this is a "troubled" cell
+
+    //for (i = n_p; i > 1; i++) {
+        //c_prev = c[i - 1];
+    //}
+}
+
 /* global lambda evaluation
  *
  * computes the max value of |u + c|, |u|, |u - c|.
@@ -648,42 +671,27 @@ __device__ void eval_global_lambda(double *c_rho, double *c_u, double *c_v, doub
                             int n_quad, int n_p, int idx) {
     int i, j;
     double rho, u, v, E, c;
-    double sum1, sum2, sum3;
+    double sum;
 
-    // compute the magnitude max characteristic quantity
-    for (j = 0; j < n_quad; j++) {
-        for (i = 0; i < n_p; i++) {
-            rho += c_rho[i] * basis[i * n_quad + j];
-            u   += c_u[i]   * basis[i * n_quad + j];
-            v   += c_v[i]   * basis[i * n_quad + j];
-            E   += c_E[i]   * basis[i * n_quad + j];
-        }
+    // get cell averages
+    rho = c_rho[0];
+    u   = c_u[0];
+    v   = c_v[0];
+    E   = c_E[0];
 
-        // since we have rho * u, rho * v
-        u = u / rho;
-        v = v / rho;
-        
-        // evaluate speed of sound
-        c = eval_c(rho, u, v, E);
+    u = u / rho;
+    v = v / rho;
 
-        // sum the three characteric quantities
-        sum1 += w[j] * abs(sqrtf(u*u + v*v) - c);
-        sum2 += w[j] * abs(sqrtf(u*u + v*v));
-        sum3 += w[j] * abs(sqrtf(u*u + v*v) + c);
-    }
+    // evaluate c
+    c = eval_c(rho, u, v, E);
 
-    // only want the magnitude
-    sum1 = abs(sum1);
-    sum2 = abs(sum2);
-    sum3 = abs(sum3);
+    // norm
+    sum = sqrtf(u*u + v*v);
 
-    // store the max for this element
-    if (sum1 > sum2 && sum1 > sum3) {
-        lambda[idx] = sum1;
-    } else if (sum2 > sum1 && sum2 > sum3) {
-        lambda[idx] = sum2;
+    if (sum > 0) {
+        lambda[idx] = sum + c;
     } else {
-        lambda[idx] = sum3;
+        lambda[idx] = -sum + c;
     }
 }
 
@@ -1084,42 +1092,26 @@ __device__ void eval_surface(double *c_rho_left, double *c_u_left, double *c_v_l
                                  nx, ny);
             
             // 1st equation
-            if (right_idx == -1) {
-                s = flux_x1_l * nx + flux_y1_l * ny;
-            } else {
-                s = 0.5 * ((flux_x1_l + flux_x1_r) * nx + (flux_y1_l + flux_y1_r) * ny 
-                            + lambda * (rho_left - rho_right));
-            }
+            s = 0.5 * ((flux_x1_l + flux_x1_r) * nx + (flux_y1_l + flux_y1_r) * ny 
+                        + lambda * (rho_left - rho_right));
             left_sum1  += w_oned[j] * s * basis_side[left_side  * n_p * n_quad1d + i * n_quad1d + j];
             right_sum1 += w_oned[j] * s * basis_side[right_side * n_p * n_quad1d + i * n_quad1d + n_quad1d - 1 - j];
 
             // 2nd equation
-            if (right_idx == -1) {
-                s = flux_x2_l * nx + flux_y2_l * ny;
-            } else {
-                s = 0.5 * ((flux_x2_l + flux_x2_r) * nx + (flux_y2_l + flux_y2_r) * ny 
-                            + lambda * (u_left - u_right));
-            }
+            s = 0.5 * ((flux_x2_l + flux_x2_r) * nx + (flux_y2_l + flux_y2_r) * ny 
+                        + lambda * (u_left - u_right));
             left_sum2  += w_oned[j] * s * basis_side[left_side  * n_p * n_quad1d + i * n_quad1d + j];
             right_sum2 += w_oned[j] * s * basis_side[right_side * n_p * n_quad1d + i * n_quad1d + n_quad1d - 1 - j];
 
             // 3rd equation
-            if (right_idx == -1) {
-                s = flux_x3_l * nx + flux_y3_l * ny;
-            } else {
-                s = 0.5 * ((flux_x3_l + flux_x3_r) * nx + (flux_y3_l + flux_y3_r) * ny 
-                            + lambda * (v_left - v_right));
-            }
+            s = 0.5 * ((flux_x3_l + flux_x3_r) * nx + (flux_y3_l + flux_y3_r) * ny 
+                        + lambda * (v_left - v_right));
             left_sum3  += w_oned[j] * s * basis_side[left_side  * n_p * n_quad1d + i * n_quad1d + j];
             right_sum3 += w_oned[j] * s * basis_side[right_side * n_p * n_quad1d + i * n_quad1d + n_quad1d - 1 - j];
 
             // 4th equation
-            if (right_idx == -1) {
-                s = flux_x4_l * nx + flux_y4_l * ny;
-            } else {
-                s = 0.5 * ((flux_x4_l + flux_x4_r) * nx + (flux_y4_l + flux_y4_r) * ny 
-                            + lambda * (E_left - E_right));
-            }
+            s = 0.5 * ((flux_x4_l + flux_x4_r) * nx + (flux_y4_l + flux_y4_r) * ny 
+                        + lambda * (E_left - E_right));
             left_sum4  += w_oned[j] * s * basis_side[left_side  * n_p * n_quad1d + i * n_quad1d + j];
             right_sum4 += w_oned[j] * s * basis_side[right_side * n_p * n_quad1d + i * n_quad1d + n_quad1d - 1 - j];
         }

@@ -210,7 +210,7 @@ void time_integrate_rk4(int n_quad, int n_quad1d, int n_p, int n, int num_elem, 
             free(max_lambda);
         //}
 
-        dt  = 0.35 * min_r / max_l /  (2. * n + 1.);
+        dt  = 0.7 * min_r / max_l /  (2. * n + 1.);
 
         t += dt;
 
@@ -241,6 +241,9 @@ void time_integrate_rk4(int n_quad, int n_quad1d, int n_p, int n, int num_elem, 
                                               d_left_elem, d_J, dt, n_p, num_sides, num_elem);
         cudaThreadSynchronize();
 
+        //limit_c<<<n_blocks_elem, n_threads>>>(d_k1, n_p, num_elem);
+        cudaThreadSynchronize();
+
         rk4_tempstorage<<<n_blocks_rk4_temp, n_threads>>>(d_c, d_kstar, d_k1, 0.5, n_p, num_elem);
         cudaThreadSynchronize();
 
@@ -267,6 +270,9 @@ void time_integrate_rk4(int n_quad, int n_quad1d, int n_p, int n, int num_elem, 
         eval_rhs_rk4<<<n_blocks_elem, n_threads>>>(d_k2, d_quad_rhs, d_left_riemann_rhs, d_right_riemann_rhs,
                                               d_elem_s1, d_elem_s2, d_elem_s3, 
                                               d_left_elem, d_J, dt, n_p, num_sides, num_elem);
+        cudaThreadSynchronize();
+
+        //limit_c<<<n_blocks_elem, n_threads>>>(d_k2, n_p, num_elem);
         cudaThreadSynchronize();
 
         rk4_tempstorage<<<n_blocks_rk4_temp, n_threads>>>(d_c, d_kstar, d_k2, 0.5, n_p, num_elem);
@@ -297,6 +303,9 @@ void time_integrate_rk4(int n_quad, int n_quad1d, int n_p, int n, int num_elem, 
                                               d_left_elem, d_J, dt, n_p, num_sides, num_elem);
         cudaThreadSynchronize();
 
+        //limit_c<<<n_blocks_elem, n_threads>>>(d_k3, n_p, num_elem);
+        cudaThreadSynchronize();
+
         rk4_tempstorage<<<n_blocks_rk4_temp, n_threads>>>(d_c, d_kstar, d_k3, 1.0, n_p, num_elem);
         cudaThreadSynchronize();
 
@@ -323,6 +332,9 @@ void time_integrate_rk4(int n_quad, int n_quad1d, int n_p, int n, int num_elem, 
         eval_rhs_rk4<<<n_blocks_elem, n_threads>>>(d_k4, d_quad_rhs, d_left_riemann_rhs, d_right_riemann_rhs, 
                                               d_elem_s1, d_elem_s2, d_elem_s3, 
                                               d_left_elem, d_J, dt, n_p, num_sides, num_elem);
+        cudaThreadSynchronize();
+
+        //limit_c<<<n_blocks_elem, n_threads>>>(d_k4, n_p, num_elem);
         cudaThreadSynchronize();
 
         checkCudaError("error after stage 4.");

@@ -246,7 +246,6 @@ int main(int argc, char *argv[]) {
     checkCudaError("error before time integration.");
 
     time_integrate_rk4(n_quad, n_quad1d, n_p, n, num_elem, num_sides, endtime, min_r);
-    t = timesteps * dt;
 
     // evaluate at the vertex points and copy over data
     Uv1 = (double *) malloc(num_elem * sizeof(double));
