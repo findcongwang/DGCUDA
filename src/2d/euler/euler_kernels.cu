@@ -12,6 +12,7 @@
 
 #define PI 3.14159
 #define GAMMA 1.4
+#define MACH 2.5
 
 /***********************
  *
@@ -182,13 +183,16 @@ __device__ double eval_c(double rho, double u, double v, double E) {
  * returns the value of the intial condition at point x
  */
 __device__ double rho0(double x, double y) {
-    return 2.;
+    double r = x*x + y*y;
+    return powf(1 + (GAMMA - 1)/ 2. * MACH * (1 - powf(1. / r, 2)), 1./(GAMMA - 1));
 }
 __device__ double u0(double x, double y) {
-    return 1.;
+    double r = x*x + y*y;
+    return MACH / r;
 }
 __device__ double v0(double x, double y) {
-    return 1.;
+    double r = x*x + y*y;
+    return MACH / r;
 }
 __device__ double E0(double x, double y) {
     return 1. / (GAMMA - 1) + (powf(u0(x, y), 2) + powf(v0(x, y), 2)) / 2. * rho0(x, y);
@@ -214,17 +218,32 @@ __device__ double boundary_exact_E(double x, double y, double t) {
 __device__ void reflecting_boundary(double rho_left, double *rho_right,
                                     double u_left,   double *u_right,
                                     double v_left,   double *v_right,
-                                    double E_left,   double *E_right) {
+                                    double E_left,   double *E_right,
+                                    double nx,       double ny) {
     // set the sides to reflect
+    *rho_right = rho_left;
+    *E_right   = E_left;
+
+    // these things need to actually reflect...
+    // 2 (V dot N) * N - V
+    //*u_right = 2 * (u_left * ny + v_left * nx) * ny - u_left ;
+    //*v_right = 2 * (u_left * ny + v_left * nx) * ny - v_left ;
+
+    *u_right = -2 * (u_left * nx + v_left * ny) * nx + u_left;
+    *v_right = -2 * (u_left * nx + v_left * ny) * ny + v_left;
+}
+
+__device__ void inflow_boundary(double rho_left, double *rho_right,
+                                double u_left,   double *u_right,
+                                double v_left,   double *v_right,
+                                double E_left,   double *E_right) {
+
     *rho_right = rho_left;
     *u_right   = u_left;
     *v_right   = v_left;
     *E_right   = E_left;
+
 }
-
-//__device__ void inflow_boundary(double *rho_right, double *u_right,
-                                //double *v_right, double *E_right) {
-
     /*
     double r1_eval, r2_eval;
     double x, y;
@@ -705,6 +724,7 @@ __device__ void eval_left_right(double *c_rho_left, double *c_rho_right,
                              double *c_E_left,   double *c_E_right,
                              double *rho_left, double *u_left, double *v_left, double *E_left,
                              double *rho_right, double *u_right, double *v_right, double *E_right,
+                             double nx, double ny,
                              double v1x, double v1y,
                              double v2x, double v2y,
                              double v3x, double v3y,
@@ -745,7 +765,8 @@ __device__ void eval_left_right(double *c_rho_left, double *c_rho_right,
         reflecting_boundary(*rho_left, rho_right, 
                             *u_left,   u_right, 
                             *v_left,   v_right, 
-                            *E_left,   E_right);
+                            *E_left,   E_right,
+                            nx, ny);
 
     ///////////////////////
     // outflow 
@@ -755,6 +776,10 @@ __device__ void eval_left_right(double *c_rho_left, double *c_rho_right,
     // inflow 
     ///////////////////////
     } else if (right_idx == -3) {
+        inflow_boundary(*rho_left, rho_right, 
+                        *u_left,   u_right, 
+                        *v_left,   v_right, 
+                        *E_left,   E_right);
     ///////////////////////
     // not a boundary
     ///////////////////////
@@ -1069,6 +1094,7 @@ __device__ void eval_surface(double *c_rho_left, double *c_u_left, double *c_v_l
                             c_E_left,   c_E_right,
                             &rho_left,  &u_left,  &v_left,  &E_left,
                             &rho_right, &u_right, &v_right, &E_right,
+                            nx, ny,
                             v1x, v1y, v2x, v2y, v3x, v3y,
                             j, left_side, right_side,
                             left_idx, right_idx,

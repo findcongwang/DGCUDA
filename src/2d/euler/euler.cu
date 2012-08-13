@@ -111,7 +111,7 @@ void read_mesh(FILE *mesh_file,
               int *elem_s1,  int *elem_s2, int *elem_s3,
               int *left_elem, int *right_elem) {
 
-    int i, j, error, s1, s2, s3, numsides;
+    int i, j, items, s1, s2, s3, numsides, boundary;
     double J, tmpx, tmpy;
     char line[100];
     numsides = 0;
@@ -124,10 +124,19 @@ void read_mesh(FILE *mesh_file,
     i = 0;
     while(fgets(line, sizeof(line), mesh_file) != NULL) {
         // these three vertices define the element
-        error = sscanf(line, "%lf %lf %lf %lf %lf %lf", &V1x[i], &V1y[i], &V2x[i], &V2y[i], &V3x[i], &V3y[i]);
-        if (error != 6) {
-            printf("error (%i) reading mesh.\n", error);
+        items = sscanf(line, "%lf %lf %lf %lf %lf %lf %i", &V1x[i], &V1y[i], &V2x[i], &V2y[i], &V3x[i], &V3y[i], &boundary);
+        if (items != 7) {
+            printf("items (%i) reading mesh.\n", items);
             exit(0);
+        }
+
+        switch (boundary) {
+            case 10000: right_side_number[numsides] = -1;
+                        break;
+            case 20000: right_side_number[numsides] = -2;
+                        break;
+            case 30000: right_side_number[numsides] = -3;
+                        break;
         }
 
         // determine whether we should add these three sides or not

@@ -14,7 +14,8 @@ Line Loop(5) = {1,-3,2,4};
 Plane Surface(6) = {5};
 
 Physical Surface (100) = {6};
-Physical Line (20000) = {3,4};
+Physical Line (10000) = {3,4};
+Physical Line (30000) = {1,2};
 
 
 
