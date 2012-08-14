@@ -111,7 +111,7 @@ void read_mesh(FILE *mesh_file,
               int *elem_s1,  int *elem_s2, int *elem_s3,
               int *left_elem, int *right_elem) {
 
-    int i, j, items, s1, s2, s3, numsides, boundary;
+    int i, j, items, s1, s2, s3, numsides, boundary_side, boundary;
     double J, tmpx, tmpy;
     char line[100];
     numsides = 0;
@@ -124,12 +124,16 @@ void read_mesh(FILE *mesh_file,
     i = 0;
     while(fgets(line, sizeof(line), mesh_file) != NULL) {
         // these three vertices define the element
-        items = sscanf(line, "%lf %lf %lf %lf %lf %lf %i", &V1x[i], &V1y[i], &V2x[i], &V2y[i], &V3x[i], &V3y[i], &boundary);
-        if (items != 7) {
-            printf("items (%i) reading mesh.\n", items);
+        items = sscanf(line, "%lf %lf %lf %lf %lf %lf %i %i", &V1x[i], &V1y[i], 
+                                                              &V2x[i], &V2y[i], 
+                                                              &V3x[i], &V3y[i], 
+                                                              &boundary_side, &boundary);
+        if (items != 8) {
+            printf("error: not enough items (%i) while reading mesh.\n", items);
             exit(0);
         }
 
+        /*
         switch (boundary) {
             case 10000: right_side_number[numsides] = -1;
                         break;
@@ -138,6 +142,7 @@ void read_mesh(FILE *mesh_file,
             case 30000: right_side_number[numsides] = -3;
                         break;
         }
+        */
 
         // determine whether we should add these three sides or not
         s1 = 1;
@@ -153,6 +158,13 @@ void read_mesh(FILE *mesh_file,
             V1y[i] = V2y[i];
             V2x[i] = tmpx;
             V2y[i] = tmpy;
+
+            // need to swap boundary sides since we swapped sides
+            if (boundary_side == 0) {
+                boundary_side = 1;
+            } else if (boundary_side == 1) {
+                boundary_side = 0;
+            }
         }
 
         // scan through the existing sides to see if we already added it
@@ -212,6 +224,19 @@ void read_mesh(FILE *mesh_file,
 
             // link the added side to this element
             left_side_number[numsides] = 0;
+
+            // see if this is a boundary side
+            if (boundary_side == 0) {
+                switch (boundary) {
+                    case 10000: right_side_number[numsides] = -1;
+                                break;
+                    case 20000: right_side_number[numsides] = -2;
+                                break;
+                    case 30000: right_side_number[numsides] = -3;
+                                break;
+                }
+            }
+
             // and link the element to this side
             elem_s1[i] = numsides;
 
@@ -227,6 +252,19 @@ void read_mesh(FILE *mesh_file,
 
             // link the added side to this element
             left_side_number[numsides] = 1;
+
+            // see if this is a boundary side
+            if (boundary_side == 1) {
+                switch (boundary) {
+                    case 10000: right_side_number[numsides] = -1;
+                                break;
+                    case 20000: right_side_number[numsides] = -2;
+                                break;
+                    case 30000: right_side_number[numsides] = -3;
+                                break;
+                }
+            }
+
             // and link the element to this side
             elem_s2[i] = numsides;
 
@@ -242,6 +280,19 @@ void read_mesh(FILE *mesh_file,
 
             // link the added side to this element
             left_side_number[numsides] = 2;
+
+            // see if this is a boundary side
+            if (boundary_side == 2) {
+                switch (boundary) {
+                    case 10000: right_side_number[numsides] = -1;
+                                break;
+                    case 20000: right_side_number[numsides] = -2;
+                                break;
+                    case 30000: right_side_number[numsides] = -3;
+                                break;
+                }
+            }
+
             // and link the element to this side
             elem_s3[i] = numsides;
 

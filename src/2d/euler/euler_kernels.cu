@@ -224,27 +224,19 @@ __device__ void reflecting_boundary(double rho_left, double *rho_right,
     *rho_right = rho_left;
     *E_right   = E_left;
 
-    // these things need to actually reflect...
-    // 2 (V dot N) * N - V
-    //*u_right = 2 * (u_left * ny + v_left * nx) * ny - u_left ;
-    //*v_right = 2 * (u_left * ny + v_left * nx) * ny - v_left ;
-
-    *u_right = -2 * (u_left * nx + v_left * ny) * nx + u_left;
-    *v_right = -2 * (u_left * nx + v_left * ny) * ny + v_left;
+    // make the velocities reflect wrt the normal
+    // -2 (V dot N) * N + V
+    *u_right = - (u_left * nx + v_left * ny);
+    *v_right = u_left * (-ny) + v_left * nx;
 }
 
-__device__ void inflow_boundary(double rho_left, double *rho_right,
-                                double u_left,   double *u_right,
-                                double v_left,   double *v_right,
-                                double E_left,   double *E_right) {
+__device__ void inflow_boundary(double *rho_right, double *u_right, double *v_right, double *E_right,
+                                double v1x, double v1y, 
+                                double v2x, double v2y,
+                                double v3x, double v3y,
+                                int j,
+                                int left_side, int n_quad1d) {
 
-    *rho_right = rho_left;
-    *u_right   = u_left;
-    *v_right   = v_left;
-    *E_right   = E_left;
-
-}
-    /*
     double r1_eval, r2_eval;
     double x, y;
 
@@ -268,13 +260,11 @@ __device__ void inflow_boundary(double rho_left, double *rho_right,
     x = v2x * r1_eval + v3x * r2_eval + v1x * (1 - r1_eval - r2_eval);
     y = v2y * r1_eval + v3y * r2_eval + v1y * (1 - r1_eval - r2_eval);
         
-    */
-    // set the sides to reflect
-    //*rho_right = *rho_left;
-    //*u_right   = *u_left;
-    //*v_right   = *v_left;
-    //*E_right   = *E_left;
-//}
+    *rho_right = rho0(x, y);
+    *u_right   = u0(x, y);
+    *v_right   = v0(x, y);
+    *E_right   = E0(x, y);
+}
 
 /* u exact
  *
@@ -776,10 +766,10 @@ __device__ void eval_left_right(double *c_rho_left, double *c_rho_right,
     // inflow 
     ///////////////////////
     } else if (right_idx == -3) {
-        inflow_boundary(*rho_left, rho_right, 
-                        *u_left,   u_right, 
-                        *v_left,   v_right, 
-                        *E_left,   E_right);
+        inflow_boundary(rho_right, u_right, v_right, E_right,
+                        v1x, v1y, v2x, v2y, v3x, v3y, 
+                        j, 
+                        left_side, n_quad1d);
     ///////////////////////
     // not a boundary
     ///////////////////////

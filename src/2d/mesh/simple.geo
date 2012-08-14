@@ -1,5 +1,5 @@
 // Gmsh project created on Fri Mar  9 12:34:28 2012
-l = .03;
+l = .01;
 Point(1) = {0, 0, 0, l};
 Point(2) = {0, 1, 0, l};
 Point(3) = {1, 1, 0, l};

@@ -31,11 +31,19 @@ def genmesh(inFilename, outFilename):
     # next line is the number of elements
     num_elements = int(inFile.readline())
 
+    edge_list = []
     elem_list = []
+    boundary_list = []
     # add the vertices for each element into elem_list
     for i in xrange(0,num_elements):
         s = inFile.readline().split()
-        print s
+        if len(s) == 7:
+            boundary = int(s[3])
+            v1 = int(s[5]) - 1
+            v2 = int(s[6]) - 1
+            edge_list.append((vertex_list[v1], vertex_list[v2]))
+            boundary_list.append(boundary)
+
         if len(s) == 8:
             v1 = int(s[5]) - 1
             v2 = int(s[6]) - 1
@@ -45,14 +53,37 @@ def genmesh(inFilename, outFilename):
     # write the number of elements to the file
     outFile.write(str(len(elem_list)) + "\n")
 
-    # write the elements in elem_list to outfile
+    # write the elements in elem_list to outFile
     for elem in elem_list:
-        outFile.write("%f %f %f %f %f %f\n" % (elem[0][0], elem[0][1],
+        # check to see if any edge is a boundary edge the boundary edges in edge_list to outFile
+        side_number  = -1
+        boundary_idx = 0
+        for edge, boundary in zip(edge_list, boundary_list):
+            if ((edge[0][0] == elem[0][0] and edge[0][1] == elem[0][1]) or (edge[0][0] == elem[0][1] and edge[0][1] == elem[0][0])):
+                side_number = 0
+                boundary_idx = boundary
+                break
+            elif ((edge[0][0] == elem[1][0] and edge[0][1] == elem[1][1]) or (edge[0][0] == elem[1][1] and edge[0][1] == elem[1][0])):
+                side_number = 1
+                boundary_idx = boundary
+                break
+            elif ((edge[0][0] == elem[2][0] and edge[0][1] == elem[2][1]) or (edge[0][0] == elem[2][1] and edge[0][1] == elem[2][0])):
+                side_number = 2
+                boundary_idx = boundary
+                break
+
+        outFile.write("%f %f %f %f %f %f %i %i\n" % (elem[0][0], elem[0][1],
                                                elem[1][0], elem[1][1],
-                                               elem[2][0], elem[2][1]))
+                                               elem[2][0], elem[2][1],
+                                               side_number, boundary_idx))
+
+    outFile.close()
+
 
 if __name__ == "__main__":
-    inFilename  = argv[1] 
-    outFilename = argv[2]
-    genmesh(inFilename, outFilename)
-    print "usage: genmesh.py [infile] [outfile]"
+    try:
+        inFilename  = argv[1] 
+        outFilename = argv[2]
+        genmesh(inFilename, outFilename)
+    except:
+        print "usage: genmesh.py [infile] [outfile]"

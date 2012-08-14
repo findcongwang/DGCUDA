@@ -7,15 +7,15 @@ int main(int argc, char *argv[]) {
     int i, n, n_p, timesteps, n_quad, n_quad1d, alpha;
     int debug;
 
-    float dt, t;
-    float *min_J, min_j;
-    float *V1x, *V1y, *V2x, *V2y, *V3x, *V3y;
-    float *sides_x1, *sides_x2;
-    float *sides_y1, *sides_y2;
+    double dt, t;
+    double *min_J, min_j;
+    double *V1x, *V1y, *V2x, *V2y, *V3x, *V3y;
+    double *sides_x1, *sides_x2;
+    double *sides_y1, *sides_y2;
 
-    float *r1_local, *r2_local, *w_local;
+    double *r1_local, *r2_local, *w_local;
 
-    float *s_r, *oned_w_local;
+    double *s_r, *oned_w_local;
 
     int *left_elem, *right_elem;
     int *elem_s1, *elem_s2, *elem_s3;
@@ -27,15 +27,15 @@ int main(int argc, char *argv[]) {
     char *mesh_filename;
     char *out_filename;
 
-    float *Uv1, *Uv2, *Uv3;
+    double *Uv1, *Uv2, *Uv3;
 
-    void (*eval_u_ftn)(float*, float*, float*, float*, int, int) = NULL;
-    void (*eval_error_ftn)(float*, 
-                       float*, float*,
-                       float*, float*,
-                       float*, float*,
-                       float*, float*, float*, 
-                       int, int, float, int) = NULL;
+    void (*eval_u_ftn)(double*, double*, double*, double*, int, int) = NULL;
+    void (*eval_error_ftn)(double*, 
+                       double*, double*,
+                       double*, double*,
+                       double*, double*,
+                       double*, double*, double*, 
+                       int, int, double, int) = NULL;
 
     // get input 
     alpha = 0;
@@ -53,16 +53,17 @@ int main(int argc, char *argv[]) {
         printf("\nERROR: mesh file not found.\n");
         return 1;
     }
+
     fgets(line, 100, mesh_file);
     sscanf(line, "%i", &num_elem);
 
     // allocate vertex points
-    V1x = (float *) malloc(num_elem * sizeof(float));
-    V1y = (float *) malloc(num_elem * sizeof(float));
-    V2x = (float *) malloc(num_elem * sizeof(float));
-    V2y = (float *) malloc(num_elem * sizeof(float));
-    V3x = (float *) malloc(num_elem * sizeof(float));
-    V3y = (float *) malloc(num_elem * sizeof(float));
+    V1x = (double *) malloc(num_elem * sizeof(double));
+    V1y = (double *) malloc(num_elem * sizeof(double));
+    V2x = (double *) malloc(num_elem * sizeof(double));
+    V2y = (double *) malloc(num_elem * sizeof(double));
+    V3x = (double *) malloc(num_elem * sizeof(double));
+    V3y = (double *) malloc(num_elem * sizeof(double));
 
     elem_s1 = (int *) malloc(num_elem * sizeof(int));
     elem_s2 = (int *) malloc(num_elem * sizeof(int));
@@ -72,10 +73,10 @@ int main(int argc, char *argv[]) {
     left_side_number  = (int *)   malloc(3*num_elem * sizeof(int));
     right_side_number = (int *)   malloc(3*num_elem * sizeof(int));
 
-    sides_x1    = (float *) malloc(3*num_elem * sizeof(float));
-    sides_x2    = (float *) malloc(3*num_elem * sizeof(float));
-    sides_y1    = (float *) malloc(3*num_elem * sizeof(float));
-    sides_y2    = (float *) malloc(3*num_elem * sizeof(float)); 
+    sides_x1    = (double *) malloc(3*num_elem * sizeof(double));
+    sides_x2    = (double *) malloc(3*num_elem * sizeof(double));
+    sides_y1    = (double *) malloc(3*num_elem * sizeof(double));
+    sides_y2    = (double *) malloc(3*num_elem * sizeof(double)); 
     left_elem   = (int *) malloc(3*num_elem * sizeof(int));
     right_elem  = (int *) malloc(3*num_elem * sizeof(int));
 
@@ -113,14 +114,16 @@ int main(int argc, char *argv[]) {
     // pre computations
     preval_jacobian<<<n_blocks_elem, n_threads>>>(d_J, d_V1x, d_V1y, d_V2x, d_V2y, d_V3x, d_V3y, num_elem); 
     cudaThreadSynchronize();
+    checkCudaError("error after preval_jacobian.");
 
     // find the min jacobian. do it on the gpu if there are at least 256 elements
     if (num_elem >= 256) {
         min_jacobian<<<n_blocks_jacobian, 256>>>(d_J, d_min_J, num_elem);
+        checkCudaError("error after min_jacobian.");
 
         // each block finds the smallest value, so need to sort through n_blocks_jacobian
-        min_J = (float *) malloc(n_blocks_jacobian * sizeof(float));
-        cudaMemcpy(min_J, d_min_J, n_blocks_jacobian * sizeof(float), cudaMemcpyDeviceToHost);
+        min_J = (double *) malloc(n_blocks_jacobian * sizeof(double));
+        cudaMemcpy(min_J, d_min_J, n_blocks_jacobian * sizeof(double), cudaMemcpyDeviceToHost);
         min_j = min_J[0];
         for (i = 0; i < n_blocks_jacobian; i++) {
             min_j = (min_J[i] > min_j) ? min_J[i] : min_j;
@@ -129,8 +132,8 @@ int main(int argc, char *argv[]) {
 
     } else {
         // just grab all the jacobians and sort them since there are so few of them
-        min_J = (float *) malloc(num_elem * sizeof(float));
-        cudaMemcpy(min_J, d_J, num_elem * sizeof(float), cudaMemcpyDeviceToHost);
+        min_J = (double *) malloc(num_elem * sizeof(double));
+        cudaMemcpy(min_J, d_J, num_elem * sizeof(double), cudaMemcpyDeviceToHost);
         min_j = min_J[0];
         for (i = 0; i < num_elem; i++) {
             min_j = (min_J[i] > min_j) ? min_J[i] : min_j;
@@ -184,8 +187,8 @@ int main(int argc, char *argv[]) {
     printf(" ? %i elements\n", num_elem);
     printf(" ? %i sides\n", num_sides);
     printf(" ? %i timesteps\n", timesteps);
-    printf(" ? min jacobian = %f\n", min_j);
-    printf(" ? dt = %f\n", dt);
+    printf(" ? min jacobian = %lf\n", min_j);
+    printf(" ? dt = %lf\n", dt);
 
     checkCudaError("error before time integration.");
     fprintf(out_file, "View \"Exported field \" {\n");
@@ -194,23 +197,23 @@ int main(int argc, char *argv[]) {
     t = timesteps * dt;
 
     if (debug) {
-        float *c = (float *) malloc(num_elem * n_p * sizeof(float));
-        cudaMemcpy(c, d_c, num_elem * n_p * sizeof(float), cudaMemcpyDeviceToHost);
+        double *c = (double *) malloc(num_elem * n_p * sizeof(double));
+        cudaMemcpy(c, d_c, num_elem * n_p * sizeof(double), cudaMemcpyDeviceToHost);
         printf(" c\n");
         printf(" ~~~\n");
         for (i = 0; i < num_elem * n_p; i++) {
             if (i != 0 && i % num_elem == 0) {
                 printf("   --- \n");
             }
-            printf(" > %f\n", c[i]);
+            printf(" > %lf\n", c[i]);
         }
         free(c);
     }
 
     // evaluate at the vertex points and copy over data
-    Uv1 = (float *) malloc(num_elem * sizeof(float));
-    Uv2 = (float *) malloc(num_elem * sizeof(float));
-    Uv3 = (float *) malloc(num_elem * sizeof(float));
+    Uv1 = (double *) malloc(num_elem * sizeof(double));
+    Uv2 = (double *) malloc(num_elem * sizeof(double));
+    Uv3 = (double *) malloc(num_elem * sizeof(double));
 
     switch (n) {
         case 0: eval_u_ftn = eval_u_wrapper0;
@@ -246,14 +249,14 @@ int main(int argc, char *argv[]) {
                                                  //d_Uv1, d_Uv2, d_Uv3, num_elem, n_p, t * dt);
     eval_u_ftn<<<n_blocks_elem, n_threads>>>(d_c, d_Uv1, d_Uv2, d_Uv3, num_elem, n_p);
     cudaThreadSynchronize();
-    cudaMemcpy(Uv1, d_Uv1, num_elem * sizeof(float), cudaMemcpyDeviceToHost);
-    cudaMemcpy(Uv2, d_Uv2, num_elem * sizeof(float), cudaMemcpyDeviceToHost);
-    cudaMemcpy(Uv3, d_Uv3, num_elem * sizeof(float), cudaMemcpyDeviceToHost);
+    cudaMemcpy(Uv1, d_Uv1, num_elem * sizeof(double), cudaMemcpyDeviceToHost);
+    cudaMemcpy(Uv2, d_Uv2, num_elem * sizeof(double), cudaMemcpyDeviceToHost);
+    cudaMemcpy(Uv3, d_Uv3, num_elem * sizeof(double), cudaMemcpyDeviceToHost);
 
     // write data to file
     // TODO: this will output multiple vertices values. does gmsh care? i dunno...
     for (i = 0; i < num_elem; i++) {
-        fprintf(out_file, "ST (%f,%f,0,%f,%f,0,%f,%f,0) {%f,%f,%f};\n", 
+        fprintf(out_file, "ST (%lf,%lf,0,%lf,%lf,0,%lf,%lf,0) {%lf,%lf,%lf};\n", 
                                V1x[i], V1y[i], V2x[i], V2y[i], V3x[i], V3y[i],
                                Uv1[i], Uv2[i], Uv3[i]);
     }
