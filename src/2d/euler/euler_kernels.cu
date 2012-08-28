@@ -219,9 +219,10 @@ __device__ void reflecting_boundary(double rho_left, double *rho_right,
 
     // make the velocities reflect wrt the normal
     // -2 (V dot N) * N + V
-    double dot = u_left * (-ny) + v_left * nx;
-    *u_right   = u_left - 2 * dot * (-ny);
-    *v_right   = v_left - 2 * dot * nx;
+    double dot = u_left * nx + v_left * ny;
+
+    *u_right   = u_left - 2 * dot * nx;
+    *v_right   = v_left - 2 * dot * ny;
 }
 
 __device__ void outflow_boundary(double rho_left, double *rho_right,
