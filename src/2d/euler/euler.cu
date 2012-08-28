@@ -124,25 +124,17 @@ void read_mesh(FILE *mesh_file,
     i = 0;
     while(fgets(line, sizeof(line), mesh_file) != NULL) {
         // these three vertices define the element
+        // and boundary_side tells which side is a boundary
+        // while boundary determines the type of boundary
         items = sscanf(line, "%lf %lf %lf %lf %lf %lf %i %i", &V1x[i], &V1y[i], 
                                                               &V2x[i], &V2y[i], 
                                                               &V3x[i], &V3y[i], 
                                                               &boundary_side, &boundary);
+
         if (items != 8) {
             printf("error: not enough items (%i) while reading mesh.\n", items);
             exit(0);
         }
-
-        /*
-        switch (boundary) {
-            case 10000: right_side_number[numsides] = -1;
-                        break;
-            case 20000: right_side_number[numsides] = -2;
-                        break;
-            case 30000: right_side_number[numsides] = -3;
-                        break;
-        }
-        */
 
         // determine whether we should add these three sides or not
         s1 = 1;
@@ -159,7 +151,7 @@ void read_mesh(FILE *mesh_file,
             V2x[i] = tmpx;
             V2y[i] = tmpy;
 
-            // need to swap boundary sides since we swapped sides
+            // need to swap boundary sides 0 and 1 since we swapped sides 0 and 1
             if (boundary_side == 0) {
                 boundary_side = 1;
             } else if (boundary_side == 1) {
@@ -228,11 +220,11 @@ void read_mesh(FILE *mesh_file,
             // see if this is a boundary side
             if (boundary_side == 0) {
                 switch (boundary) {
-                    case 10000: right_side_number[numsides] = -1;
+                    case 10000: right_elem[numsides] = -1;
                                 break;
-                    case 20000: right_side_number[numsides] = -2;
+                    case 20000: right_elem[numsides] = -2;
                                 break;
-                    case 30000: right_side_number[numsides] = -3;
+                    case 30000: right_elem[numsides] = -3;
                                 break;
                 }
             }
@@ -256,11 +248,11 @@ void read_mesh(FILE *mesh_file,
             // see if this is a boundary side
             if (boundary_side == 1) {
                 switch (boundary) {
-                    case 10000: right_side_number[numsides] = -1;
+                    case 10000: right_elem[numsides] = -1;
                                 break;
-                    case 20000: right_side_number[numsides] = -2;
+                    case 20000: right_elem[numsides] = -2;
                                 break;
-                    case 30000: right_side_number[numsides] = -3;
+                    case 30000: right_elem[numsides] = -3;
                                 break;
                 }
             }
@@ -284,11 +276,11 @@ void read_mesh(FILE *mesh_file,
             // see if this is a boundary side
             if (boundary_side == 2) {
                 switch (boundary) {
-                    case 10000: right_side_number[numsides] = -1;
+                    case 10000: right_elem[numsides] = -1;
                                 break;
-                    case 20000: right_side_number[numsides] = -2;
+                    case 20000: right_elem[numsides] = -2;
                                 break;
-                    case 30000: right_side_number[numsides] = -3;
+                    case 30000: right_elem[numsides] = -3;
                                 break;
                 }
             }

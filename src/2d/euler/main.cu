@@ -33,6 +33,7 @@ int main(int argc, char *argv[]) {
     char *outfile_base;
     int outfile_len;
 
+    double *Uu1, *Uu2, *Uu3;
     double *Uv1, *Uv2, *Uv3;
 
     void (*eval_rho_ftn)(double*, double*, double*, double*, int, int) = NULL;
@@ -248,6 +249,10 @@ int main(int argc, char *argv[]) {
     time_integrate_rk4(n_quad, n_quad1d, n_p, n, num_elem, num_sides, endtime, min_r);
 
     // evaluate at the vertex points and copy over data
+    Uu1 = (double *) malloc(num_elem * sizeof(double));
+    Uu2 = (double *) malloc(num_elem * sizeof(double));
+    Uu3 = (double *) malloc(num_elem * sizeof(double));
+
     Uv1 = (double *) malloc(num_elem * sizeof(double));
     Uv2 = (double *) malloc(num_elem * sizeof(double));
     Uv3 = (double *) malloc(num_elem * sizeof(double));
@@ -267,32 +272,21 @@ int main(int argc, char *argv[]) {
     fprintf(out_file,"};");
     fclose(out_file);
 
-    // evaluate u and write to file
+    // evaluate the u and v vectors and write to file
     eval_u_ftn<<<n_blocks_elem, n_threads>>>(d_c, d_Uv1, d_Uv2, d_Uv3, num_elem, n_p);
+    cudaMemcpy(Uu1, d_Uv1, num_elem * sizeof(double), cudaMemcpyDeviceToHost);
+    cudaMemcpy(Uu2, d_Uv2, num_elem * sizeof(double), cudaMemcpyDeviceToHost);
+    cudaMemcpy(Uu3, d_Uv3, num_elem * sizeof(double), cudaMemcpyDeviceToHost);
+    eval_v_ftn<<<n_blocks_elem, n_threads>>>(d_c, d_Uv1, d_Uv2, d_Uv3, num_elem, n_p);
     cudaMemcpy(Uv1, d_Uv1, num_elem * sizeof(double), cudaMemcpyDeviceToHost);
     cudaMemcpy(Uv2, d_Uv2, num_elem * sizeof(double), cudaMemcpyDeviceToHost);
     cudaMemcpy(Uv3, d_Uv3, num_elem * sizeof(double), cudaMemcpyDeviceToHost);
     out_file  = fopen(u_out_filename , "w");
     fprintf(out_file, "View \"u \" {\n");
     for (i = 0; i < num_elem; i++) {
-        fprintf(out_file, "ST (%lf,%lf,0,%lf,%lf,0,%lf,%lf,0) {%lf,%lf,%lf};\n", 
+        fprintf(out_file, "VT (%lf,%lf,0,%lf,%lf,0,%lf,%lf,0) {%lf,%lf,0,%lf,%lf,0,%lf,%lf,0};\n", 
                                V1x[i], V1y[i], V2x[i], V2y[i], V3x[i], V3y[i],
-                               Uv1[i], Uv2[i], Uv3[i]);
-    }
-    fprintf(out_file,"};");
-    fclose(out_file);
-
-    // evaluate v and write to file
-    eval_v_ftn<<<n_blocks_elem, n_threads>>>(d_c, d_Uv1, d_Uv2, d_Uv3, num_elem, n_p);
-    cudaMemcpy(Uv1, d_Uv1, num_elem * sizeof(double), cudaMemcpyDeviceToHost);
-    cudaMemcpy(Uv2, d_Uv2, num_elem * sizeof(double), cudaMemcpyDeviceToHost);
-    cudaMemcpy(Uv3, d_Uv3, num_elem * sizeof(double), cudaMemcpyDeviceToHost);
-    out_file  = fopen(v_out_filename , "w");
-    fprintf(out_file, "View \"v \" {\n");
-    for (i = 0; i < num_elem; i++) {
-        fprintf(out_file, "ST (%lf,%lf,0,%lf,%lf,0,%lf,%lf,0) {%lf,%lf,%lf};\n", 
-                               V1x[i], V1y[i], V2x[i], V2y[i], V3x[i], V3y[i],
-                               Uv1[i], Uv2[i], Uv3[i]);
+                               Uu1[i], Uv1[i], Uu2[i], Uv2[i], Uu3[i], Uv3[i]);
     }
     fprintf(out_file,"};");
     fclose(out_file);

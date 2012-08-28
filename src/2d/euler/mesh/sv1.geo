@@ -15,7 +15,8 @@ Plane Surface(6) = {5};
 
 Physical Surface (100) = {6};
 Physical Line (10000) = {3,4};
-Physical Line (30000) = {1,2};
+Physical Line (20000) = {2};
+Physical Line (30000) = {1};
 
 
 

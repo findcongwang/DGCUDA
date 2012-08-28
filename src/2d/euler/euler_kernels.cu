@@ -151,17 +151,8 @@ int *d_right_elem; // index of right element for side idx
  * DEVICE FUNCTIONS
  *
  ***********************/
-/* riemann solver
- *
- * evaluates the riemann problem over the boundary using Gaussian quadrature
- * with Legendre polynomials as basis functions.
- */
-__device__ double riemann(double u_left, double u_right) {
-    return 0.5 * (u_left + u_right);
-}
-
 __device__ double pressure(double rho, double u, double v, double E) {
-    return (GAMMA - 1) * (E - (u*u + v*v) / 2 * rho);
+    return (GAMMA - 1.) * (E - (u*u + v*v) / 2. * rho);
 }
 
 /* evaluate c
@@ -169,7 +160,9 @@ __device__ double pressure(double rho, double u, double v, double E) {
  * evaulates the speed of sound c
  */
 __device__ double eval_c(double rho, double u, double v, double E) {
-    return sqrtf(GAMMA * pressure(rho, u, v, E) / rho);
+    double p = pressure(rho, u, v, E);
+
+    return sqrtf(GAMMA * p / rho);
 }    
 
 /***********************
@@ -188,14 +181,14 @@ __device__ double rho0(double x, double y) {
 }
 __device__ double u0(double x, double y) {
     double r = x*x + y*y;
-    return MACH / r;
+    return cos(PI/2. * x/1.384) * MACH / r;
 }
 __device__ double v0(double x, double y) {
     double r = x*x + y*y;
-    return MACH / r;
+    return -cos(PI/2. * y/1.384) * MACH / r;
 }
 __device__ double E0(double x, double y) {
-    return 1. / (GAMMA - 1) + (powf(u0(x, y), 2) + powf(v0(x, y), 2)) / 2. * rho0(x, y);
+    return powf(rho0(x,y),GAMMA) / (GAMMA * (GAMMA - 1)) + (powf(u0(x, y), 2) + powf(v0(x, y), 2)) / 2. * rho0(x, y);
 }
 
 /* boundary exact
@@ -226,8 +219,19 @@ __device__ void reflecting_boundary(double rho_left, double *rho_right,
 
     // make the velocities reflect wrt the normal
     // -2 (V dot N) * N + V
-    *u_right = - (u_left * nx + v_left * ny);
-    *v_right = u_left * (-ny) + v_left * nx;
+    double dot = u_left * (-ny) + v_left * nx;
+    *u_right   = u_left - 2 * dot * (-ny);
+    *v_right   = v_left - 2 * dot * nx;
+}
+
+__device__ void outflow_boundary(double rho_left, double *rho_right,
+                                 double u_left,   double *u_right,
+                                 double v_left,   double *v_right,
+                                 double E_left,   double *E_right) {
+    *rho_right = rho_left;
+    *u_right   = u_left;
+    *v_right   = v_left;
+    *E_right   = E_left;
 }
 
 __device__ void inflow_boundary(double *rho_right, double *u_right, double *v_right, double *E_right,
@@ -743,6 +747,11 @@ __device__ void eval_left_right(double *c_rho_left, double *c_rho_right,
         *E_left   += c_E_left[i]   * basis_side[left_side * n_p * n_quad1d + i * n_quad1d + j];
     }
 
+    // unphysical rho
+    if (*rho_left <= 0) {
+        *rho_left = c_rho_left[0];
+    }
+
     // since we actually have coefficients for rho * u and rho * v
     *u_left = *u_left / *rho_left;
     *v_left = *v_left / *rho_left;
@@ -762,6 +771,11 @@ __device__ void eval_left_right(double *c_rho_left, double *c_rho_right,
     // outflow 
     ///////////////////////
     } else if (right_idx == -2) {
+        outflow_boundary(*rho_left, rho_right,
+                         *u_left,   u_right,
+                         *v_left,   v_right,
+                         *E_left,   E_right);
+
     ///////////////////////
     // inflow 
     ///////////////////////
@@ -780,6 +794,11 @@ __device__ void eval_left_right(double *c_rho_left, double *c_rho_right,
             *u_right   += c_u_right[i]   * basis_side[right_side * n_p * n_quad1d + i * n_quad1d + n_quad1d - 1 - j];
             *v_right   += c_v_right[i]   * basis_side[right_side * n_p * n_quad1d + i * n_quad1d + n_quad1d - 1 - j];
             *E_right   += c_E_right[i]   * basis_side[right_side * n_p * n_quad1d + i * n_quad1d + n_quad1d - 1 - j];
+        }
+
+        // unphysical rho
+        if (*rho_right <= 0) {
+            *rho_right = c_rho_right[0];
         }
 
         // again, since we have coefficients for rho * u and rho * v
@@ -1106,7 +1125,7 @@ __device__ void eval_surface(double *c_rho_left, double *c_u_left, double *c_v_l
                                  v_left, v_right, 
                                  E_left, E_right,
                                  nx, ny);
-            
+
             // 1st equation
             s = 0.5 * ((flux_x1_l + flux_x1_r) * nx + (flux_y1_l + flux_y1_r) * ny 
                         + lambda * (rho_left - rho_right));
@@ -1133,14 +1152,14 @@ __device__ void eval_surface(double *c_rho_left, double *c_u_left, double *c_v_l
         }
 
         // store this side's contribution in the riemann rhs vectors
-        left_riemann_rhs[num_sides * n_p * 0 + i * num_sides + idx]  = -len / 2 * left_sum1;
-        left_riemann_rhs[num_sides * n_p * 1 + i * num_sides + idx]  = -len / 2 * left_sum2;
-        left_riemann_rhs[num_sides * n_p * 2 + i * num_sides + idx]  = -len / 2 * left_sum3;
-        left_riemann_rhs[num_sides * n_p * 3 + i * num_sides + idx]  = -len / 2 * left_sum4;
-        right_riemann_rhs[num_sides * n_p * 0 + i * num_sides + idx] =  len / 2 * right_sum1;
-        right_riemann_rhs[num_sides * n_p * 1 + i * num_sides + idx] =  len / 2 * right_sum2;
-        right_riemann_rhs[num_sides * n_p * 2 + i * num_sides + idx] =  len / 2 * right_sum3;
-        right_riemann_rhs[num_sides * n_p * 3 + i * num_sides + idx] =  len / 2 * right_sum4;
+        left_riemann_rhs[num_sides * n_p * 0 + i * num_sides + idx]  = -len / 2. * left_sum1;
+        left_riemann_rhs[num_sides * n_p * 1 + i * num_sides + idx]  = -len / 2. * left_sum2;
+        left_riemann_rhs[num_sides * n_p * 2 + i * num_sides + idx]  = -len / 2. * left_sum3;
+        left_riemann_rhs[num_sides * n_p * 3 + i * num_sides + idx]  = -len / 2. * left_sum4;
+        right_riemann_rhs[num_sides * n_p * 0 + i * num_sides + idx] =  len / 2. * right_sum1;
+        right_riemann_rhs[num_sides * n_p * 1 + i * num_sides + idx] =  len / 2. * right_sum2;
+        right_riemann_rhs[num_sides * n_p * 2 + i * num_sides + idx] =  len / 2. * right_sum3;
+        right_riemann_rhs[num_sides * n_p * 3 + i * num_sides + idx] =  len / 2. * right_sum4;
     }
 }
 
@@ -1176,6 +1195,11 @@ __device__ void eval_volume(double *c_rho, double *c_u, double *c_v,   double *c
                 u   += c_u[k]   * basis[n_quad * k + j];
                 v   += c_v[k]   * basis[n_quad * k + j];
                 E   += c_E[k]   * basis[n_quad * k + j];
+            }
+
+            // unphysical rho
+            if (rho <= 0) {
+                rho = c_rho[0];
             }
 
             // since we actually have coefficients for rho * u, rho * v
