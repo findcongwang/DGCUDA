@@ -771,10 +771,14 @@ __device__ void eval_left_right(double *c_rho_left, double *c_rho_right,
     // outflow 
     ///////////////////////
     } else if (right_idx == -2) {
-        outflow_boundary(*rho_left, rho_right,
-                         *u_left,   u_right,
-                         *v_left,   v_right,
-                         *E_left,   E_right);
+        inflow_boundary(rho_right, u_right, v_right, E_right,
+                        v1x, v1y, v2x, v2y, v3x, v3y, 
+                        j, 
+                        left_side, n_quad1d);
+        //outflow_boundary(*rho_left, rho_right,
+                         //*u_left,   u_right,
+                         //*v_left,   v_right,
+                         //*E_left,   E_right);
 
     ///////////////////////
     // inflow 
