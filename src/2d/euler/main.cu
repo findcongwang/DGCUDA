@@ -309,6 +309,9 @@ int main(int argc, char *argv[]) {
     // free variables
     free_gpu();
     
+    free(Uu1);
+    free(Uu2);
+    free(Uu3);
     free(Uv1);
     free(Uv2);
     free(Uv3);

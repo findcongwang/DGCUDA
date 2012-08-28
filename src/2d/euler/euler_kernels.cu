@@ -185,7 +185,7 @@ __device__ double u0(double x, double y) {
 }
 __device__ double v0(double x, double y) {
     double r = x*x + y*y;
-    return -cos(PI/2. * y/1.384) * MACH / r;
+    return -sin(PI/2. * x/1.384) * MACH / r;
 }
 __device__ double E0(double x, double y) {
     return powf(rho0(x,y),GAMMA) / (GAMMA * (GAMMA - 1)) + (powf(u0(x, y), 2) + powf(v0(x, y), 2)) / 2. * rho0(x, y);
@@ -313,8 +313,8 @@ __global__ void init_conditions(double *c, double *J,
             }
 
             c[num_elem * n_p * 0 + i * num_elem + idx] = rho;
-            c[num_elem * n_p * 1 + i * num_elem + idx] = u; // we actually calculate and store rho * u
-            c[num_elem * n_p * 2 + i * num_elem + idx] = v; // we actually calculate and store rho * v
+            c[num_elem * n_p * 1 + i * num_elem + idx] = u; // we actually calculate rho * u
+            c[num_elem * n_p * 2 + i * num_elem + idx] = v; // we actually calculate rho * v
             c[num_elem * n_p * 3 + i * num_elem + idx] = E;
         } 
     }
@@ -661,7 +661,7 @@ __global__ void limit_c(double *c_inner,
                    double *c_s1, double *c_s2, double *c_s3,
                    int n_p, int num_elem) {
 
-    int idx = blockIdx.x * blockDim.x + threadIdx.x;
+    //int idx = blockIdx.x * blockDim.x + threadIdx.x;
 
     // get cell averages
     //avg_inner = c_inner[0];
@@ -682,7 +682,6 @@ __global__ void limit_c(double *c_inner,
  */
 __device__ void eval_global_lambda(double *c_rho, double *c_u, double *c_v, double *c_E, double *lambda,
                             int n_quad, int n_p, int idx) {
-    int i, j;
     double rho, u, v, E, c;
     double sum;
 
@@ -748,7 +747,8 @@ __device__ void eval_left_right(double *c_rho_left, double *c_rho_right,
     }
 
     // unphysical rho
-    if (*rho_left <= 0) {
+    if (*rho_left <= 0.) {
+        // use cell average
         *rho_left = c_rho_left[0];
     }
 
@@ -834,195 +834,34 @@ __device__ double eval_lambda(double rho_left, double rho_right,
     double left_max, right_max;
     double c_left, c_right;
     
+    // get c for both sides
     c_left  = eval_c(rho_left, u_left, v_left, E_left);
     c_right = eval_c(rho_right, u_right, v_right, E_right);
 
+    // find the speeds on each side
     s_left  = nx * u_left  + ny * v_left;
     s_right = nx * u_right + ny * v_right; 
     
+    // if speed is positive, want s + c, else s - c
     if (s_left > 0.) {
         left_max = s_left + c_left;
     } else {
         left_max = -s_left + c_left;
     }
 
+    // if speed is positive, want s + c, else s - c
     if (s_right > 0.) {
         right_max = s_right + c_right;
     } else {
         right_max = -s_right + c_right;
     }
 
-    return (abs(left_max) > abs(right_max)) ? abs(left_max) : abs(right_max);
-
-    ////////////////
-    // left element 
-    ////////////////
-
-    /*
-    // evaluate u - c
-    sum1_l = 0.;
-    for (j = 0; j < n_quad; j++) {
-        // evaluate rho,u,v,E at the integration point
-        rho = 0.;
-        u   = 0.;
-        v   = 0.;
-        E   = 0.;
-        for (i = 0; i < n_p; i++) {
-            rho += c_rho_left[i] * basis[n_quad * i + j];
-            u   += c_u_left[i]   * basis[n_quad * i + j];
-            v   += c_v_left[i]   * basis[n_quad * i + j];
-            E   += c_E_left[i]   * basis[n_quad * i + j];
-        }
-        u = u / rho;
-        v = v / rho;
-        // evaluate c at the integration point
-        c = eval_c(rho, u, v, E);
-
-        sum1_l += w[j] * (sqrtf(u*u + v*v) - c);
+    // return the max absolute value of | s +- c |
+    if (abs(left_max) > abs(right_max)) {
+        return abs(left_max);
+    } else { 
+        return abs(right_max);
     }
-    sum1_l = abs(sum1_l);
-
-    // evaluate u
-    sum2_l = 0.;
-    for (j = 0; j < n_quad; j++) {
-        // evaluate u at the integration point
-        rho = 0.;
-        u   = 0.;
-        v   = 0.;
-        for (i = 0; i < n_p; i++) {
-            rho += c_rho_left[i] * basis[n_quad * i + j];
-            u   += c_u_left[i]   * basis[n_quad * i + j];
-            v   += c_v_left[i]   * basis[n_quad * i + j];
-        }
-        u = u / rho;
-        v = v / rho;
-
-        sum2_l += w[j] * sqrtf(u*u + v*v);
-    }
-
-    sum2_l = abs(sum2_l);
-
-    // evaluate u + c
-    sum3_l = 0;
-    for (j = 0; j < n_quad; j++) {
-        // evaluate rho,u,v,E at the integration point
-        rho = 0.;
-        u   = 0.;
-        v   = 0.;
-        E   = 0.;
-        for (i = 0; i < n_p; i++) {
-            rho += c_rho_left[i] * basis[n_quad * i + j];
-            u   += c_u_left[i]   * basis[n_quad * i + j];
-            v   += c_v_left[i]   * basis[n_quad * i + j];
-            E   += c_E_left[i]   * basis[n_quad * i + j];
-        }
-        u = u / rho;
-        v = v / rho;
-        // evaluate c at the integration point
-        c = eval_c(rho, u, v, E);
-
-        sum3_l += w[j] * (sqrtf(u*u + v*v) + c);
-    }
-    sum3_l = abs(sum3_l);
-
-    ////////////////
-    // right element
-    ////////////////
-    // TODO: big bug here. c_*_right may not be defined if we're on a boundary element.
-
-    if (right_idx != -1) {
-        // evaluate u - c
-        sum1_r = 0;
-        for (j = 0; j < n_quad; j++) {
-            // evaluate rho,u,v,E at the integration point
-            rho = 0.;
-            u   = 0.;
-            v   = 0.;
-            E   = 0.;
-            for (i = 0; i < n_p; i++) {
-                rho += c_rho_right[i] * basis[n_quad * i + j];
-                u   += c_u_right[i]   * basis[n_quad * i + j];
-                v   += c_v_right[i]   * basis[n_quad * i + j];
-                E   += c_E_right[i]   * basis[n_quad * i + j];
-            }
-            u = u / rho;
-            v = v / rho;
-            // evaluate c at the integration point
-            c = eval_c(rho, u, v, E);
-
-            sum1_r += w[j] * (sqrtf(u*u + v*v) - c);
-        }
-        sum1_r = abs(sum1_r);
-
-        // evaluate u
-        sum2_r = 0;
-        for (j = 0; j < n_quad; j++) {
-            // evaluate u at the integration point
-            rho = 0.;
-            u   = 0.;
-            v   = 0.;
-            for (i = 0; i < n_p; i++) {
-                rho += c_rho_right[i] * basis[n_quad * i + j];
-                u   += c_u_right[i]   * basis[n_quad * i + j];
-                v   += c_v_right[i]   * basis[n_quad * i + j];
-            }
-            u = u / rho;
-            v = v / rho;
-
-            sum2_r += w[j] * sqrtf(u*u + v*v);
-        }
-
-        sum2_r = abs(sum2_r);
-
-        // evaluate u + c
-        sum3_r = 0;
-        for (j = 0; j < n_quad; j++) {
-            // evaluate rho,u,v,E at the integration point
-            rho = 0.;
-            u   = 0.;
-            v   = 0.;
-            E   = 0.;
-            for (i = 0; i < n_p; i++) {
-                rho += c_rho_right[i] * basis[n_quad * i + j];
-                u   += c_u_right[i]   * basis[n_quad * i + j];
-                v   += c_v_right[i]   * basis[n_quad * i + j];
-                E   += c_E_right[i]   * basis[n_quad * i + j];
-            }
-            u = u / rho;
-            v = v / rho;
-            // evaluate c at the integration point
-            c = eval_c(rho, u, v, E);
-
-            sum3_r += w[j] * (sqrtf(u*u + v*v) + c);
-        }
-        sum3_r = abs(sum3_r);
-    }
-
-    max = 0;
-    if (sum1_l > max) {
-        max = sum1_l;
-    }
-    if (sum2_l > max) {
-        max = sum2_l;
-    }
-    if (sum3_l > max) {
-        max = sum3_l;
-    }
-
-    if (right_idx != -1) {
-        if (sum1_r > max) {
-            max = sum1_r;
-        }
-        if (sum2_r > max) {
-            max = sum2_r;
-        }
-        if (sum3_r > max) {
-            max = sum3_r;
-        }
-    }
-
-    return max;
-    */
 }
 
 /* evaluate flux

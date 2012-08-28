@@ -32,10 +32,10 @@ __global__ void rk4(double *c, double *k1, double *k2, double *k3, double *k4, i
     int idx = blockDim.x * blockIdx.x + threadIdx.x;
 
     if (idx < n_p * num_elem) {
-        c[num_elem * n_p * 0 + idx] += k1[idx]/6. + k2[idx]/3. + k3[idx]/3. + k4[idx]/6.;
-        c[num_elem * n_p * 1 + idx] += k1[idx]/6. + k2[idx]/3. + k3[idx]/3. + k4[idx]/6.;
-        c[num_elem * n_p * 2 + idx] += k1[idx]/6. + k2[idx]/3. + k3[idx]/3. + k4[idx]/6.;
-        c[num_elem * n_p * 3 + idx] += k1[idx]/6. + k2[idx]/3. + k3[idx]/3. + k4[idx]/6.;
+        c[num_elem * n_p * 0 + idx] += k1[num_elem * n_p * 0 + idx]/6. + k2[num_elem * n_p * 0 + idx]/3. + k3[num_elem * n_p * 0 + idx]/3. + k4[num_elem * n_p * 0 + idx]/6.;
+        c[num_elem * n_p * 1 + idx] += k1[num_elem * n_p * 1 + idx]/6. + k2[num_elem * n_p * 1 + idx]/3. + k3[num_elem * n_p * 1 + idx]/3. + k4[num_elem * n_p * 1 + idx]/6.;
+        c[num_elem * n_p * 2 + idx] += k1[num_elem * n_p * 2 + idx]/6. + k2[num_elem * n_p * 2 + idx]/3. + k3[num_elem * n_p * 2 + idx]/3. + k4[num_elem * n_p * 2 + idx]/6.;
+        c[num_elem * n_p * 3 + idx] += k1[num_elem * n_p * 3 + idx]/6. + k2[num_elem * n_p * 3 + idx]/3. + k3[num_elem * n_p * 3 + idx]/3. + k4[num_elem * n_p * 3 + idx]/6.;
     }
 }
 
