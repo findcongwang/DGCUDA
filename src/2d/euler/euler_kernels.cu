@@ -162,9 +162,10 @@ __device__ double pressure(double rho, double u, double v, double E) {
 __device__ double eval_c(double rho, double u, double v, double E) {
     double p = pressure(rho, u, v, E);
 
-    if (p < 0) {
-        p = 0.001;
-    }
+    // TODO: this is a dirty fix, but it's necessary or else c collapses into NAN
+    //if (p < 0) {
+        //p = 0.0001;
+    //}
 
     return sqrtf(GAMMA * p / rho);
 }    
@@ -759,6 +760,11 @@ __device__ void eval_left_right(double *c_rho_left, double *c_rho_right,
         *rho_left = c_rho_left[0];
     }
 
+    // in case rho_left comes back nonphysical
+    if (*rho_left <= 0) {
+        *rho_left = c_rho_left[0];
+    }
+
     // since we actually have coefficients for rho * u and rho * v
     *u_left = *u_left / *rho_left;
     *v_left = *v_left / *rho_left;
@@ -804,7 +810,7 @@ __device__ void eval_left_right(double *c_rho_left, double *c_rho_right,
             *E_right   += c_E_right[i]   * basis_side[right_side * n_p * n_quad1d + i * n_quad1d + n_quad1d - 1 - j];
         }
 
-        // unphysical rho
+        // in case rho_right comes back nonphysical
         if (*rho_right <= 0) {
             *rho_right = c_rho_right[0];
         }
@@ -1044,7 +1050,7 @@ __device__ void eval_volume(double *c_rho, double *c_u, double *c_v,   double *c
                 E   += c_E[k]   * basis[n_quad * k + j];
             }
 
-            // unphysical rho
+            // in case rho comes back nonphysical
             if (rho <= 0) {
                 rho = c_rho[0];
             }
