@@ -232,10 +232,12 @@ __device__ void reflecting_boundary(double rho_left, double *rho_right,
 __device__ void outflow_boundary(double rho_left, double *rho_right,
                                  double u_left,   double *u_right,
                                  double v_left,   double *v_right,
-                                 double E_left,   double *E_right) {
+                                 double E_left,   double *E_right,
+                                 double nx,       double ny) {
+    // make the flow move along the normal outside the cell so we don't introduce any new flow
     *rho_right = rho_left;
-    *u_right   = 0;
-    *v_right   = 0;
+    *u_right   = -u_left * nx; //TODO: is this right? it just sort of worked...
+    *v_right   = -v_left * ny; //TODO: is this right? it just sort of worked...
     *E_right   = E_left;
 }
 
@@ -776,14 +778,11 @@ __device__ void eval_left_right(double *c_rho_left, double *c_rho_right,
     // outflow 
     ///////////////////////
     } else if (right_idx == -2) {
-        //outflow_boundary(*rho_left, rho_right,
-                         //*u_left,   u_right,
-                         //*v_left,   v_right,
-                         //*E_left,   E_right);
-        inflow_boundary(rho_right, u_right, v_right, E_right,
-                        v1x, v1y, v2x, v2y, v3x, v3y, 
-                        j, 
-                        left_side, n_quad1d);
+        outflow_boundary(*rho_left, rho_right,
+                         *u_left,   u_right,
+                         *v_left,   v_right,
+                         *E_left,   E_right,
+                         nx, ny);
 
     ///////////////////////
     // inflow 
