@@ -162,6 +162,10 @@ __device__ double pressure(double rho, double u, double v, double E) {
 __device__ double eval_c(double rho, double u, double v, double E) {
     double p = pressure(rho, u, v, E);
 
+    if (p < 0) {
+        p = 0.001;
+    }
+
     return sqrtf(GAMMA * p / rho);
 }    
 
@@ -230,8 +234,8 @@ __device__ void outflow_boundary(double rho_left, double *rho_right,
                                  double v_left,   double *v_right,
                                  double E_left,   double *E_right) {
     *rho_right = rho_left;
-    *u_right   = u_left;
-    *v_right   = v_left;
+    *u_right   = 0;
+    *v_right   = 0;
     *E_right   = E_left;
 }
 
@@ -772,14 +776,14 @@ __device__ void eval_left_right(double *c_rho_left, double *c_rho_right,
     // outflow 
     ///////////////////////
     } else if (right_idx == -2) {
-        inflow_boundary(rho_right, u_right, v_right, E_right,
-                        v1x, v1y, v2x, v2y, v3x, v3y, 
-                        j, 
-                        left_side, n_quad1d);
         //outflow_boundary(*rho_left, rho_right,
                          //*u_left,   u_right,
                          //*v_left,   v_right,
                          //*E_left,   E_right);
+        inflow_boundary(rho_right, u_right, v_right, E_right,
+                        v1x, v1y, v2x, v2y, v3x, v3y, 
+                        j, 
+                        left_side, n_quad1d);
 
     ///////////////////////
     // inflow 
