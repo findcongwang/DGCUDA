@@ -163,6 +163,8 @@ __device__ double eval_c(double rho, double u, double v, double E) {
     double p = pressure(rho, u, v, E);
 
     // TODO: this is a dirty fix, but it's necessary or else c collapses into NAN
+    // This happens because E < u*u + v*v, which shouldn't ever be possible...
+    // apparently it only happens when the outflow boundary conditions are set wrong.
     //if (p < 0) {
         //p = 0.0001;
     //}
@@ -765,6 +767,11 @@ __device__ void eval_left_right(double *c_rho_left, double *c_rho_right,
         *rho_left = c_rho_left[0];
     }
 
+    // in case E_left comes back nonphysical
+    if (*E_left <= 0) {
+        *E_left = c_E_left[0];
+    }
+
     // since we actually have coefficients for rho * u and rho * v
     *u_left = *u_left / *rho_left;
     *v_left = *v_left / *rho_left;
@@ -784,11 +791,15 @@ __device__ void eval_left_right(double *c_rho_left, double *c_rho_right,
     // outflow 
     ///////////////////////
     } else if (right_idx == -2) {
-        outflow_boundary(*rho_left, rho_right,
-                         *u_left,   u_right,
-                         *v_left,   v_right,
-                         *E_left,   E_right,
-                         nx, ny);
+        inflow_boundary(rho_right, u_right, v_right, E_right,
+                        v1x, v1y, v2x, v2y, v3x, v3y, 
+                        j, 
+                        left_side, n_quad1d);
+        //outflow_boundary(*rho_left, rho_right,
+                         //*u_left,   u_right,
+                         //*v_left,   v_right,
+                         //*E_left,   E_right,
+                         //nx, ny);
 
     ///////////////////////
     // inflow 
@@ -1053,6 +1064,11 @@ __device__ void eval_volume(double *c_rho, double *c_u, double *c_v,   double *c
             // in case rho comes back nonphysical
             if (rho <= 0) {
                 rho = c_rho[0];
+            }
+
+            // in case E comes back nonphysical
+            if (E <= 0) {
+                E = c_E[0];
             }
 
             // since we actually have coefficients for rho * u, rho * v
