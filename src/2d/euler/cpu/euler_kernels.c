@@ -659,6 +659,11 @@ void eval_left_right(double *c_rho_left, double *c_rho_right,
             *rho_right = c_rho_right[0];
         }
 
+        // in case E_right comes back nonphysical
+        if (*E_right <= 0) {
+            *E_right = c_E_right[0];
+        }
+
         // again, since we have coefficients for rho * u and rho * v
         *u_right = *u_right / *rho_right;
         *v_right = *v_right / *rho_right;
@@ -863,6 +868,12 @@ void eval_surface(double *c,
                 eval_flux(rho_right, u_right, v_right, E_right,
                           &flux_x1_r, &flux_y1_r, &flux_x2_r, &flux_y2_r,
                           &flux_x3_r, &flux_y3_r, &flux_x4_r, &flux_y4_r);
+
+                if (right_idx == -1 && pressure(rho_right, u_right, v_right, E_right)) {
+                    printf("on a boundary.\n");
+                } else {
+                    printf("NOT a boundary.\n");
+                }
 
                 // need these local max values
                 lambda = eval_lambda(rho_left, rho_right,
