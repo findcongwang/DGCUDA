@@ -121,6 +121,16 @@ int *d_right_elem; // index of right element for side idx
  *
  ***********************/
 double pressure(double rho, double u, double v, double E) {
+
+    // TODO: this is a dirty fix, but it's necessary or else c collapses into NAN
+    // This happens because E < u*u + v*v, which shouldn't ever be possible...
+    // apparently it only happens when the outflow boundary conditions are set wrong.
+    // OK, this should SERIOUSLY not be happening here...
+    if( (GAMMA - 1.) * (E - (u*u + v*v) / 2. * rho) < 0) {
+        printf("ALERT: pressure negative!\n");
+        printf(" > p = %lf\n", (GAMMA - 1.) * (E - (u*u + v*v) / 2. * rho));
+        return 0.0001;
+    }
     return (GAMMA - 1.) * (E - (u*u + v*v) / 2. * rho);
 }
 
@@ -130,13 +140,9 @@ double pressure(double rho, double u, double v, double E) {
  */
 double eval_c(double rho, double u, double v, double E) {
     double p = pressure(rho, u, v, E);
-
-    // TODO: this is a dirty fix, but it's necessary or else c collapses into NAN
-    // This happens because E < u*u + v*v, which shouldn't ever be possible...
-    // apparently it only happens when the outflow boundary conditions are set wrong.
-    //if (p < 0) {
-        //p = 0.0001;
-    //}
+    if (p < 0) {
+        printf("   inside eval_c\n");
+    }
 
     return sqrtf(GAMMA * p / rho);
 }    
@@ -520,8 +526,8 @@ void eval_global_lambda(double *c,
 
     int idx;
 
-    // get cell averages
     for (idx = 0; idx < num_elem; idx++) {
+        // get cell averages
         rho = c[num_elem * n_p * 0 + idx];
         u   = c[num_elem * n_p * 1 + idx];
         v   = c[num_elem * n_p * 2 + idx];
@@ -730,6 +736,9 @@ void eval_flux(double rho, double u, double v, double E,
 
     // evaluate pressure
     double p = pressure(rho, u, v, E);
+    if (p < 0) {
+        printf("   inside eval_flux\n");
+    }
 
     // flux_1 
     *flux_x1 = rho * u;
@@ -772,16 +781,14 @@ void eval_surface(double *c,
         double nx = Nx[idx];
         double ny = Ny[idx];
 
-        double v1x = V1x[idx];
-        double v1y = V1y[idx];
-        double v2x = V2x[idx];
-        double v2y = V2y[idx];
-        double v3x = V3x[idx];
-        double v3y = V3y[idx];
+        double v1x = V1x[left_idx];
+        double v1y = V1y[left_idx];
+        double v2x = V2x[left_idx];
+        double v2y = V2y[left_idx];
+        double v3x = V3x[left_idx];
+        double v3y = V3y[left_idx];
 
         double len = length[idx];
-
-        int n;
 
         double c_rho_left[n_p];
         double c_u_left[n_p];
@@ -793,20 +800,6 @@ void eval_surface(double *c,
         double c_v_right[n_p];
         double c_E_right[n_p];
 
-        // get the coefficients for this side's element
-        for (n = 0; n < n_p; n++) {
-            c_rho_left[n] = c[num_elem * n_p * 0 + n * num_elem + left_idx];
-            c_u_left[n]   = c[num_elem * n_p * 1 + n * num_elem + left_idx];
-            c_v_left[n]   = c[num_elem * n_p * 2 + n * num_elem + left_idx];
-            c_E_left[n]   = c[num_elem * n_p * 3 + n * num_elem + left_idx];
-
-            if (right_idx != -1) {
-                c_rho_right[n] = c[num_elem * n_p * 0 + n * num_elem + right_idx];
-                c_u_right[n]   = c[num_elem * n_p * 1 + n * num_elem + right_idx];
-                c_v_right[n]   = c[num_elem * n_p * 2 + n * num_elem + right_idx];
-                c_E_right[n]   = c[num_elem * n_p * 3 + n * num_elem + right_idx];
-            }
-        }
         int i, j;
         double s;
         double lambda;
@@ -821,6 +814,20 @@ void eval_surface(double *c,
         double rho_left, u_left, v_left, E_left;
         double rho_right, u_right, v_right, E_right;
 
+        // get the coefficients for this side's element
+        for (i = 0; i < n_p; i++) {
+            c_rho_left[i] = c[num_elem * n_p * 0 + i * num_elem + left_idx];
+            c_u_left[i]   = c[num_elem * n_p * 1 + i * num_elem + left_idx];
+            c_v_left[i]   = c[num_elem * n_p * 2 + i * num_elem + left_idx];
+            c_E_left[i]   = c[num_elem * n_p * 3 + i * num_elem + left_idx];
+
+            if (right_idx != -1) {
+                c_rho_right[i] = c[num_elem * n_p * 0 + i * num_elem + right_idx];
+                c_u_right[i]   = c[num_elem * n_p * 1 + i * num_elem + right_idx];
+                c_v_right[i]   = c[num_elem * n_p * 2 + i * num_elem + right_idx];
+                c_E_right[i]   = c[num_elem * n_p * 3 + i * num_elem + right_idx];
+            }
+        }
         // multiply across by the i'th basis function
         for (i = 0; i < n_p; i++) {
 
@@ -926,21 +933,20 @@ void eval_volume(double *c,
         double c_v[n_p];
         double c_E[n_p];
 
-        int n;
-
-        // get the coefficients
-        for (n = 0; n < n_p; n++) {
-            c_rho[n] = c[num_elem * n_p * 0 + idx];
-            c_u[n]   = c[num_elem * n_p * 1 + idx];
-            c_v[n]   = c[num_elem * n_p * 2 + idx];
-            c_E[n]   = c[num_elem * n_p * 3 + idx];
-        }
-
         int i, j, k;
         double rho, u, v, E;
         double flux_x1, flux_y1, flux_x2, flux_y2;
         double flux_x3, flux_y3, flux_x4, flux_y4;
         double sum1, sum2, sum3, sum4;
+
+
+        // get the coefficients
+        for (i = 0; i < n_p; i++) {
+            c_rho[i] = c[num_elem * n_p * 0 + i * num_elem + idx];
+            c_u[i]   = c[num_elem * n_p * 1 + i * num_elem + idx];
+            c_v[i]   = c[num_elem * n_p * 2 + i * num_elem + idx];
+            c_E[i]   = c[num_elem * n_p * 3 + i * num_elem + idx];
+        }
 
         // evaluate the volume integral for each coefficient
         for (i = 0; i < n_p; i++) {
@@ -1024,24 +1030,27 @@ void eval_volume(double *c,
  */
 void eval_u(double *c, 
             double *Uv1, double *Uv2, double *Uv3,
-            int num_elem, int n_p, int idx) {
-    int i;
-    double uv1, uv2, uv3;
+            int num_elem, int n_p, int j) {
+    int idx;
+    for (idx = 0; idx < num_elem; idx++) {
+        int i;
+        double uv1, uv2, uv3;
 
-    // calculate values at the integration points
-    uv1 = 0.;
-    uv2 = 0.;
-    uv3 = 0.;
-    for (i = 0; i < n_p; i++) {
-        uv1 += c[i] * basis_vertex[i * 3 + 0];
-        uv2 += c[i] * basis_vertex[i * 3 + 1];
-        uv3 += c[i] * basis_vertex[i * 3 + 2];
+        // calculate values at the integration points
+        uv1 = 0.;
+        uv2 = 0.;
+        uv3 = 0.;
+        for (i = 0; i < n_p; i++) {
+            uv1 += c[num_elem * n_p * j + i * num_elem + idx] * basis_vertex[i * 3 + 0];
+            uv2 += c[num_elem * n_p * j + i * num_elem + idx] * basis_vertex[i * 3 + 1];
+            uv3 += c[num_elem * n_p * j + i * num_elem + idx] * basis_vertex[i * 3 + 2];
+        }
+
+        // store result
+        Uv1[idx] = uv1;
+        Uv2[idx] = uv2;
+        Uv3[idx] = uv3;
     }
-
-    // store result
-    Uv1[idx] = uv1;
-    Uv2[idx] = uv2;
-    Uv3[idx] = uv3;
 }
 
 /* evaluate u velocity
@@ -1049,38 +1058,43 @@ void eval_u(double *c,
  * evaluates u and v at the three vertex points for output
  * THREADS: num_elem
  */
-void eval_u_velocity(double *c, double *c_rho,
-                       double *Uv1, double *Uv2, double *Uv3,
-                       int num_elem, int n_p, int idx) {
-    int i;
-    double uv1, uv2, uv3;
-    double rhov1, rhov2, rhov3;
+void eval_u_velocity(double *c, 
+                     double *Uv1, double *Uv2, double *Uv3,
+                     int num_elem, int n_p, int j) {
+    int idx;
 
-    // calculate values at the integration points
-    rhov1 = 0.;
-    rhov2 = 0.;
-    rhov3 = 0.;
-    for (i = 0; i < n_p; i++) {
-        rhov1 += c_rho[i] * basis_vertex[i * 3 + 0];
-        rhov2 += c_rho[i] * basis_vertex[i * 3 + 1];
-        rhov3 += c_rho[i] * basis_vertex[i * 3 + 2];
+    for (idx = 0; idx < num_elem; idx++) {
+        int i;
+
+        double uv1, uv2, uv3;
+        double rhov1, rhov2, rhov3;
+
+        // calculate values at the integration points
+        rhov1 = 0.;
+        rhov2 = 0.;
+        rhov3 = 0.;
+        for (i = 0; i < n_p; i++) {
+            rhov1 += c[num_elem * n_p * 0 + i * num_elem + idx] * basis_vertex[i * 3 + 0];
+            rhov2 += c[num_elem * n_p * 0 + i * num_elem + idx] * basis_vertex[i * 3 + 1];
+            rhov3 += c[num_elem * n_p * 0 + i * num_elem + idx] * basis_vertex[i * 3 + 2];
+        }
+
+        uv1 = 0.;
+        uv2 = 0.;
+        uv3 = 0.;
+        for (i = 0; i < n_p; i++) {
+            uv1 += c[num_elem * n_p * j + i * num_elem + idx] * basis_vertex[i * 3 + 0];
+            uv2 += c[num_elem * n_p * j + i * num_elem + idx] * basis_vertex[i * 3 + 1];
+            uv3 += c[num_elem * n_p * j + i * num_elem + idx] * basis_vertex[i * 3 + 2];
+        }
+
+        uv1 = uv1 / rhov1;
+        uv2 = uv2 / rhov2;
+        uv3 = uv3 / rhov3;
+
+        // store result
+        Uv1[idx] = uv1;
+        Uv2[idx] = uv2;
+        Uv3[idx] = uv3;
     }
-
-    uv1 = 0.;
-    uv2 = 0.;
-    uv3 = 0.;
-    for (i = 0; i < n_p; i++) {
-        uv1 += c[i] * basis_vertex[i * 3 + 0];
-        uv2 += c[i] * basis_vertex[i * 3 + 1];
-        uv3 += c[i] * basis_vertex[i * 3 + 2];
-    }
-
-    uv1 = uv1 / rhov1;
-    uv2 = uv2 / rhov2;
-    uv3 = uv3 / rhov3;
-
-    // store result
-    Uv1[idx] = uv1;
-    Uv2[idx] = uv2;
-    Uv3[idx] = uv3;
 }

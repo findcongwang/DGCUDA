@@ -46,9 +46,9 @@ void rk4(double *c, double *k1, double *k2, double *k3, double *k4, int n_p, int
  * THREADS: num_elem
  */
 void eval_rhs_rk4(double *c, double *quad_rhs, double *left_riemann_rhs, double *right_riemann_rhs, 
-                         int *elem_s1, int *elem_s2, int *elem_s3,
-                         int *left_elem, double *J, 
-                         double dt, int n_p, int num_sides, int num_elem) {
+                  int *elem_s1, int *elem_s2, int *elem_s3,
+                  int *left_elem, double *J, 
+                  double dt, int n_p, int num_sides, int num_elem) {
     int idx;
 
     double s1_eqn1, s2_eqn1, s3_eqn1;
@@ -130,8 +130,9 @@ void time_integrate_rk4(int n_quad, int n_quad1d, int n_p, int n, int num_elem, 
         // compute all the lambda values over each cell
         eval_global_lambda(d_c, d_lambda, n_quad, n_p, num_elem);
 
-        // find the max value of lambda. do it on the gpu if there are at least 256 elements
+        // find the max value of lambda
         max_lambda = (double *) malloc(num_elem * sizeof(double));
+        memcpy(max_lambda, d_lambda, num_elem * sizeof(double));
         max_l = max_lambda[0];
         for (i = 0; i < num_elem; i++) {
             max_l = (max_lambda[i] > max_l) ? max_lambda[i] : max_l;
@@ -143,7 +144,7 @@ void time_integrate_rk4(int n_quad, int n_quad1d, int n_p, int n, int num_elem, 
 
         // add to total time
         t += dt;
-        printf(" > t = %lf\n", t);
+        printf(" > (%lf), t = %lf\n", max_l, t);
 
         // stage 1
         eval_surface(d_c, d_left_riemann_rhs, d_right_riemann_rhs, 
@@ -331,6 +332,5 @@ void time_integrate_fe(double dt, int n_quad, int n_quad1d, int n_p, int n,
         eval_rhs_fe(d_c, d_quad_rhs, d_left_riemann_rhs, d_right_riemann_rhs, 
                     d_elem_s1, d_elem_s2, d_elem_s3, 
                     d_left_elem, d_J, dt, n_p, num_sides, num_elem);
-        cudaThreadSynchronize();
     }
 }

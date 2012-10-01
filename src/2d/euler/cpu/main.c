@@ -1,7 +1,6 @@
 #include "euler.c"
 
 int main(int argc, char *argv[]) {
-    checkCudaError("error before start.");
     int num_elem, num_sides;
     int n_threads, n_blocks_elem, n_blocks_reduction, n_blocks_sides;
     int i, n, n_p, timesteps, n_quad, n_quad1d;
@@ -35,17 +34,6 @@ int main(int argc, char *argv[]) {
 
     double *Uu1, *Uu2, *Uu3;
     double *Uv1, *Uv2, *Uv3;
-
-    void (*eval_rho_ftn)(double*, double*, double*, double*, int, int) = NULL;
-    void (*eval_u_ftn)(double*, double*, double*, double*, int, int) = NULL;
-    void (*eval_v_ftn)(double*, double*, double*, double*, int, int) = NULL;
-    void (*eval_E_ftn)(double*, double*, double*, double*, int, int) = NULL;
-    void (*eval_error_ftn)(double*, 
-                       double*, double*,
-                       double*, double*,
-                       double*, double*,
-                       double*, double*, double*, 
-                       int, int, double, int) = NULL;
 
     // get input 
     endtime = -1;
@@ -119,15 +107,13 @@ int main(int argc, char *argv[]) {
              elem_s1, elem_s2, elem_s3,
              left_elem, right_elem);
 
-    checkCudaError("error after gpu init.");
     n_threads          = 256;
     n_blocks_elem      = (num_elem  / n_threads) + ((num_elem  % n_threads) ? 1 : 0);
     n_blocks_sides     = (num_sides / n_threads) + ((num_sides % n_threads) ? 1 : 0);
     n_blocks_reduction = (num_elem  / 256) + ((num_elem  % 256) ? 1 : 0);
 
     // find the min inscribed circle
-    preval_inscribed_circles<<<n_blocks_elem, n_threads>>>
-                (d_J, d_V1x, d_V1y, d_V2x, d_V2y, d_V3x, d_V3y, num_elem);
+    preval_inscribed_circles(d_J, d_V1x, d_V1y, d_V2x, d_V2y, d_V3x, d_V3y, num_elem);
     min_radius = (double *) malloc(num_elem * sizeof(double));
 
     /*
@@ -150,7 +136,7 @@ int main(int argc, char *argv[]) {
         */
         // just grab all the radii and sort them since there are so few of them
         min_radius = (double *) malloc(num_elem * sizeof(double));
-        cudaMemcpy(min_radius, d_J, num_elem * sizeof(double), cudaMemcpyDeviceToHost);
+        memcpy(min_radius, d_J, num_elem * sizeof(double));
         min_r = min_radius[0];
         for (i = 1; i < num_elem; i++) {
             min_r = (min_radius[i] < min_r) ? min_radius[i] : min_r;
@@ -159,34 +145,29 @@ int main(int argc, char *argv[]) {
     //}
 
     // pre computations
-    preval_jacobian<<<n_blocks_elem, n_threads>>>(d_J, d_V1x, d_V1y, d_V2x, d_V2y, d_V3x, d_V3y, num_elem); 
-    checkCudaError("error after preval_jacobian.");
+    preval_jacobian(d_J, d_V1x, d_V1y, d_V2x, d_V2y, d_V3x, d_V3y, num_elem); 
 
-    cudaThreadSynchronize();
-
-    preval_side_length<<<n_blocks_sides, n_threads>>>(d_s_length, d_s_V1x, d_s_V1y, d_s_V2x, d_s_V2y, 
+    preval_side_length(d_s_length, d_s_V1x, d_s_V1y, d_s_V2x, d_s_V2y, 
                                                       num_sides); 
     //cudaThreadSynchronize();
-    preval_normals<<<n_blocks_sides, n_threads>>>(d_Nx, d_Ny, 
-                                                  d_s_V1x, d_s_V1y, d_s_V2x, d_s_V2y,
-                                                  d_V1x, d_V1y, 
-                                                  d_V2x, d_V2y, 
-                                                  d_V3x, d_V3y, 
-                                                  d_left_side_number, num_sides); 
-    cudaThreadSynchronize();
-    preval_normals_direction<<<n_blocks_sides, n_threads>>>(d_Nx, d_Ny, 
-                                                  d_V1x, d_V1y, 
-                                                  d_V2x, d_V2y, 
-                                                  d_V3x, d_V3y, 
-                                                  d_left_elem, d_left_side_number, num_sides); 
+    preval_normals(d_Nx, d_Ny, 
+                   d_s_V1x, d_s_V1y, d_s_V2x, d_s_V2y,
+                   d_V1x, d_V1y, 
+                   d_V2x, d_V2y, 
+                   d_V3x, d_V3y, 
+                   d_left_side_number, num_sides); 
 
-    preval_partials<<<n_blocks_elem, n_threads>>>(d_V1x, d_V1y,
-                                                  d_V2x, d_V2y,
-                                                  d_V3x, d_V3y,
-                                                  d_xr,  d_yr,
-                                                  d_xs,  d_ys, num_elem);
-    cudaThreadSynchronize();
-    checkCudaError("error after prevals.");
+    preval_normals_direction(d_Nx, d_Ny, 
+                             d_V1x, d_V1y, 
+                             d_V2x, d_V2y, 
+                             d_V3x, d_V3y, 
+                             d_left_elem, d_left_side_number, num_sides); 
+
+    preval_partials(d_V1x, d_V1y,
+                    d_V2x, d_V2y,
+                    d_V3x, d_V3y,
+                    d_xr,  d_yr,
+                    d_xs,  d_ys, num_elem);
 
     // get the correct quadrature rules for this scheme
     set_quadrature(n, &r1_local, &r2_local, &w_local, 
@@ -194,12 +175,10 @@ int main(int argc, char *argv[]) {
 
     // evaluate the basis functions at those points and store on GPU
     preval_basis(r1_local, r2_local, s_r, w_local, oned_w_local, n_quad, n_quad1d, n_p);
-    cudaThreadSynchronize();
 
     // initial conditions
-    init_conditions<<<n_blocks_elem, n_threads>>>(d_c, d_J, d_V1x, d_V1y, d_V2x, d_V2y, d_V3x, d_V3y,
+    init_conditions(d_c, d_J, d_V1x, d_V1y, d_V2x, d_V2y, d_V3x, d_V3y,
                     n_quad, n_p, num_elem);
-    checkCudaError("error after initial conditions.");
 
     printf("Computing...\n");
     printf(" ? %i degree polynomial interpolation (n_p = %i)\n", n, n_p);
@@ -208,8 +187,6 @@ int main(int argc, char *argv[]) {
     printf(" ? %i sides\n", num_sides);
     printf(" ? min radius = %lf\n", min_r);
     printf(" ? endtime = %lf\n", endtime);
-
-    checkCudaError("error before time integration.");
 
     time_integrate_rk4(n_quad, n_quad1d, n_p, n, num_elem, num_sides, endtime, min_r);
 
@@ -223,29 +200,29 @@ int main(int argc, char *argv[]) {
     Uv3 = (double *) malloc(num_elem * sizeof(double));
 
     // evaluate rho and write to file 
-    eval_rho_ftn<<<n_blocks_elem, n_threads>>>(d_c, d_Uv1, d_Uv2, d_Uv3, num_elem, n_p);
-    cudaMemcpy(Uv1, d_Uv1, num_elem * sizeof(double), cudaMemcpyDeviceToHost);
-    cudaMemcpy(Uv2, d_Uv2, num_elem * sizeof(double), cudaMemcpyDeviceToHost);
-    cudaMemcpy(Uv3, d_Uv3, num_elem * sizeof(double), cudaMemcpyDeviceToHost);
+    eval_u(d_c, d_Uv1, d_Uv2, d_Uv3, num_elem, n_p, 0);
+    memcpy(Uv1, d_Uv1, num_elem * sizeof(double));
+    memcpy(Uv2, d_Uv2, num_elem * sizeof(double));
+    memcpy(Uv3, d_Uv3, num_elem * sizeof(double));
     out_file  = fopen(rho_out_filename , "w");
     fprintf(out_file, "View \"Density \" {\n");
     for (i = 0; i < num_elem; i++) {
         fprintf(out_file, "ST (%lf,%lf,0,%lf,%lf,0,%lf,%lf,0) {%lf,%lf,%lf};\n", 
                                V1x[i], V1y[i], V2x[i], V2y[i], V3x[i], V3y[i],
-                               Uv1[i], Uv2[i], Uv3[i]);
+                               d_Uv1[i], d_Uv2[i], d_Uv3[i]);
     }
     fprintf(out_file,"};");
     fclose(out_file);
 
     // evaluate the u and v vectors and write to file
-    eval_u_ftn<<<n_blocks_elem, n_threads>>>(d_c, d_Uv1, d_Uv2, d_Uv3, num_elem, n_p);
-    cudaMemcpy(Uu1, d_Uv1, num_elem * sizeof(double), cudaMemcpyDeviceToHost);
-    cudaMemcpy(Uu2, d_Uv2, num_elem * sizeof(double), cudaMemcpyDeviceToHost);
-    cudaMemcpy(Uu3, d_Uv3, num_elem * sizeof(double), cudaMemcpyDeviceToHost);
-    eval_v_ftn<<<n_blocks_elem, n_threads>>>(d_c, d_Uv1, d_Uv2, d_Uv3, num_elem, n_p);
-    cudaMemcpy(Uv1, d_Uv1, num_elem * sizeof(double), cudaMemcpyDeviceToHost);
-    cudaMemcpy(Uv2, d_Uv2, num_elem * sizeof(double), cudaMemcpyDeviceToHost);
-    cudaMemcpy(Uv3, d_Uv3, num_elem * sizeof(double), cudaMemcpyDeviceToHost);
+    eval_u_velocity(d_c, d_Uv1, d_Uv2, d_Uv3, num_elem, n_p, 1);
+    memcpy(Uu1, d_Uv1, num_elem * sizeof(double));
+    memcpy(Uu2, d_Uv2, num_elem * sizeof(double));
+    memcpy(Uu3, d_Uv3, num_elem * sizeof(double));
+    eval_u_velocity(d_c, d_Uv1, d_Uv2, d_Uv3, num_elem, n_p, 2);
+    memcpy(Uv1, d_Uv1, num_elem * sizeof(double));
+    memcpy(Uv2, d_Uv2, num_elem * sizeof(double));
+    memcpy(Uv3, d_Uv3, num_elem * sizeof(double));
     out_file  = fopen(u_out_filename , "w");
     fprintf(out_file, "View \"u \" {\n");
     for (i = 0; i < num_elem; i++) {
@@ -257,10 +234,10 @@ int main(int argc, char *argv[]) {
     fclose(out_file);
 
     // evaluate E and write to file
-    eval_E_ftn<<<n_blocks_elem, n_threads>>>(d_c, d_Uv1, d_Uv2, d_Uv3, num_elem, n_p);
-    cudaMemcpy(Uv1, d_Uv1, num_elem * sizeof(double), cudaMemcpyDeviceToHost);
-    cudaMemcpy(Uv2, d_Uv2, num_elem * sizeof(double), cudaMemcpyDeviceToHost);
-    cudaMemcpy(Uv3, d_Uv3, num_elem * sizeof(double), cudaMemcpyDeviceToHost);
+    eval_u(d_c, d_Uv1, d_Uv2, d_Uv3, num_elem, n_p, 3);
+    memcpy(Uv1, d_Uv1, num_elem * sizeof(double));
+    memcpy(Uv2, d_Uv2, num_elem * sizeof(double));
+    memcpy(Uv3, d_Uv3, num_elem * sizeof(double));
     out_file  = fopen(E_out_filename , "w");
     fprintf(out_file, "View \"E \" {\n");
     for (i = 0; i < num_elem; i++) {
@@ -307,7 +284,6 @@ int main(int argc, char *argv[]) {
     free(w_local);
     free(s_r);
     free(oned_w_local);
-
 
     return 0;
 }

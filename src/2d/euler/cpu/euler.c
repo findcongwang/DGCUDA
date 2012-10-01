@@ -1,10 +1,11 @@
-#include<math.h>
+#include <math.h>
 #include <stdio.h>
+#include <string.h>
 #include <stdlib.h>
 #include "euler_kernels.c"
 #include "time_integrator_euler.c"
-#include "../../quadrature.cu"
-#include "../../basis.cu"
+#include "quadrature.c"
+#include "basis.c"
 
 /* 2dadvec_euler.cu
  * 
@@ -299,8 +300,6 @@ void init_gpu(int num_elem, int num_sides, int n_p,
               int *left_elem, int *right_elem) {
     int reduction_size = (num_elem  / 256) + ((num_elem  % 256) ? 1 : 0);
 
-    cudaDeviceReset();
-
     d_c = (double *) malloc(4 * num_elem * n_p * sizeof(double)); 
     d_quad_rhs = (double *) malloc(4 * num_elem * n_p * sizeof(double));
     d_left_riemann_rhs = (double *) malloc(4 * num_sides * n_p * sizeof(double));
@@ -312,10 +311,10 @@ void init_gpu(int num_elem, int num_sides, int n_p,
     d_k3    = (double *) malloc(4 * num_elem * n_p * sizeof(double));
     d_k4    = (double *) malloc(4 * num_elem * n_p * sizeof(double));
 
-    d_J = (double *) malloc(num_elem * sizeof(double));
-    d_lambda = (double *) malloc(num_elem * sizeof(double));
+    d_J         = (double *) malloc(num_elem * sizeof(double));
+    d_lambda    = (double *) malloc(num_elem * sizeof(double));
     d_reduction = (double *) malloc(reduction_size * sizeof(double));
-    d_s_length = (double *) malloc(num_sides * sizeof(double));
+    d_s_length  = (double *) malloc(num_sides * sizeof(double));
 
     d_s_V1x = (double *) malloc(num_sides * sizeof(double));
     d_s_V2x = (double *) malloc(num_sides * sizeof(double));
@@ -342,7 +341,7 @@ void init_gpu(int num_elem, int num_sides, int n_p,
     d_xs = (double *) malloc(num_elem * sizeof(double));
     d_ys = (double *) malloc(num_elem * sizeof(double));
 
-    d_left_side_number = (int *) malloc(num_sides * sizeof(int));
+    d_left_side_number  = (int *) malloc(num_sides * sizeof(int));
     d_right_side_number = (int *) malloc( num_sides * sizeof(int));
 
     d_Nx = (double *) malloc(num_sides * sizeof(double));
@@ -376,61 +375,61 @@ void init_gpu(int num_elem, int num_sides, int n_p,
 }
 
 void free_gpu() {
-    cudaFree(d_c);
-    cudaFree(d_quad_rhs);
-    cudaFree(d_left_riemann_rhs);
-    cudaFree(d_right_riemann_rhs);
+    free(d_c);
+    free(d_quad_rhs);
+    free(d_left_riemann_rhs);
+    free(d_right_riemann_rhs);
 
-    cudaFree(d_kstar);
-    cudaFree(d_k1);
-    cudaFree(d_k2);
-    cudaFree(d_k3);
-    cudaFree(d_k4);
+    free(d_kstar);
+    free(d_k1);
+    free(d_k2);
+    free(d_k3);
+    free(d_k4);
 
-    cudaFree(d_J);
-    cudaFree(d_lambda);
-    cudaFree(d_reduction);
-    cudaFree(d_s_length);
+    free(d_J);
+    free(d_lambda);
+    free(d_reduction);
+    free(d_s_length);
 
-    cudaFree(d_s_V1x);
-    cudaFree(d_s_V2x);
-    cudaFree(d_s_V1y);
-    cudaFree(d_s_V2y);
+    free(d_s_V1x);
+    free(d_s_V2x);
+    free(d_s_V1y);
+    free(d_s_V2y);
 
-    cudaFree(d_elem_s1);
-    cudaFree(d_elem_s2);
-    cudaFree(d_elem_s3);
+    free(d_elem_s1);
+    free(d_elem_s2);
+    free(d_elem_s3);
 
-    cudaFree(d_Uv1);
-    cudaFree(d_Uv2);
-    cudaFree(d_Uv3);
+    free(d_Uv1);
+    free(d_Uv2);
+    free(d_Uv3);
 
-    cudaFree(d_V1x);
-    cudaFree(d_V1y);
-    cudaFree(d_V2x);
-    cudaFree(d_V2y);
-    cudaFree(d_V3x);
-    cudaFree(d_V3y);
+    free(d_V1x);
+    free(d_V1y);
+    free(d_V2x);
+    free(d_V2y);
+    free(d_V3x);
+    free(d_V3y);
 
-    cudaFree(d_xr);
-    cudaFree(d_yr);
-    cudaFree(d_xs);
-    cudaFree(d_ys);
+    free(d_xr);
+    free(d_yr);
+    free(d_xs);
+    free(d_ys);
 
-    cudaFree(d_left_side_number);
-    cudaFree(d_right_side_number);
+    free(d_left_side_number);
+    free(d_right_side_number);
 
-    cudaFree(d_Nx);
-    cudaFree(d_Ny);
+    free(d_Nx);
+    free(d_Ny);
 
-    cudaFree(d_right_elem);
-    cudaFree(d_left_elem);
+    free(d_right_elem);
+    free(d_left_elem);
 }
 
 void usage_error() {
-    printf("\nUsage: dgcuda [OPTIONS] [MESH] [OUTFILE]\n");
+    printf("\nUsage: cpueuler [OPTIONS] [MESH] [OUTFILE]\n");
     printf(" Options: [-n] Order of polynomial approximation.\n");
-    printf("          [-t] Number of timesteps.\n");
+    printf("          [-T] End time.\n");
     printf("          [-d] Debug.\n");
 }
 
