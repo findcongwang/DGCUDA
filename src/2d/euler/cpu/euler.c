@@ -1,10 +1,10 @@
+#include<math.h>
 #include <stdio.h>
 #include <stdlib.h>
-#include "euler_kernels.cu"
-#include "euler_kernels_wrappers.cu"
-#include "time_integrator_euler.cu"
-#include "../quadrature.cu"
-#include "../basis.cu"
+#include "euler_kernels.c"
+#include "time_integrator_euler.c"
+#include "../../quadrature.cu"
+#include "../../basis.cu"
 
 /* 2dadvec_euler.cu
  * 
@@ -86,15 +86,6 @@ void set_quadrature(int n,
     for (i = 0; i < *n_quad1d; i++) {
         (*s_r)[i] = quad_1d[n][2*i];
         (*oned_w_local)[i] = quad_1d[n][2*i+1];
-    }
-}
-
-void checkCudaError(const char *message)
-{
-    cudaError_t error = cudaGetLastError();
-    if(error!=cudaSuccess) {
-        fprintf(stderr,"ERROR: %s: %s\n", message, cudaGetErrorString(error) );
-        exit(-1);
     }
 }
 
@@ -308,82 +299,80 @@ void init_gpu(int num_elem, int num_sides, int n_p,
               int *left_elem, int *right_elem) {
     int reduction_size = (num_elem  / 256) + ((num_elem  % 256) ? 1 : 0);
 
-    checkCudaError("error before init.");
     cudaDeviceReset();
 
-    cudaMalloc((void **) &d_c,        4 * num_elem * n_p * sizeof(double));
-    cudaMalloc((void **) &d_quad_rhs, 4 * num_elem * n_p * sizeof(double));
-    cudaMalloc((void **) &d_left_riemann_rhs,  4 * num_sides * n_p * sizeof(double));
-    cudaMalloc((void **) &d_right_riemann_rhs, 4 * num_sides * n_p * sizeof(double));
+    d_c = (double *) malloc(4 * num_elem * n_p * sizeof(double)); 
+    d_quad_rhs = (double *) malloc(4 * num_elem * n_p * sizeof(double));
+    d_left_riemann_rhs = (double *) malloc(4 * num_sides * n_p * sizeof(double));
+    d_right_riemann_rhs = (double *) malloc(4 * num_sides * n_p * sizeof(double));
 
-    cudaMalloc((void **) &d_kstar, 4 * num_elem * n_p * sizeof(double));
-    cudaMalloc((void **) &d_k1, 4 * num_elem * n_p * sizeof(double));
-    cudaMalloc((void **) &d_k2, 4 * num_elem * n_p * sizeof(double));
-    cudaMalloc((void **) &d_k3, 4 * num_elem * n_p * sizeof(double));
-    cudaMalloc((void **) &d_k4, 4 * num_elem * n_p * sizeof(double));
+    d_kstar = (double *) malloc(4 * num_elem * n_p * sizeof(double));
+    d_k1    = (double *) malloc(4 * num_elem * n_p * sizeof(double));
+    d_k2    = (double *) malloc(4 * num_elem * n_p * sizeof(double));
+    d_k3    = (double *) malloc(4 * num_elem * n_p * sizeof(double));
+    d_k4    = (double *) malloc(4 * num_elem * n_p * sizeof(double));
 
-    cudaMalloc((void **) &d_J        , num_elem * sizeof(double));
-    cudaMalloc((void **) &d_lambda   , num_elem * sizeof(double));
-    cudaMalloc((void **) &d_reduction, reduction_size * sizeof(double));
-    cudaMalloc((void **) &d_s_length , num_sides * sizeof(double));
+    d_J = (double *) malloc(num_elem * sizeof(double));
+    d_lambda = (double *) malloc(num_elem * sizeof(double));
+    d_reduction = (double *) malloc(reduction_size * sizeof(double));
+    d_s_length = (double *) malloc(num_sides * sizeof(double));
 
-    cudaMalloc((void **) &d_s_V1x, num_sides * sizeof(double));
-    cudaMalloc((void **) &d_s_V2x, num_sides * sizeof(double));
-    cudaMalloc((void **) &d_s_V1y, num_sides * sizeof(double));
-    cudaMalloc((void **) &d_s_V2y, num_sides * sizeof(double));
+    d_s_V1x = (double *) malloc(num_sides * sizeof(double));
+    d_s_V2x = (double *) malloc(num_sides * sizeof(double));
+    d_s_V1y = (double *) malloc(num_sides * sizeof(double));
+    d_s_V2y = (double *) malloc(num_sides * sizeof(double));
 
-    cudaMalloc((void **) &d_elem_s1, num_elem * sizeof(int));
-    cudaMalloc((void **) &d_elem_s2, num_elem * sizeof(int));
-    cudaMalloc((void **) &d_elem_s3, num_elem * sizeof(int));
+    d_elem_s1 = (int *) malloc(num_elem * sizeof(int));
+    d_elem_s2 = (int *) malloc(num_elem * sizeof(int));
+    d_elem_s3 = (int *) malloc(num_elem * sizeof(int));
 
-    cudaMalloc((void **) &d_Uv1, num_elem * sizeof(double));
-    cudaMalloc((void **) &d_Uv2, num_elem * sizeof(double));
-    cudaMalloc((void **) &d_Uv3, num_elem * sizeof(double));
+    d_Uv1 = (double *) malloc(num_elem * sizeof(double));
+    d_Uv2 = (double *) malloc(num_elem * sizeof(double));
+    d_Uv3 = (double *) malloc(num_elem * sizeof(double));
 
-    cudaMalloc((void **) &d_V1x, num_elem * sizeof(double));
-    cudaMalloc((void **) &d_V1y, num_elem * sizeof(double));
-    cudaMalloc((void **) &d_V2x, num_elem * sizeof(double));
-    cudaMalloc((void **) &d_V2y, num_elem * sizeof(double));
-    cudaMalloc((void **) &d_V3x, num_elem * sizeof(double));
-    cudaMalloc((void **) &d_V3y, num_elem * sizeof(double));
+    d_V1x = (double *) malloc(num_elem * sizeof(double));
+    d_V1y = (double *) malloc(num_elem * sizeof(double));
+    d_V2x = (double *) malloc(num_elem * sizeof(double));
+    d_V2y = (double *) malloc(num_elem * sizeof(double));
+    d_V3x = (double *) malloc(num_elem * sizeof(double));
+    d_V3y = (double *) malloc(num_elem * sizeof(double));
 
-    cudaMalloc((void **) &d_xr, num_elem * sizeof(double));
-    cudaMalloc((void **) &d_yr, num_elem * sizeof(double));
-    cudaMalloc((void **) &d_xs, num_elem * sizeof(double));
-    cudaMalloc((void **) &d_ys, num_elem * sizeof(double));
+    d_xr = (double *) malloc(num_elem * sizeof(double));
+    d_yr = (double *) malloc(num_elem * sizeof(double));
+    d_xs = (double *) malloc(num_elem * sizeof(double));
+    d_ys = (double *) malloc(num_elem * sizeof(double));
 
-    cudaMalloc((void **) &d_left_side_number , num_sides * sizeof(int));
-    cudaMalloc((void **) &d_right_side_number, num_sides * sizeof(int));
+    d_left_side_number = (int *) malloc(num_sides * sizeof(int));
+    d_right_side_number = (int *) malloc( num_sides * sizeof(int));
 
-    cudaMalloc((void **) &d_Nx, num_sides * sizeof(double));
-    cudaMalloc((void **) &d_Ny, num_sides * sizeof(double));
+    d_Nx = (double *) malloc(num_sides * sizeof(double));
+    d_Ny = (double *) malloc(num_sides * sizeof(double));
 
-    cudaMalloc((void **) &d_right_elem, num_sides * sizeof(int));
-    cudaMalloc((void **) &d_left_elem , num_sides * sizeof(int));
+    d_right_elem = (int *) malloc(num_sides * sizeof(int));
+    d_left_elem  = (int *) malloc(num_sides * sizeof(int));
 
     // copy over data
-    cudaMemcpy(d_s_V1x, sides_x1, num_sides * sizeof(double), cudaMemcpyHostToDevice);
-    cudaMemcpy(d_s_V1y, sides_y1, num_sides * sizeof(double), cudaMemcpyHostToDevice);
-    cudaMemcpy(d_s_V2x, sides_x2, num_sides * sizeof(double), cudaMemcpyHostToDevice);
-    cudaMemcpy(d_s_V2y, sides_y2, num_sides * sizeof(double), cudaMemcpyHostToDevice);
+    memcpy(d_s_V1x, sides_x1, num_sides * sizeof(double));
+    memcpy(d_s_V1y, sides_y1, num_sides * sizeof(double));
+    memcpy(d_s_V2x, sides_x2, num_sides * sizeof(double));
+    memcpy(d_s_V2y, sides_y2, num_sides * sizeof(double));
 
-    cudaMemcpy(d_left_side_number , left_side_number , num_sides * sizeof(int), cudaMemcpyHostToDevice);
-    cudaMemcpy(d_right_side_number, right_side_number, num_sides * sizeof(int), cudaMemcpyHostToDevice);
+    memcpy(d_left_side_number , left_side_number , num_sides * sizeof(int));
+    memcpy(d_right_side_number, right_side_number, num_sides * sizeof(int));
 
-    cudaMemcpy(d_elem_s1, elem_s1, num_elem * sizeof(int), cudaMemcpyHostToDevice);
-    cudaMemcpy(d_elem_s2, elem_s2, num_elem * sizeof(int), cudaMemcpyHostToDevice);
-    cudaMemcpy(d_elem_s3, elem_s3, num_elem * sizeof(int), cudaMemcpyHostToDevice);
-    checkCudaError("error inside gpu init.");
+    memcpy(d_elem_s1, elem_s1, num_elem * sizeof(int));
+    memcpy(d_elem_s2, elem_s2, num_elem * sizeof(int));
+    memcpy(d_elem_s3, elem_s3, num_elem * sizeof(int));
 
-    cudaMemcpy(d_V1x, V1x, num_elem * sizeof(double), cudaMemcpyHostToDevice);
-    cudaMemcpy(d_V1y, V1y, num_elem * sizeof(double), cudaMemcpyHostToDevice);
-    cudaMemcpy(d_V2x, V2x, num_elem * sizeof(double), cudaMemcpyHostToDevice);
-    cudaMemcpy(d_V2y, V2y, num_elem * sizeof(double), cudaMemcpyHostToDevice);
-    cudaMemcpy(d_V3x, V3x, num_elem * sizeof(double), cudaMemcpyHostToDevice);
-    cudaMemcpy(d_V3y, V3y, num_elem * sizeof(double), cudaMemcpyHostToDevice);
+    memcpy(d_V1x, V1x, num_elem * sizeof(double));
+    memcpy(d_V1y, V1y, num_elem * sizeof(double));
+    memcpy(d_V2x, V2x, num_elem * sizeof(double));
+    memcpy(d_V2y, V2y, num_elem * sizeof(double));
+    memcpy(d_V3x, V3x, num_elem * sizeof(double));
+    memcpy(d_V3y, V3y, num_elem * sizeof(double));
 
-    cudaMemcpy(d_left_elem , left_elem , num_sides * sizeof(int), cudaMemcpyHostToDevice);
-    cudaMemcpy(d_right_elem, right_elem, num_sides * sizeof(int), cudaMemcpyHostToDevice);
+    memcpy(d_left_elem , left_elem , num_sides * sizeof(int));
+    memcpy(d_right_elem, right_elem, num_sides * sizeof(int));
 }
 
 void free_gpu() {

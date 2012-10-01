@@ -1,4 +1,4 @@
-#include "euler.cu"
+#include "euler.c"
 
 int main(int argc, char *argv[]) {
     checkCudaError("error before start.");
@@ -70,41 +70,6 @@ int main(int argc, char *argv[]) {
     }
     fgets(line, 100, mesh_file);
     sscanf(line, "%i", &num_elem);
-
-    // get the correct functions for this scheme
-    switch (n) {
-        case 0: eval_rho_ftn = eval_rho_wrapper0;
-                eval_u_ftn = eval_u_wrapper0;
-                eval_v_ftn = eval_v_wrapper0;
-                eval_E_ftn = eval_E_wrapper0;
-                break;
-        case 1: eval_rho_ftn = eval_rho_wrapper1;
-                eval_u_ftn = eval_u_wrapper1;
-                eval_v_ftn = eval_v_wrapper1;
-                eval_E_ftn = eval_E_wrapper1;
-                break;
-        case 2: eval_rho_ftn = eval_rho_wrapper2;
-                eval_u_ftn = eval_u_wrapper2;
-                eval_v_ftn = eval_v_wrapper2;
-                eval_E_ftn = eval_E_wrapper2;
-                break;
-        case 3: eval_rho_ftn = eval_rho_wrapper3;
-                eval_u_ftn = eval_u_wrapper3;
-                eval_v_ftn = eval_v_wrapper3;
-                eval_E_ftn = eval_E_wrapper3;
-                break;
-        case 4: eval_rho_ftn = eval_rho_wrapper4;
-                eval_u_ftn = eval_u_wrapper4;
-                eval_v_ftn = eval_v_wrapper4;
-                eval_E_ftn = eval_E_wrapper4;
-                break;
-        case 5: eval_rho_ftn = eval_rho_wrapper5;
-                eval_u_ftn = eval_u_wrapper5;
-                eval_v_ftn = eval_v_wrapper5;
-                eval_E_ftn = eval_E_wrapper5;
-                break;
-    }
-
 
     // allocate vertex points
     V1x = (double *) malloc(num_elem * sizeof(double));

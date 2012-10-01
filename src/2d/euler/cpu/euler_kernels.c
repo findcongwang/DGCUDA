@@ -202,23 +202,23 @@ void reflecting_boundary(double rho_left, double *rho_right,
 }
 
 void outflow_boundary(double rho_left, double *rho_right,
-                                 double u_left,   double *u_right,
-                                 double v_left,   double *v_right,
-                                 double E_left,   double *E_right,
-                                 double nx,       double ny) {
+                      double u_left,   double *u_right,
+                      double v_left,   double *v_right,
+                      double E_left,   double *E_right,
+                      double nx,       double ny) {
     // make the flow move along the normal outside the cell so we don't introduce any new flow
     *rho_right = rho_left;
-    *u_right   = -u_left * nx; //TODO: is this right? it just sort of worked...
-    *v_right   = -v_left * ny; //TODO: is this right? it just sort of worked...
+    *u_right   = -u_left * nx; //TODO: this doesn't work
+    *v_right   = -v_left * ny; //TODO: this doesn't work
     *E_right   = E_left;
 }
 
 void inflow_boundary(double *rho_right, double *u_right, double *v_right, double *E_right,
-                                double v1x, double v1y, 
-                                double v2x, double v2y,
-                                double v3x, double v3y,
-                                int j,
-                                int left_side, int n_quad1d) {
+                     double v1x, double v1y, 
+                     double v2x, double v2y,
+                     double v3x, double v3y,
+                     int j,
+                     int left_side, int n_quad1d) {
 
     double r1_eval, r2_eval;
     double x, y;
@@ -249,29 +249,20 @@ void inflow_boundary(double *rho_right, double *u_right, double *v_right, double
     *E_right   = E0(x, y);
 }
 
-/* u exact
- *
- * returns the exact value of u for error measurement.
- */
-double uexact(double x, double y, double t) {
-    return u0(x, y);
-}
-
 /* initial conditions
  *
  * computes the coefficients for the initial conditions
  * THREADS: num_elem
  */
-__global__ void init_conditions(double *c, double *J,
-                                double *V1x, double *V1y,
-                                double *V2x, double *V2y,
-                                double *V3x, double *V3y,
-                                int n_quad, int n_p, int num_elem) {
-    int idx = blockDim.x * blockIdx.x + threadIdx.x;
-    int i, j;
+void init_conditions(double *c, double *J,
+                     double *V1x, double *V1y,
+                     double *V2x, double *V2y,
+                     double *V3x, double *V3y,
+                     int n_quad, int n_p, int num_elem) {
+    int idx, i, j;
     double x, y, rho, u, v, E;
 
-    if (idx < num_elem) {
+    for (idx = 0; idx < num_elem; idx++) {
         for (i = 0; i < n_p; i++) {
             rho = 0.;
             u   = 0.;
@@ -299,144 +290,6 @@ __global__ void init_conditions(double *c, double *J,
     }
 }
 
-/* min reduction function
- *
- * returns the min value from the global data J and stores in min_J
- * each block computes the min jacobian inside of that block and stores it in the
- * blockIdx.x spot of the shared min_J variable.
- * NOTE: this is fixed for 256 threads.
- */
-__global__ void min_reduction(double *D, double *min_D, int num_elem) {
-    int idx = blockDim.x * blockIdx.x + threadIdx.x;
-    int tid = threadIdx.x;
-    int i   = (blockIdx.x * 256 * 2) + threadIdx.x;
-
-    __shared__ double s_min[256];
-
-    if (idx < num_elem) {
-        // set all of min to D[idx] initially
-        s_min[tid] = D[idx];
-        __syncthreads();
-
-        // test a few
-        while (i < num_elem) {
-            s_min[tid] = (s_min[tid] < D[i]) ? s_min[tid] : D[i];
-            s_min[tid] = (s_min[tid] < D[i + 256]) ? s_min[tid] : D[i];
-            i += gridDim.x * 256 * 2;
-            __syncthreads();
-        }
-
-        // first half of the warps
-        __syncthreads();
-        if (tid < 128) {
-            s_min[tid] = (s_min[tid] < s_min[tid + 128]) ? s_min[tid] : s_min[tid + 128];
-        }
-
-        // first and second warps
-        __syncthreads();
-        if (tid < 64) {
-            s_min[tid] = (s_min[tid] < s_min[tid + 64]) ? s_min[tid] : s_min[tid + 64];
-        }
-
-        // unroll last warp
-        __syncthreads();
-        if (tid < 32) {
-            if (blockDim.x >= 64) {
-                s_min[tid] = (s_min[tid] < s_min[tid + 32]) ? s_min[tid] : s_min[tid + 32];
-            }
-            if (blockDim.x >= 32) {
-                s_min[tid] = (s_min[tid] < s_min[tid + 16]) ? s_min[tid] : s_min[tid + 16];
-            }
-            if (blockDim.x >= 16) {
-                s_min[tid] = (s_min[tid] < s_min[tid + 8]) ? s_min[tid] : s_min[tid + 8];
-            }
-            if (blockDim.x >= 8) {
-                s_min[tid] = (s_min[tid] < s_min[tid + 4]) ? s_min[tid] : s_min[tid + 4];
-            }
-            if (blockDim.x >= 4) {
-                s_min[tid] = (s_min[tid] < s_min[tid + 2]) ? s_min[tid] : s_min[tid + 2];
-            }
-            if (blockDim.x >= 2) {
-                s_min[tid] = (s_min[tid] < s_min[tid + 1]) ? s_min[tid] : s_min[tid + 1];
-            }
-        }
-
-        __syncthreads();
-        if (tid == 0) {
-            min_D[blockIdx.x] = s_min[0];
-        }
-    }
-}
-
-/* max reduction function
- *
- * returns the max value from the global data D and stores in max
- * each block computes the max jacobian inside of that block and stores it in the
- * blockIdx.x spot of the shared max variable.
- * NOTE: this is fixed for 256 threads.
- */
-__global__ void max_reduction(double *D, double *max_D, int num_elem) {
-    int idx = blockDim.x * blockIdx.x + threadIdx.x;
-    int tid = threadIdx.x;
-    int i   = (blockIdx.x * 256 * 2) + threadIdx.x;
-
-    __shared__ double s_max[256];
-
-    if (idx < num_elem) {
-        // set all of max to D[idx] initially
-        s_max[tid] = D[idx];
-        __syncthreads();
-
-        // test a few
-        while (i + 256 < num_elem) {
-            s_max[tid] = (s_max[tid] > D[i]) ? s_max[tid] : D[i];
-            s_max[tid] = (s_max[tid] > D[i + 256]) ? s_max[tid] : D[i];
-            i += gridDim.x * 256 * 2;
-            __syncthreads();
-        }
-
-        // first half of the warps
-        __syncthreads();
-        if (tid < 128) {
-            s_max[tid] = (s_max[tid] > s_max[tid + 128]) ? s_max[tid] : s_max[tid + 128];
-        }
-
-        // first and second warps
-        __syncthreads();
-        if (tid < 64) {
-            s_max[tid] = (s_max[tid] > s_max[tid + 64]) ? s_max[tid] : s_max[tid + 64];
-        }
-
-        // unroll last warp
-        __syncthreads();
-        if (tid < 32) {
-            if (blockDim.x >= 64) {
-                s_max[tid] = (s_max[tid] > s_max[tid + 32]) ? s_max[tid] : s_max[tid + 32];
-            }
-            if (blockDim.x >= 32) {
-                s_max[tid] = (s_max[tid] > s_max[tid + 16]) ? s_max[tid] : s_max[tid + 16];
-            }
-            if (blockDim.x >= 16) {
-                s_max[tid] = (s_max[tid] > s_max[tid + 8]) ? s_max[tid] : s_max[tid + 8];
-            }
-            if (blockDim.x >= 8) {
-                s_max[tid] = (s_max[tid] > s_max[tid + 4]) ? s_max[tid] : s_max[tid + 4];
-            }
-            if (blockDim.x >= 4) {
-                s_max[tid] = (s_max[tid] > s_max[tid + 2]) ? s_max[tid] : s_max[tid + 2];
-            }
-            if (blockDim.x >= 2) {
-                s_max[tid] = (s_max[tid] > s_max[tid + 1]) ? s_max[tid] : s_max[tid + 1];
-            }
-        }
-
-        __syncthreads();
-        if (tid == 0) {
-            max_D[blockIdx.x] = s_max[0];
-        }
-    }
-}
-
 /***********************
  *
  * PRECOMPUTING
@@ -448,13 +301,13 @@ __global__ void max_reduction(double *D, double *max_D, int num_elem) {
  * precomputes the length of each side.
  * THREADS: num_sides
  */ 
-__global__ void preval_side_length(double *s_length, 
-                              double *s_V1x, double *s_V1y, 
-                              double *s_V2x, double *s_V2y,
-                              int num_sides) {
-    int idx = blockDim.x * blockIdx.x + threadIdx.x;
+void preval_side_length(double *s_length, 
+                        double *s_V1x, double *s_V1y, 
+                        double *s_V2x, double *s_V2y,
+                        int num_sides) {
+    int idx;
 
-    if (idx < num_sides) {
+    for (idx = 0; idx < num_sides; idx++) {
         // compute and store the length of the side
         s_length[idx] = sqrtf(powf(s_V1x[idx] - s_V2x[idx],2) + powf(s_V1y[idx] - s_V2y[idx],2));
     }
@@ -465,14 +318,15 @@ __global__ void preval_side_length(double *s_length,
  * computes the radius of each inscribed circle. stores in d_J to find the minumum,
  * then we reuse d_J.
  */
-__global__ void preval_inscribed_circles(double *J,
-                                    double *V1x, double *V1y,
-                                    double *V2x, double *V2y,
-                                    double *V3x, double *V3y,
-                                    int num_elem) {
-    int idx = blockDim.x * blockIdx.x + threadIdx.x;
+void preval_inscribed_circles(double *J,
+                              double *V1x, double *V1y,
+                              double *V2x, double *V2y,
+                              double *V3x, double *V3y,
+                              int num_elem) {
 
-    if (idx < num_elem) {
+    int idx;
+
+    for (idx = 0; idx < num_elem; idx++) {
         double a, b, c, k;
         a = sqrtf(powf(V1x[idx] - V2x[idx], 2) + powf(V1y[idx] - V2y[idx], 2));
         b = sqrtf(powf(V2x[idx] - V3x[idx], 2) + powf(V2y[idx] - V3y[idx], 2));
@@ -490,14 +344,14 @@ __global__ void preval_inscribed_circles(double *J,
  * precomputes the jacobian determinant for each element.
  * THREADS: num_elem
  */
-__global__ void preval_jacobian(double *J, 
-                           double *V1x, double *V1y, 
-                           double *V2x, double *V2y, 
-                           double *V3x, double *V3y,
-                           int num_elem) {
-    int idx = blockDim.x * blockIdx.x + threadIdx.x;
+void preval_jacobian(double *J, 
+                     double *V1x, double *V1y, 
+                     double *V2x, double *V2y, 
+                     double *V3x, double *V3y,
+                     int num_elem) {
+    int idx;
 
-    if (idx < num_elem) {
+    for (idx = 0; idx < num_elem; idx++) {
         double x1, y1, x2, y2, x3, y3;
 
         // read vertex points
@@ -520,17 +374,17 @@ __global__ void preval_jacobian(double *J,
  * THREADS: num_sides
  *
  */
-__global__ void preval_normals(double *Nx, double *Ny, 
-                          double *s_V1x, double *s_V1y, 
-                          double *s_V2x, double *s_V2y,
-                          double *V1x, double *V1y, 
-                          double *V2x, double *V2y, 
-                          double *V3x, double *V3y,
-                          int *left_side_number, int num_sides) {
+void preval_normals(double *Nx, double *Ny, 
+                    double *s_V1x, double *s_V1y, 
+                    double *s_V2x, double *s_V2y,
+                    double *V1x, double *V1y, 
+                    double *V2x, double *V2y, 
+                    double *V3x, double *V3y,
+                    int *left_side_number, int num_sides) {
 
-    int idx = blockDim.x * blockIdx.x + threadIdx.x;
+    int idx;
 
-    if (idx < num_sides) {
+    for (idx = 0; idx < num_sides; idx++) {
         double x, y, length;
         double sv1x, sv1y, sv2x, sv2y;
     
@@ -552,15 +406,15 @@ __global__ void preval_normals(double *Nx, double *Ny,
     }
 }
 
-__global__ void preval_normals_direction(double *Nx, double *Ny, 
-                          double *V1x, double *V1y, 
-                          double *V2x, double *V2y, 
-                          double *V3x, double *V3y,
-                          int *left_elem, int *left_side_number, int num_sides) {
+void preval_normals_direction(double *Nx, double *Ny, 
+                              double *V1x, double *V1y, 
+                              double *V2x, double *V2y, 
+                              double *V3x, double *V3y,
+                              int *left_elem, int *left_side_number, int num_sides) {
 
-    int idx = blockDim.x * blockIdx.x + threadIdx.x;
+    int idx;
 
-    if (idx < num_sides) {
+    for (idx = 0; idx < num_sides; idx++) {
         double new_x, new_y, dot;
         double initial_x, initial_y, target_x, target_y;
         double x, y;
@@ -610,13 +464,13 @@ __global__ void preval_normals_direction(double *Nx, double *Ny,
     }
 }
 
-__global__ void preval_partials(double *V1x, double *V1y,
-                                double *V2x, double *V2y,
-                                double *V3x, double *V3y,
-                                double *xr,  double *yr,
-                                double *xs,  double *ys, int num_elem) {
-    int idx = blockDim.x * blockIdx.x + threadIdx.x;
-    if (idx < num_elem) {
+void preval_partials(double *V1x, double *V1y,
+                     double *V2x, double *V2y,
+                     double *V3x, double *V3y,
+                     double *xr,  double *yr,
+                     double *xs,  double *ys, int num_elem) {
+    int idx;
+    for (idx = 0; idx < num_elem; idx++) {
         // evaulate the jacobians of the mappings for the chain rule
         // x = x2 * r + x3 * s + x1 * (1 - r - s)
         xr[idx] = V2x[idx] - V1x[idx];
@@ -636,11 +490,10 @@ __global__ void preval_partials(double *V1x, double *V1y,
  *
  * the standard limiter for coefficient values
  */
-__global__ void limit_c(double *c_inner, 
-                   double *c_s1, double *c_s2, double *c_s3,
-                   int n_p, int num_elem) {
+void limit_c(double *c_inner, 
+             double *c_s1, double *c_s2, double *c_s3,
+             int n_p, int num_elem) {
 
-    //int idx = blockIdx.x * blockDim.x + threadIdx.x;
 
     // get cell averages
     //avg_inner = c_inner[0];
@@ -659,30 +512,35 @@ __global__ void limit_c(double *c_inner,
  *
  * computes the max value of |u + c|, |u|, |u - c|.
  */
-void eval_global_lambda(double *c_rho, double *c_u, double *c_v, double *c_E, double *lambda,
-                            int n_quad, int n_p, int idx) {
-    double rho, u, v, E, c;
+void eval_global_lambda(double *c, 
+                        double *lambda,
+                        int n_quad, int n_p, int num_elem) {
+    double rho, u, v, E, c_speed;
     double sum;
 
+    int idx;
+
     // get cell averages
-    rho = c_rho[0];
-    u   = c_u[0];
-    v   = c_v[0];
-    E   = c_E[0];
+    for (idx = 0; idx < num_elem; idx++) {
+        rho = c[num_elem * n_p * 0 + idx];
+        u   = c[num_elem * n_p * 1 + idx];
+        v   = c[num_elem * n_p * 2 + idx];
+        E   = c[num_elem * n_p * 3 + idx];
 
-    u = u / rho;
-    v = v / rho;
+        u = u / rho;
+        v = v / rho;
 
-    // evaluate c
-    c = eval_c(rho, u, v, E);
+        // evaluate c
+        c_speed = eval_c(rho, u, v, E);
 
-    // norm
-    sum = sqrtf(u*u + v*v);
+        // norm
+        sum = sqrtf(u*u + v*v);
 
-    if (sum > 0) {
-        lambda[idx] = sum + c;
-    } else {
-        lambda[idx] = -sum + c;
+        if (sum > 0) {
+            lambda[idx] = sum + c_speed;
+        } else {
+            lambda[idx] = -sum + c_speed;
+        }
     }
 }
 
@@ -691,20 +549,20 @@ void eval_global_lambda(double *c_rho, double *c_u, double *c_v, double *c_E, do
  * device function to solve the riemann problem.
  */
 void eval_left_right(double *c_rho_left, double *c_rho_right,
-                             double *c_u_left,   double *c_u_right,
-                             double *c_v_left,   double *c_v_right,
-                             double *c_E_left,   double *c_E_right,
-                             double *rho_left, double *u_left, double *v_left, double *E_left,
-                             double *rho_right, double *u_right, double *v_right, double *E_right,
-                             double nx, double ny,
-                             double v1x, double v1y,
-                             double v2x, double v2y,
-                             double v3x, double v3y,
-                             int j, // j, as usual, is the index of the integration point
-                             int left_side, int right_side,
-                             int left_idx, int right_idx,
-                             int n_p, int n_quad1d,
-                             int num_sides, double t) { 
+                     double *c_u_left,   double *c_u_right,
+                     double *c_v_left,   double *c_v_right,
+                     double *c_E_left,   double *c_E_right,
+                     double *rho_left, double *u_left, double *v_left, double *E_left,
+                     double *rho_right, double *u_right, double *v_right, double *E_right,
+                     double nx, double ny,
+                     double v1x, double v1y,
+                     double v2x, double v2y,
+                     double v3x, double v3y,
+                     int j, // j, as usual, is the index of the integration point
+                     int left_side, int right_side,
+                     int left_idx, int right_idx,
+                     int n_p, int n_quad1d,
+                     int num_sides, double t) { 
 
     int i;
 
@@ -819,10 +677,10 @@ void eval_left_right(double *c_rho_left, double *c_rho_right,
  *  |u - c|, |u|, |u + c|
  */
 double eval_lambda(double rho_left, double rho_right,
-                              double u_left,   double u_right,
-                              double v_left,   double v_right,
-                              double E_left,   double E_right,
-                              double nx,       double ny) {
+                   double u_left,   double u_right,
+                   double v_left,   double v_right,
+                   double E_left,   double E_right,
+                   double nx,       double ny) {
                               
     double s_left, s_right;
     double left_max, right_max;
@@ -865,10 +723,10 @@ double eval_lambda(double rho_left, double rho_right,
  * NOTE: this needs the ACTUAL values for u and v, NOT rho * u, rho * v.
  */
 void eval_flux(double rho, double u, double v, double E, 
-                     double *flux_x1, double *flux_y1,
-                     double *flux_x2, double *flux_y2,
-                     double *flux_x3, double *flux_y3,
-                     double *flux_x4, double *flux_y4) {
+               double *flux_x1, double *flux_y1,
+               double *flux_x2, double *flux_y2,
+               double *flux_x3, double *flux_y3,
+               double *flux_x4, double *flux_y4) {
 
     // evaluate pressure
     double p = pressure(rho, u, v, E);
@@ -890,19 +748,65 @@ void eval_flux(double rho, double u, double v, double E,
     *flux_y4 = v * (E + p);
 }
 
-void eval_surface(double *c_rho_left, double *c_u_left, double *c_v_left, double *c_E_left,
-                             double *c_rho_right, double *c_u_right, double *c_v_right, double *c_E_right,
-                             double *left_riemann_rhs, double *right_riemann_rhs, 
-                             double len, double J,
-                             double v1x, double v1y,
-                             double v2x, double v2y,
-                             double v3x, double v3y,
-                             int left_idx,  int right_idx,
-                             int left_side, int right_side, 
-                             double nx, double ny, 
-                             int n_quad1d, int n_quad, int n_p, int num_sides, 
-                             int num_elem, double t) {
+void eval_surface(double *c,
+                  double *left_riemann_rhs, double *right_riemann_rhs, 
+                  double *length, 
+                  double *V1x, double *V1y,
+                  double *V2x, double *V2y,
+                  double *V3x, double *V3y,
+                  int *left_idx_list,  int *right_idx_list,
+                  int *left_side_list, int *right_side_list, 
+                  double *Nx, double *Ny, 
+                  int n_quad1d, int n_quad, int n_p, int num_sides, 
+                  int num_elem, double t) {
+    int idx; 
+
+    // loop through each side
     for (idx = 0; idx < num_sides; idx++) {
+        int left_idx  = left_idx_list[idx];
+        int left_side = left_side_list[idx];
+
+        int right_idx  = right_idx_list[idx];
+        int right_side = right_side_list[idx];
+
+        double nx = Nx[idx];
+        double ny = Ny[idx];
+
+        double v1x = V1x[idx];
+        double v1y = V1y[idx];
+        double v2x = V2x[idx];
+        double v2y = V2y[idx];
+        double v3x = V3x[idx];
+        double v3y = V3y[idx];
+
+        double len = length[idx];
+
+        int n;
+
+        double c_rho_left[n_p];
+        double c_u_left[n_p];
+        double c_v_left[n_p];
+        double c_E_left[n_p];
+
+        double c_rho_right[n_p];
+        double c_u_right[n_p];
+        double c_v_right[n_p];
+        double c_E_right[n_p];
+
+        // get the coefficients for this side's element
+        for (n = 0; n < n_p; n++) {
+            c_rho_left[n] = c[num_elem * n_p * 0 + n * num_elem + left_idx];
+            c_u_left[n]   = c[num_elem * n_p * 1 + n * num_elem + left_idx];
+            c_v_left[n]   = c[num_elem * n_p * 2 + n * num_elem + left_idx];
+            c_E_left[n]   = c[num_elem * n_p * 3 + n * num_elem + left_idx];
+
+            if (right_idx != -1) {
+                c_rho_right[n] = c[num_elem * n_p * 0 + n * num_elem + right_idx];
+                c_u_right[n]   = c[num_elem * n_p * 1 + n * num_elem + right_idx];
+                c_v_right[n]   = c[num_elem * n_p * 2 + n * num_elem + right_idx];
+                c_E_right[n]   = c[num_elem * n_p * 3 + n * num_elem + right_idx];
+            }
+        }
         int i, j;
         double s;
         double lambda;
@@ -1003,87 +907,113 @@ void eval_surface(double *c_rho_left, double *c_u_left, double *c_v_left, double
  * evaluates and adds the volume integral to the rhs vector
  * THREADS: num_elem
  */
-void eval_volume(double *c_rho, double *c_u, double *c_v,   double *c_E,
-                            double *quad_rhs, 
-                            double x_r, double y_r, double x_s, double y_s,
-                            int n_quad, int n_p, int num_elem, int idx) {
-    int i, j, k;
-    double rho, u, v, E;
-    double flux_x1, flux_y1, flux_x2, flux_y2;
-    double flux_x3, flux_y3, flux_x4, flux_y4;
-    double sum1, sum2, sum3, sum4;
+void eval_volume(double *c,
+                 double *quad_rhs, 
+                 double *X_r, double *Y_r, double *X_s, double *Y_s,
+                 int n_quad, int n_p, int num_elem) {
+    int idx;
 
-    // evaluate the volume integral for each coefficient
-    for (i = 0; i < n_p; i++) {
-        sum1 = 0.;
-        sum2 = 0.;
-        sum3 = 0.;
-        sum4 = 0.;
-        for (j = 0; j < n_quad; j++) {
-            // evaluate rho, u, v, E at the integration point.
-            rho = 0.;
-            u   = 0.;
-            v   = 0.;
-            E   = 0.;
-            for (k = 0; k < n_p; k++) {
-                rho += c_rho[k] * basis[n_quad * k + j];
-                u   += c_u[k]   * basis[n_quad * k + j];
-                v   += c_v[k]   * basis[n_quad * k + j];
-                E   += c_E[k]   * basis[n_quad * k + j];
-            }
+    // loop through each element
+    for (idx = 0; idx < num_elem; idx++) {
+        
+        double x_r = X_r[idx];
+        double y_r = Y_r[idx];
+        double x_s = X_s[idx];
+        double y_s = Y_s[idx];
 
-            // in case rho comes back nonphysical
-            if (rho <= 0) {
-                rho = c_rho[0];
-            }
+        double c_rho[n_p];
+        double c_u[n_p];
+        double c_v[n_p];
+        double c_E[n_p];
 
-            // in case E comes back nonphysical
-            if (E <= 0) {
-                E = c_E[0];
-            }
+        int n;
 
-            // since we actually have coefficients for rho * u, rho * v
-            u = u / rho;
-            v = v / rho;
-
-            // evaluate flux
-            eval_flux(rho, u, v, E,
-                 &flux_x1, &flux_y1, &flux_x2, &flux_y2,
-                 &flux_x3, &flux_y3, &flux_x4, &flux_y4);
-                 
-            // Add to the sum
-            // [fx fy] * [y_s, -y_r; -x_s, x_r] * [phi_x phi_y]
-
-            // 1st equation
-            sum1 +=   flux_x1 * ( basis_grad_x[n_quad * i + j] * y_s
-                                 -basis_grad_y[n_quad * i + j] * y_r)
-                    + flux_y1 * (-basis_grad_x[n_quad * i + j] * x_s 
-                                + basis_grad_y[n_quad * i + j] * x_r);
-
-            // 2nd equation
-            sum2 +=   flux_x2 * ( basis_grad_x[n_quad * i + j] * y_s
-                                 -basis_grad_y[n_quad * i + j] * y_r)
-                    + flux_y2 * (-basis_grad_x[n_quad * i + j] * x_s 
-                                + basis_grad_y[n_quad * i + j] * x_r);
-
-            // 3rd equation
-            sum3 +=   flux_x3 * ( basis_grad_x[n_quad * i + j] * y_s
-                                 -basis_grad_y[n_quad * i + j] * y_r)
-                    + flux_y3 * (-basis_grad_x[n_quad * i + j] * x_s 
-                                + basis_grad_y[n_quad * i + j] * x_r);
-
-            // 4th equation
-            sum4 +=   flux_x4 * ( basis_grad_x[n_quad * i + j] * y_s
-                                 -basis_grad_y[n_quad * i + j] * y_r)
-                    + flux_y4 * (-basis_grad_x[n_quad * i + j] * x_s 
-                                + basis_grad_y[n_quad * i + j] * x_r);
+        // get the coefficients
+        for (n = 0; n < n_p; n++) {
+            c_rho[n] = c[num_elem * n_p * 0 + idx];
+            c_u[n]   = c[num_elem * n_p * 1 + idx];
+            c_v[n]   = c[num_elem * n_p * 2 + idx];
+            c_E[n]   = c[num_elem * n_p * 3 + idx];
         }
 
-        // store the result
-        quad_rhs[num_elem * n_p * 0 + i * num_elem + idx] = sum1;
-        quad_rhs[num_elem * n_p * 1 + i * num_elem + idx] = sum2;
-        quad_rhs[num_elem * n_p * 2 + i * num_elem + idx] = sum3;
-        quad_rhs[num_elem * n_p * 3 + i * num_elem + idx] = sum4;
+        int i, j, k;
+        double rho, u, v, E;
+        double flux_x1, flux_y1, flux_x2, flux_y2;
+        double flux_x3, flux_y3, flux_x4, flux_y4;
+        double sum1, sum2, sum3, sum4;
+
+        // evaluate the volume integral for each coefficient
+        for (i = 0; i < n_p; i++) {
+            sum1 = 0.;
+            sum2 = 0.;
+            sum3 = 0.;
+            sum4 = 0.;
+            for (j = 0; j < n_quad; j++) {
+                // evaluate rho, u, v, E at the integration point.
+                rho = 0.;
+                u   = 0.;
+                v   = 0.;
+                E   = 0.;
+                for (k = 0; k < n_p; k++) {
+                    rho += c_rho[k] * basis[n_quad * k + j];
+                    u   += c_u[k]   * basis[n_quad * k + j];
+                    v   += c_v[k]   * basis[n_quad * k + j];
+                    E   += c_E[k]   * basis[n_quad * k + j];
+                }
+
+                // in case rho comes back nonphysical
+                if (rho <= 0) {
+                    rho = c_rho[0];
+                }
+
+                // in case E comes back nonphysical
+                if (E <= 0) {
+                    E = c_E[0];
+                }
+
+                // since we actually have coefficients for rho * u, rho * v
+                u = u / rho;
+                v = v / rho;
+
+                // evaluate flux
+                eval_flux(rho, u, v, E,
+                     &flux_x1, &flux_y1, &flux_x2, &flux_y2,
+                     &flux_x3, &flux_y3, &flux_x4, &flux_y4);
+                     
+                // Add to the sum
+                // [fx fy] * [y_s, -y_r; -x_s, x_r] * [phi_x phi_y]
+
+                // 1st equation
+                sum1 +=   flux_x1 * ( basis_grad_x[n_quad * i + j] * y_s
+                                     -basis_grad_y[n_quad * i + j] * y_r)
+                        + flux_y1 * (-basis_grad_x[n_quad * i + j] * x_s 
+                                    + basis_grad_y[n_quad * i + j] * x_r);
+
+                // 2nd equation
+                sum2 +=   flux_x2 * ( basis_grad_x[n_quad * i + j] * y_s
+                                     -basis_grad_y[n_quad * i + j] * y_r)
+                        + flux_y2 * (-basis_grad_x[n_quad * i + j] * x_s 
+                                    + basis_grad_y[n_quad * i + j] * x_r);
+
+                // 3rd equation
+                sum3 +=   flux_x3 * ( basis_grad_x[n_quad * i + j] * y_s
+                                     -basis_grad_y[n_quad * i + j] * y_r)
+                        + flux_y3 * (-basis_grad_x[n_quad * i + j] * x_s 
+                                    + basis_grad_y[n_quad * i + j] * x_r);
+
+                // 4th equation
+                sum4 +=   flux_x4 * ( basis_grad_x[n_quad * i + j] * y_s
+                                     -basis_grad_y[n_quad * i + j] * y_r)
+                        + flux_y4 * (-basis_grad_x[n_quad * i + j] * x_s 
+                                    + basis_grad_y[n_quad * i + j] * x_r);
+            }
+
+            // store the result
+            quad_rhs[num_elem * n_p * 0 + i * num_elem + idx] = sum1;
+            quad_rhs[num_elem * n_p * 1 + i * num_elem + idx] = sum2;
+            quad_rhs[num_elem * n_p * 2 + i * num_elem + idx] = sum3;
+            quad_rhs[num_elem * n_p * 3 + i * num_elem + idx] = sum4;
+        }
     }
 }
 
@@ -1093,8 +1023,8 @@ void eval_volume(double *c_rho, double *c_u, double *c_v,   double *c_E,
  * THREADS: num_elem
  */
 void eval_u(double *c, 
-                       double *Uv1, double *Uv2, double *Uv3,
-                       int num_elem, int n_p, int idx) {
+            double *Uv1, double *Uv2, double *Uv3,
+            int num_elem, int n_p, int idx) {
     int i;
     double uv1, uv2, uv3;
 
