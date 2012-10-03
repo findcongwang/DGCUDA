@@ -152,7 +152,14 @@ int *d_right_elem; // index of right element for side idx
  *
  ***********************/
 __device__ double pressure(double rho, double u, double v, double E) {
-    return (GAMMA - 1.) * (E - (u*u + v*v) / 2. * rho);
+    // TODO: this is a dirty fix, but it's necessary or else c collapses into NAN
+    // This happens because 
+    //     E < 0.5 rho (u^2 + v^2) 
+    // which shouldn't ever be possible...
+    if ((E - (u*u + v*v) / 2. / rho) < 0) {
+        return 0.0001;
+    }
+    return (GAMMA - 1.) * (E - (u*u + v*v) / 2. / rho);
 }
 
 /* evaluate c
@@ -161,13 +168,6 @@ __device__ double pressure(double rho, double u, double v, double E) {
  */
 __device__ double eval_c(double rho, double u, double v, double E) {
     double p = pressure(rho, u, v, E);
-
-    // TODO: this is a dirty fix, but it's necessary or else c collapses into NAN
-    // This happens because E < u*u + v*v, which shouldn't ever be possible...
-    // apparently it only happens when the outflow boundary conditions are set wrong.
-    //if (p < 0) {
-        //p = 0.0001;
-    //}
 
     return sqrtf(GAMMA * p / rho);
 }    
@@ -184,7 +184,7 @@ __device__ double eval_c(double rho, double u, double v, double E) {
  */
 __device__ double rho0(double x, double y) {
     double r = x*x + y*y;
-    return powf(1 + (GAMMA - 1)/ 2. * MACH * (1 - powf(1. / r, 2)), 1./(GAMMA - 1));
+    return powf(1 + (GAMMA - 1)/ 2. * MACH * MACH * (1 - powf(1. / r, 2)), 1./(GAMMA - 1));
 }
 __device__ double u0(double x, double y) {
     double r = x*x + y*y;
@@ -195,7 +195,7 @@ __device__ double v0(double x, double y) {
     return -sin(PI/2. * x/1.384) * MACH / r;
 }
 __device__ double E0(double x, double y) {
-    return powf(rho0(x,y),GAMMA) / (GAMMA * (GAMMA - 1)) + (powf(u0(x, y), 2) + powf(v0(x, y), 2)) / 2. * rho0(x, y);
+    return powf(rho0(x,y),GAMMA) / (GAMMA * (GAMMA - 1)) + (powf(u0(x, y), 2) + powf(v0(x, y), 2)) / 2. / rho0(x, y);
 }
 
 /* boundary exact
@@ -226,10 +226,16 @@ __device__ void reflecting_boundary(double rho_left, double *rho_right,
 
     // make the velocities reflect wrt the normal
     // -2 (V dot N) * N + V
-    double dot = u_left * nx + v_left * ny;
+    //double dot = u_left * nx + v_left * ny;
+    //*u_right   = u_left - 2 * dot * nx;
+    //*v_right   = v_left - 2 * dot * ny;
 
-    *u_right   = u_left - 2 * dot * nx;
-    *v_right   = v_left - 2 * dot * ny;
+    // taken from lilia's code:
+    double vn = -(u_left * nx + v_left * ny);
+    double vt = u_left * ny - v_left * nx;
+
+    *u_right = vn * nx + vt * ny;
+    *v_right = vn * ny - vt * nx;
 }
 
 __device__ void outflow_boundary(double rho_left, double *rho_right,
@@ -238,9 +244,10 @@ __device__ void outflow_boundary(double rho_left, double *rho_right,
                                  double E_left,   double *E_right,
                                  double nx,       double ny) {
     // make the flow move along the normal outside the cell so we don't introduce any new flow
+    double dot = sqrtf(u_left * u_left + v_left * v_left);
     *rho_right = rho_left;
-    *u_right   = -u_left * nx; //TODO: is this right? it just sort of worked...
-    *v_right   = -v_left * ny; //TODO: is this right? it just sort of worked...
+    *u_right   = dot * nx; //TODO: is this right? it just sort of worked...
+    *v_right   = dot * ny; //TODO: is this right? it just sort of worked...
     *E_right   = E_left;
 }
 
@@ -781,6 +788,10 @@ __device__ void eval_left_right(double *c_rho_left, double *c_rho_right,
     // reflecting 
     ///////////////////////
     if (right_idx == -1) {
+        //inflow_boundary(rho_right, u_right, v_right, E_right,
+                        //v1x, v1y, v2x, v2y, v3x, v3y, 
+                        //j, 
+                        //left_side, n_quad1d);
         reflecting_boundary(*rho_left, rho_right, 
                             *u_left,   u_right, 
                             *v_left,   v_right, 
@@ -791,15 +802,15 @@ __device__ void eval_left_right(double *c_rho_left, double *c_rho_right,
     // outflow 
     ///////////////////////
     } else if (right_idx == -2) {
-        inflow_boundary(rho_right, u_right, v_right, E_right,
-                        v1x, v1y, v2x, v2y, v3x, v3y, 
-                        j, 
-                        left_side, n_quad1d);
-        //outflow_boundary(*rho_left, rho_right,
-                         //*u_left,   u_right,
-                         //*v_left,   v_right,
-                         //*E_left,   E_right,
-                         //nx, ny);
+        //inflow_boundary(rho_right, u_right, v_right, E_right,
+                        //v1x, v1y, v2x, v2y, v3x, v3y, 
+                        //j, 
+                        //left_side, n_quad1d);
+        outflow_boundary(*rho_left, rho_right,
+                         *u_left,   u_right,
+                         *v_left,   v_right,
+                         *E_left,   E_right,
+                         nx, ny);
 
     ///////////////////////
     // inflow 
@@ -882,10 +893,10 @@ __device__ double eval_lambda(double rho_left, double rho_right,
     }
 
     // return the max absolute value of | s +- c |
-    if (abs(left_max) > abs(right_max)) {
-        return abs(left_max);
+    if (fabs(left_max) > fabs(right_max)) {
+        return fabs(left_max);
     } else { 
-        return abs(right_max);
+        return fabs(right_max);
     }
 }
 

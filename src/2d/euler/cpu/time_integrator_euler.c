@@ -146,6 +146,7 @@ void time_integrate_rk4(int n_quad, int n_quad1d, int n_p, int n, int num_elem, 
         t += dt;
         printf(" > (%lf), t = %lf\n", max_l, t);
 
+
         // stage 1
         eval_surface(d_c, d_left_riemann_rhs, d_right_riemann_rhs, 
                      d_s_length, 
@@ -166,6 +167,7 @@ void time_integrate_rk4(int n_quad, int n_quad1d, int n_p, int n, int num_elem, 
                      d_left_elem, d_J, dt, n_p, num_sides, num_elem);
 
         rk4_tempstorage(d_c, d_kstar, d_k1, 0.5, n_p, num_elem);
+
 
         // stage 2
         eval_surface(d_kstar, d_left_riemann_rhs, d_right_riemann_rhs, 
@@ -188,6 +190,7 @@ void time_integrate_rk4(int n_quad, int n_quad1d, int n_p, int n, int num_elem, 
 
         rk4_tempstorage(d_c, d_kstar, d_k2, 0.5, n_p, num_elem);
 
+
         // stage 3
         eval_surface(d_kstar, d_left_riemann_rhs, d_right_riemann_rhs, 
                      d_s_length, 
@@ -208,6 +211,7 @@ void time_integrate_rk4(int n_quad, int n_quad1d, int n_p, int n, int num_elem, 
                      d_left_elem, d_J, dt, n_p, num_sides, num_elem);
 
         rk4_tempstorage(d_c, d_kstar, d_k3, 1.0, n_p, num_elem);
+
 
         // stage 4
         eval_surface(d_kstar, d_left_riemann_rhs, d_right_riemann_rhs, 
@@ -315,6 +319,7 @@ void time_integrate_fe(double dt, int n_quad, int n_quad1d, int n_p, int n,
 
     for (i = 0; i < timesteps; i++) {
         t = i * dt;
+        printf(" > t = %lf\n", t);
         eval_surface(d_c, d_left_riemann_rhs, d_right_riemann_rhs, 
                          d_s_length, 
                          d_V1x, d_V1y,

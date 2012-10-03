@@ -212,7 +212,7 @@ void preval_basis(double *r1_local, double *r2_local, double *s_r, double *w_loc
     memcpy(basis_side, basis_side_local, 3 * n_quad1d * n_p * sizeof(double));
     memcpy(basis_vertex, basis_vertex_local, 3 * n_p * sizeof(double));
     memcpy(w, w_local, n_quad * sizeof(double));
-    memcpy(w_oned, w_oned_local, n_quad * sizeof(double));
+    memcpy(w_oned, w_oned_local, n_quad1d * sizeof(double));
     memcpy(r1, r1_local, n_quad * sizeof(double));
     memcpy(r2, r2_local, n_quad * sizeof(double));
     memcpy(r_oned, s_r, n_quad1d * sizeof(double));

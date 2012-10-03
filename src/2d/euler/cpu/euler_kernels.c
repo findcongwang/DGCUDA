@@ -120,29 +120,30 @@ int *d_right_elem; // index of right element for side idx
  * DEVICE FUNCTIONS
  *
  ***********************/
-double pressure(double rho, double u, double v, double E) {
+double pressure(double rho, double u, double v, double E, int side_type, int idx) {
 
     // TODO: this is a dirty fix, but it's necessary or else c collapses into NAN
     // This happens because E < u*u + v*v, which shouldn't ever be possible...
     // apparently it only happens when the outflow boundary conditions are set wrong.
     // OK, this should SERIOUSLY not be happening here...
-    if( (GAMMA - 1.) * (E - (u*u + v*v) / 2. * rho) < 0) {
+    if( (GAMMA - 1.) * (E - (u*u + v*v) / 2. / rho) < 0) {
         printf("ALERT: pressure negative!\n");
-        printf(" > p = %lf\n", (GAMMA - 1.) * (E - (u*u + v*v) / 2. * rho));
+        printf(" > idx %i\n", idx);
+        printf(" > side %i\n", side_type);
+        printf(" > (%lf, %lf, %lf, %lf)\n", rho, u, v, E);
+        printf(" > p = %lf\n", (GAMMA - 1.) * (E - (u*u + v*v) / 2. / rho));
+        //exit(0);
         return 0.0001;
     }
-    return (GAMMA - 1.) * (E - (u*u + v*v) / 2. * rho);
+    return (GAMMA - 1.) * (E - (u*u + v*v) / 2. / rho);
 }
 
 /* evaluate c
  *
  * evaulates the speed of sound c
  */
-double eval_c(double rho, double u, double v, double E) {
-    double p = pressure(rho, u, v, E);
-    if (p < 0) {
-        printf("   inside eval_c\n");
-    }
+double eval_c(double rho, double u, double v, double E, int side_type, int idx) {
+    double p = pressure(rho, u, v, E, side_type, idx);
 
     return sqrtf(GAMMA * p / rho);
 }    
@@ -159,7 +160,7 @@ double eval_c(double rho, double u, double v, double E) {
  */
 double rho0(double x, double y) {
     double r = x*x + y*y;
-    return powf(1 + (GAMMA - 1)/ 2. * MACH * (1 - powf(1. / r, 2)), 1./(GAMMA - 1));
+    return powf(1 + (GAMMA - 1)/ 2. * MACH * MACH * (1 - powf(1. / r, 2)), 1./(GAMMA - 1));
 }
 double u0(double x, double y) {
     double r = x*x + y*y;
@@ -170,7 +171,7 @@ double v0(double x, double y) {
     return -sin(PI/2. * x/1.384) * MACH / r;
 }
 double E0(double x, double y) {
-    return powf(rho0(x,y),GAMMA) / (GAMMA * (GAMMA - 1)) + (powf(u0(x, y), 2) + powf(v0(x, y), 2)) / 2. * rho0(x, y);
+    return powf(rho0(x,y),GAMMA) / (GAMMA * (GAMMA - 1)) + (powf(u0(x, y), 2) + powf(v0(x, y), 2)) / 2. / rho0(x, y);
 }
 
 /* boundary exact
@@ -191,20 +192,31 @@ double boundary_exact_E(double x, double y, double t) {
 }
 
 void reflecting_boundary(double rho_left, double *rho_right,
-                                    double u_left,   double *u_right,
-                                    double v_left,   double *v_right,
-                                    double E_left,   double *E_right,
-                                    double nx,       double ny) {
+                         double u_left,   double *u_right,
+                         double v_left,   double *v_right,
+                         double E_left,   double *E_right,
+                         double nx,       double ny) {
     // set the sides to reflect
     *rho_right = rho_left;
     *E_right   = E_left;
 
     // make the velocities reflect wrt the normal
     // -2 (V dot N) * N + V
-    double dot = u_left * nx + v_left * ny;
+    //double dot = u_left * nx + v_left * ny;
+    //*u_right   = u_left - 2 * dot * nx;
+    //*v_right   = v_left - 2 * dot * ny;
 
-    *u_right   = u_left - 2 * dot * nx;
-    *v_right   = v_left - 2 * dot * ny;
+    // taken from lilia's code:
+    //double vn = -(u_left * nx + v_left * ny);
+    //double vt = u_left * ny - v_left * nx;
+
+    //*u_right = vn * nx + vt * ny;
+    //*v_right = vn * ny - vt * nx;
+
+    // taken from algorithm 1
+    *u_right = (u_left * ny - v_left * nx)*ny;
+    *v_right = -(u_left * ny - v_left * nx)*nx;
+
 }
 
 void outflow_boundary(double rho_left, double *rho_right,
@@ -213,10 +225,21 @@ void outflow_boundary(double rho_left, double *rho_right,
                       double E_left,   double *E_right,
                       double nx,       double ny) {
     // make the flow move along the normal outside the cell so we don't introduce any new flow
-    *rho_right = rho_left;
-    *u_right   = -u_left * nx; //TODO: this doesn't work
-    *v_right   = -v_left * ny; //TODO: this doesn't work
-    *E_right   = E_left;
+    //double dot = sqrtf(u_left * u_left + v_left * v_left);
+    //*rho_right = rho_left;
+    //*u_right   = dot * nx; //TODO: this doesn't work; or maybe it does...
+    //*v_right   = dot * ny; //TODO: this doesn't work; or maybe it does...
+    //*E_right   = E_left;
+
+    // taken from lilia's code: (also doesn't work)
+    double vn = (nx * u_left + ny * v_left) / rho_left;
+    double p = pressure(rho_left, u_left, v_left, E_left, 0, 0);
+
+    *rho_right = vn * rho_left;
+    *u_right   = vn * u_left + p * nx;
+    *v_right   = vn * v_left + p * ny;
+    *E_right   = vn * (p * (1. / (GAMMA - 1)) + 
+                 0.5 * (u_left * u_left + v_left * v_left) * rho_left + p);
 }
 
 void inflow_boundary(double *rho_right, double *u_right, double *v_right, double *E_right,
@@ -537,7 +560,7 @@ void eval_global_lambda(double *c,
         v = v / rho;
 
         // evaluate c
-        c_speed = eval_c(rho, u, v, E);
+        c_speed = eval_c(rho, u, v, E, 1, idx);
 
         // norm
         sum = sqrtf(u*u + v*v);
@@ -595,11 +618,6 @@ void eval_left_right(double *c_rho_left, double *c_rho_right,
         *rho_left = c_rho_left[0];
     }
 
-    // in case rho_left comes back nonphysical
-    if (*rho_left <= 0) {
-        *rho_left = c_rho_left[0];
-    }
-
     // in case E_left comes back nonphysical
     if (*E_left <= 0) {
         *E_left = c_E_left[0];
@@ -614,6 +632,10 @@ void eval_left_right(double *c_rho_left, double *c_rho_right,
     // reflecting 
     ///////////////////////
     if (right_idx == -1) {
+        //inflow_boundary(rho_right, u_right, v_right, E_right,
+                        //v1x, v1y, v2x, v2y, v3x, v3y, 
+                        //j, 
+                        //left_side, n_quad1d);
         reflecting_boundary(*rho_left, rho_right, 
                             *u_left,   u_right, 
                             *v_left,   v_right, 
@@ -691,15 +713,17 @@ double eval_lambda(double rho_left, double rho_right,
                    double u_left,   double u_right,
                    double v_left,   double v_right,
                    double E_left,   double E_right,
-                   double nx,       double ny) {
+                   double nx,       double ny,
+                   int left_side,   int right_side,
+                   int idx) {
                               
     double s_left, s_right;
     double left_max, right_max;
     double c_left, c_right;
     
     // get c for both sides
-    c_left  = eval_c(rho_left, u_left, v_left, E_left);
-    c_right = eval_c(rho_right, u_right, v_right, E_right);
+    c_left  = eval_c(rho_left, u_left, v_left, E_left, left_side, idx);
+    c_right = eval_c(rho_right, u_right, v_right, E_right, right_side, idx);
 
     // find the speeds on each side
     s_left  = nx * u_left  + ny * v_left;
@@ -720,10 +744,10 @@ double eval_lambda(double rho_left, double rho_right,
     }
 
     // return the max absolute value of | s +- c |
-    if (abs(left_max) > abs(right_max)) {
-        return abs(left_max);
+    if (fabs(left_max) > fabs(right_max)) {
+        return fabs(left_max);
     } else { 
-        return abs(right_max);
+        return fabs(right_max);
     }
 }
 
@@ -737,13 +761,11 @@ void eval_flux(double rho, double u, double v, double E,
                double *flux_x1, double *flux_y1,
                double *flux_x2, double *flux_y2,
                double *flux_x3, double *flux_y3,
-               double *flux_x4, double *flux_y4) {
+               double *flux_x4, double *flux_y4,
+               int side_type, int idx) {
 
     // evaluate pressure
-    double p = pressure(rho, u, v, E);
-    if (p < 0) {
-        printf("   inside eval_flux\n");
-    }
+    double p = pressure(rho, u, v, E, side_type, idx);
 
     // flux_1 
     *flux_x1 = rho * u;
@@ -826,7 +848,7 @@ void eval_surface(double *c,
             c_v_left[i]   = c[num_elem * n_p * 2 + i * num_elem + left_idx];
             c_E_left[i]   = c[num_elem * n_p * 3 + i * num_elem + left_idx];
 
-            if (right_idx != -1) {
+            if (right_idx >= 0) {
                 c_rho_right[i] = c[num_elem * n_p * 0 + i * num_elem + right_idx];
                 c_u_right[i]   = c[num_elem * n_p * 1 + i * num_elem + right_idx];
                 c_v_right[i]   = c[num_elem * n_p * 2 + i * num_elem + right_idx];
@@ -859,28 +881,32 @@ void eval_surface(double *c,
                                 left_idx, right_idx,
                                 n_p, n_quad1d, num_sides, t);
 
+                //printf(" (%i, %i)\n", left_idx, right_idx);
+                //printf("  ? (%lf, %lf)\n", rho_left, rho_right);
+                //printf("  ? (%lf, %lf)\n", u_left, u_right);
+                //printf("  ? (%lf, %lf)\n", v_left, v_right);
+                //printf("  ? (%lf, %lf)\n", E_left, E_right);
+
                 // calculate the left fluxes
                 eval_flux(rho_left, u_left, v_left, E_left,
                           &flux_x1_l, &flux_y1_l, &flux_x2_l, &flux_y2_l,
-                          &flux_x3_l, &flux_y3_l, &flux_x4_l, &flux_y4_l);
+                          &flux_x3_l, &flux_y3_l, &flux_x4_l, &flux_y4_l, 
+                          left_side, idx);
 
                 // calculate the right fluxes
                 eval_flux(rho_right, u_right, v_right, E_right,
                           &flux_x1_r, &flux_y1_r, &flux_x2_r, &flux_y2_r,
-                          &flux_x3_r, &flux_y3_r, &flux_x4_r, &flux_y4_r);
-
-                if (right_idx == -1 && pressure(rho_right, u_right, v_right, E_right)) {
-                    printf("on a boundary.\n");
-                } else {
-                    printf("NOT a boundary.\n");
-                }
+                          &flux_x3_r, &flux_y3_r, &flux_x4_r, &flux_y4_r,
+                          right_side, idx);
 
                 // need these local max values
                 lambda = eval_lambda(rho_left, rho_right,
                                      u_left, u_right, 
                                      v_left, v_right, 
                                      E_left, E_right,
-                                     nx, ny);
+                                     nx, ny,
+                                     left_side, right_side,
+                                     idx);
 
                 // 1st equation
                 s = 0.5 * ((flux_x1_l + flux_x1_r) * nx + (flux_y1_l + flux_y1_r) * ny 
@@ -995,7 +1021,7 @@ void eval_volume(double *c,
                 // evaluate flux
                 eval_flux(rho, u, v, E,
                      &flux_x1, &flux_y1, &flux_x2, &flux_y2,
-                     &flux_x3, &flux_y3, &flux_x4, &flux_y4);
+                     &flux_x3, &flux_y3, &flux_x4, &flux_y4, 1000, idx);
                      
                 // Add to the sum
                 // [fx fy] * [y_s, -y_r; -x_s, x_r] * [phi_x phi_y]

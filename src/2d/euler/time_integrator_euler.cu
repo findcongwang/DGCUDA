@@ -214,7 +214,7 @@ void time_integrate_rk4(int n_quad, int n_quad1d, int n_p, int n, int num_elem, 
 
         t += dt;
 
-        printf(" > t = %lf\n", t);
+        printf(" > (%lf) t = %lf\n", max_l, t);
         // stage 1
         checkCudaError("error before stage 1: eval_surface_ftn");
         eval_surface_ftn<<<n_blocks_sides, n_threads>>>
