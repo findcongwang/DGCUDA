@@ -39,6 +39,24 @@ void rk4(double *c, double *k1, double *k2, double *k3, double *k4, int n_p, int
     }
 }
 
+void sanity_check(double *c, int num_elem, int n_p) {
+    double rho_avg, u_avg, v_avg, E_avg, p;
+
+    int idx;
+
+    for (idx = 0; idx < num_elem; idx++) {
+        rho_avg = c[num_elem * n_p * 0 + idx];
+        u_avg   = c[num_elem * n_p * 1 + idx];
+        v_avg   = c[num_elem * n_p * 2 + idx];
+        E_avg   = c[num_elem * n_p * 3 + idx];
+
+        u_avg = u_avg / rho_avg;
+        v_avg = v_avg / rho_avg;
+
+        //p = pressure(rho_avg, v_avg, v_avg, E_avg, 30000, idx);
+    }
+}
+
 /* right hand side
  *
  * computes the sum of the quadrature and the riemann flux for the 
@@ -127,6 +145,7 @@ void time_integrate_rk4(int n_quad, int n_quad1d, int n_p, int n, int num_elem, 
     t = 0;
 
     while (t < endtime) {
+        sanity_check(d_c, num_elem, n_p);
         // compute all the lambda values over each cell
         eval_global_lambda(d_c, d_lambda, n_quad, n_p, num_elem);
 

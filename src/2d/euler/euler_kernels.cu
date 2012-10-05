@@ -12,7 +12,7 @@
 
 #define PI 3.14159
 #define GAMMA 1.4
-#define MACH 2.5
+#define MACH 2.25
 
 /***********************
  *
@@ -183,15 +183,15 @@ __device__ double eval_c(double rho, double u, double v, double E) {
  * returns the value of the intial condition at point x
  */
 __device__ double rho0(double x, double y) {
-    double r = x * x + y * y;
+    double r = sqrtf(x * x + y * y);
     return powf(1 + (GAMMA - 1)/ 2. * MACH * MACH * (1 - powf(1. / r, 2)), 1./(GAMMA - 1));
 }
 __device__ double u0(double x, double y) {
-    double r = x * x + y * y;
+    double r = sqrtf(x * x + y * y);
     return cos(PI/2. * x/1.384) * MACH / r;
 }
 __device__ double v0(double x, double y) {
-    double r = x * x + y * y;
+    double r = sqrtf(x * x + y * y);
     return -sin(PI/2. * x/1.384) * MACH / r;
 }
 __device__ double E0(double x, double y) {

@@ -12,7 +12,7 @@
 
 #define PI 3.14159
 #define GAMMA 1.4
-#define MACH 2.5
+#define MACH 2.25
 
 /***********************
  *
@@ -127,7 +127,7 @@ double pressure(double rho, double u, double v, double E, int side_type, int idx
     // apparently it only happens when the outflow boundary conditions are set wrong.
     // OK, this should SERIOUSLY not be happening here...
     if( (GAMMA - 1.) * (E - (u*u + v*v) / 2. / rho) < 0) {
-        //printf("ALERT: pressure negative!\n");
+        printf("ALERT: pressure negative!\n");
         //printf(" > idx %i\n", idx);
         //printf(" > side %i\n", side_type);
         //printf(" > (%lf, %lf, %lf, %lf)\n", rho, u, v, E);
@@ -159,19 +159,19 @@ double eval_c(double rho, double u, double v, double E, int side_type, int idx) 
  * returns the value of the intial condition at point x
  */
 double rho0(double x, double y) {
-    double r = x*x + y*y;
-    return powf(1 + (GAMMA - 1)/ 2. * MACH * MACH * (1 - powf(1. / r, 2)), 1./(GAMMA - 1));
+    double r = sqrtf(x*x + y*y);
+    return powf(1 + 0.5 * (GAMMA - 1) * MACH * MACH * (1 - powf(1. / r, 2)), 1./(GAMMA - 1));
 }
 double u0(double x, double y) {
-    double r = x*x + y*y;
+    double r = sqrtf(x*x + y*y);
     return cos(PI/2. * x/1.384) * MACH / r;
 }
 double v0(double x, double y) {
-    double r = x*x + y*y;
+    double r = sqrtf(x*x + y*y);
     return -sin(PI/2. * x/1.384) * MACH / r;
 }
 double E0(double x, double y) {
-    return powf(rho0(x,y),GAMMA) / (GAMMA * (GAMMA - 1)) + (powf(u0(x, y), 2) + powf(v0(x, y), 2)) / 2. / rho0(x, y);
+    return powf(rho0(x,y),GAMMA) / (GAMMA * (GAMMA - 1)) + 0.5 * (u0(x,y) * u0(x,y) + v0(x,y) * v0(x,y)) / rho0(x,y);
 }
 
 /* boundary exact
@@ -207,15 +207,15 @@ void reflecting_boundary(double rho_left, double *rho_right,
     //*v_right   = v_left - 2 * dot * ny;
 
     // taken from lilia's code:
-    //double vn = -(u_left * nx + v_left * ny);
-    //double vt = u_left * ny - v_left * nx;
+    double vn = -(u_left * nx + v_left * ny);
+    double vt = u_left * ny - v_left * nx;
 
-    //*u_right = vn * nx + vt * ny;
-    //*v_right = vn * ny - vt * nx;
+    *u_right = vn * nx + vt * ny;
+    *v_right = vn * ny - vt * nx;
 
     // taken from algorithm 1
-    *u_right = (u_left * ny - v_left * nx)*ny;
-    *v_right = -(u_left * ny - v_left * nx)*nx;
+    //*u_right = (u_left * ny - v_left * nx)*ny;
+    //*v_right = -(u_left * ny - v_left * nx)*nx;
 
 }
 
@@ -315,7 +315,8 @@ void init_conditions(double *c, double *J,
             c[num_elem * n_p * 1 + i * num_elem + idx] = u; // we actually calculate rho * u
             c[num_elem * n_p * 2 + i * num_elem + idx] = v; // we actually calculate rho * v
             c[num_elem * n_p * 3 + i * num_elem + idx] = E;
-        } 
+
+       } 
     }
 }
 
@@ -560,7 +561,7 @@ void eval_global_lambda(double *c,
         v = v / rho;
 
         // evaluate c
-        c_speed = eval_c(rho, u, v, E, 1, idx);
+        c_speed = eval_c(rho, u, v, E, 20000, idx);
 
         // norm
         sum = sqrtf(u*u + v*v);
