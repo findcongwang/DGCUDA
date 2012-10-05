@@ -126,16 +126,16 @@ double pressure(double rho, double u, double v, double E, int side_type, int idx
     // This happens because E < u*u + v*v, which shouldn't ever be possible...
     // apparently it only happens when the outflow boundary conditions are set wrong.
     // OK, this should SERIOUSLY not be happening here...
-    if( (GAMMA - 1.) * (E - (u*u + v*v) / 2. / rho) < 0) {
+    if( (GAMMA - 1.) * (E - (u*u + v*v) / 2. * rho) < 0) {
         printf("ALERT: pressure negative!\n");
-        //printf(" > idx %i\n", idx);
-        //printf(" > side %i\n", side_type);
-        //printf(" > (%lf, %lf, %lf, %lf)\n", rho, u, v, E);
-        //printf(" > p = %lf\n", (GAMMA - 1.) * (E - (u*u + v*v) / 2. / rho));
-        //exit(0);
-        return 0.0001;
+        printf(" > idx %i\n", idx);
+        printf(" > side %i\n", side_type);
+        printf(" > (%lf, %lf, %lf, %lf)\n", rho, u, v, E);
+        printf(" > p = %lf\n", (GAMMA - 1.) * (E - (u*u + v*v) / 2. * rho));
+        exit(0);
+        //return 0.0001;
     }
-    return (GAMMA - 1.) * (E - (u*u + v*v) / 2. / rho);
+    return (GAMMA - 1.) * (E - (u*u + v*v) / 2. * rho);
 }
 
 /* evaluate c
@@ -164,31 +164,16 @@ double rho0(double x, double y) {
 }
 double u0(double x, double y) {
     double r = sqrtf(x*x + y*y);
-    return cos(PI/2. * x/1.384) * MACH / r;
+    double theta = atan(y/x);
+    return sin(theta) * MACH / r;
 }
 double v0(double x, double y) {
     double r = sqrtf(x*x + y*y);
-    return -sin(PI/2. * x/1.384) * MACH / r;
+    double theta = atan(y/x);
+    return -cos(theta) * MACH / r;
 }
 double E0(double x, double y) {
-    return powf(rho0(x,y),GAMMA) / (GAMMA * (GAMMA - 1)) + 0.5 * (u0(x,y) * u0(x,y) + v0(x,y) * v0(x,y)) / rho0(x,y);
-}
-
-/* boundary exact
- *
- * returns the exact boundary conditions
- */
-double boundary_exact_rho(double x, double y, double t) {
-    return rho0(x, y);
-}
-double boundary_exact_u(double x, double y, double t) {
-    return u0(x, y);
-}
-double boundary_exact_v(double x, double y, double t) {
-    return v0(x, y);
-}
-double boundary_exact_E(double x, double y, double t) {
-    return E0(x, y);
+    return powf(rho0(x,y),GAMMA) / (GAMMA * (GAMMA - 1)) + 0.5 * (u0(x,y) * u0(x,y) + v0(x,y) * v0(x,y)) * rho0(x,y);
 }
 
 void reflecting_boundary(double rho_left, double *rho_right,
@@ -207,15 +192,15 @@ void reflecting_boundary(double rho_left, double *rho_right,
     //*v_right   = v_left - 2 * dot * ny;
 
     // taken from lilia's code:
-    double vn = -(u_left * nx + v_left * ny);
-    double vt = u_left * ny - v_left * nx;
+    //double vn = -(u_left * nx + v_left * ny);
+    //double vt = u_left * ny - v_left * nx;
 
-    *u_right = vn * nx + vt * ny;
-    *v_right = vn * ny - vt * nx;
+    //*u_right = vn * nx + vt * ny;
+    //*v_right = vn * ny - vt * nx;
 
     // taken from algorithm 1
-    //*u_right = (u_left * ny - v_left * nx)*ny;
-    //*v_right = -(u_left * ny - v_left * nx)*nx;
+    *u_right = (u_left * ny - v_left * nx)*ny;
+    *v_right = -(u_left * ny - v_left * nx)*nx;
 
 }
 
@@ -552,10 +537,10 @@ void eval_global_lambda(double *c,
 
     for (idx = 0; idx < num_elem; idx++) {
         // get cell averages
-        rho = c[num_elem * n_p * 0 + idx];
-        u   = c[num_elem * n_p * 1 + idx];
-        v   = c[num_elem * n_p * 2 + idx];
-        E   = c[num_elem * n_p * 3 + idx];
+        rho = c[num_elem * n_p * 0 + idx] * 1.414213562373095E+00;
+        u   = c[num_elem * n_p * 1 + idx] * 1.414213562373095E+00;
+        v   = c[num_elem * n_p * 2 + idx] * 1.414213562373095E+00;
+        E   = c[num_elem * n_p * 3 + idx] * 1.414213562373095E+00;
 
         u = u / rho;
         v = v / rho;
@@ -616,12 +601,16 @@ void eval_left_right(double *c_rho_left, double *c_rho_right,
     // unphysical rho
     if (*rho_left <= 0.) {
         // use cell average
-        *rho_left = c_rho_left[0];
+        printf("%lf rho unphysical.\n", *rho_left);
+        exit(0);
+        //*rho_left = c_rho_left[0] * 1.414213562373095E+00;
     }
 
     // in case E_left comes back nonphysical
     if (*E_left <= 0) {
-        *E_left = c_E_left[0];
+        printf("%lf E unphysical.\n", *E_left);
+        exit(0);
+        //*E_left = c_E_left[0] * 1.414213562373095E+00;
     }
 
     // since we actually have coefficients for rho * u and rho * v
@@ -678,14 +667,14 @@ void eval_left_right(double *c_rho_left, double *c_rho_right,
         }
 
         // in case rho_right comes back nonphysical
-        if (*rho_right <= 0) {
-            *rho_right = c_rho_right[0];
-        }
+        //if (*rho_right <= 0) {
+            //*rho_right = c_rho_right[0];
+        //}
 
         // in case E_right comes back nonphysical
-        if (*E_right <= 0) {
-            *E_right = c_E_right[0];
-        }
+        //if (*E_right <= 0) {
+            //*E_right = c_E_right[0];
+        //}
 
         // again, since we have coefficients for rho * u and rho * v
         *u_right = *u_right / *rho_right;
@@ -1005,19 +994,30 @@ void eval_volume(double *c,
                     E   += c_E[k]   * basis[n_quad * k + j];
                 }
 
+
                 // in case rho comes back nonphysical
                 if (rho <= 0) {
-                    rho = c_rho[0];
+                    rho = c_rho[0] * 1.414213562373095E+00;
+                    printf("rho unphysical in volume\n");
+                    exit(0);
                 }
 
                 // in case E comes back nonphysical
                 if (E <= 0) {
-                    E = c_E[0];
+                    E = c_E[0] * 1.414213562373095E+00;
+                    printf("E unphysical in volume\n");
+                    exit(0);
                 }
 
                 // since we actually have coefficients for rho * u, rho * v
                 u = u / rho;
                 v = v / rho;
+
+                //printf(" %i\n", idx);
+                //printf("  ? %lf\n", rho);
+                //printf("  ? %lf\n", u);
+                //printf("  ? %lf\n", v);
+                //printf("  ? %lf\n", E);
 
                 // evaluate flux
                 eval_flux(rho, u, v, E,
@@ -1051,6 +1051,8 @@ void eval_volume(double *c,
                         + flux_y4 * (-basis_grad_x[n_quad * i + j] * x_s 
                                     + basis_grad_y[n_quad * i + j] * x_r);
             }
+
+            //printf("%lf, %lf, %lf, %lf\n", sum1, sum2, sum3, sum4);
 
             // store the result
             quad_rhs[num_elem * n_p * 0 + i * num_elem + idx] = sum1;
@@ -1134,5 +1136,78 @@ void eval_u_velocity(double *c,
         Uv1[idx] = uv1;
         Uv2[idx] = uv2;
         Uv3[idx] = uv3;
+    }
+}
+/* evaluate u velocity
+ * 
+ * evaluates u and v at the three vertex points for output
+ * THREADS: num_elem
+ */
+void eval_p(double *c, 
+                     double *Uv1, double *Uv2, double *Uv3,
+                     int num_elem, int n_p, int j) {
+    int idx;
+
+    for (idx = 0; idx < num_elem; idx++) {
+        int i;
+
+        double rhov1, rhov2, rhov3;
+        double uv1, uv2, uv3;
+        double vv1, vv2, vv3;
+        double Ev1, Ev2, Ev3;
+
+        // calculate values at the integration points
+        rhov1 = 0.;
+        rhov2 = 0.;
+        rhov3 = 0.;
+
+        uv1 = 0.;
+        uv2 = 0.;
+        uv3 = 0.;
+
+        vv1 = 0.;
+        vv2 = 0.;
+        vv3 = 0.;
+
+        Ev1 = 0.;
+        Ev2 = 0.;
+        Ev3 = 0.;
+
+        for (i = 0; i < n_p; i++) {
+            rhov1 += c[num_elem * n_p * 0 + i * num_elem + idx] * basis_vertex[i * 3 + 0];
+            rhov2 += c[num_elem * n_p * 0 + i * num_elem + idx] * basis_vertex[i * 3 + 1];
+            rhov3 += c[num_elem * n_p * 0 + i * num_elem + idx] * basis_vertex[i * 3 + 2];
+        }
+
+        for (i = 0; i < n_p; i++) {
+            uv1 += c[num_elem * n_p * 1 + i * num_elem + idx] * basis_vertex[i * 3 + 0];
+            uv2 += c[num_elem * n_p * 1 + i * num_elem + idx] * basis_vertex[i * 3 + 1];
+            uv3 += c[num_elem * n_p * 1 + i * num_elem + idx] * basis_vertex[i * 3 + 2];
+        }
+
+        for (i = 0; i < n_p; i++) {
+            vv1 += c[num_elem * n_p * 2 + i * num_elem + idx] * basis_vertex[i * 3 + 0];
+            vv2 += c[num_elem * n_p * 2 + i * num_elem + idx] * basis_vertex[i * 3 + 1];
+            vv3 += c[num_elem * n_p * 2 + i * num_elem + idx] * basis_vertex[i * 3 + 2];
+        }
+
+        for (i = 0; i < n_p; i++) {
+            Ev1 += c[num_elem * n_p * 3 + i * num_elem + idx] * basis_vertex[i * 3 + 0];
+            Ev2 += c[num_elem * n_p * 3 + i * num_elem + idx] * basis_vertex[i * 3 + 1];
+            Ev3 += c[num_elem * n_p * 3 + i * num_elem + idx] * basis_vertex[i * 3 + 2];
+        }
+
+        uv1 = uv1 / rhov1;
+        uv2 = uv2 / rhov2;
+        uv3 = uv3 / rhov3;
+
+        vv1 = vv1 / rhov1;
+        vv2 = vv2 / rhov2;
+        vv3 = vv3 / rhov3;
+
+        // store result
+        Uv1[idx] = pressure(rhov1, uv1, vv1, Ev1, -10, idx);
+        Uv2[idx] = pressure(rhov2, uv2, vv2, Ev2, -10, idx);
+        Uv3[idx] = pressure(rhov3, uv3, vv3, Ev3, -10, idx);
     }
 }

@@ -45,15 +45,15 @@ void sanity_check(double *c, int num_elem, int n_p) {
     int idx;
 
     for (idx = 0; idx < num_elem; idx++) {
-        rho_avg = c[num_elem * n_p * 0 + idx];
-        u_avg   = c[num_elem * n_p * 1 + idx];
-        v_avg   = c[num_elem * n_p * 2 + idx];
-        E_avg   = c[num_elem * n_p * 3 + idx];
+        rho_avg = c[num_elem * n_p * 0 + idx] * 1.414213562373095E+00;
+        u_avg   = c[num_elem * n_p * 1 + idx] * 1.414213562373095E+00;
+        v_avg   = c[num_elem * n_p * 2 + idx] * 1.414213562373095E+00;
+        E_avg   = c[num_elem * n_p * 3 + idx] * 1.414213562373095E+00;
 
         u_avg = u_avg / rho_avg;
         v_avg = v_avg / rho_avg;
 
-        //p = pressure(rho_avg, v_avg, v_avg, E_avg, 30000, idx);
+        p = pressure(rho_avg, u_avg, v_avg, E_avg, 30000, idx);
     }
 }
 
@@ -165,7 +165,6 @@ void time_integrate_rk4(int n_quad, int n_quad1d, int n_p, int n, int num_elem, 
         t += dt;
         printf(" > (%lf), t = %lf\n", max_l, t);
 
-
         // stage 1
         eval_surface(d_c, d_left_riemann_rhs, d_right_riemann_rhs, 
                      d_s_length, 
@@ -186,7 +185,6 @@ void time_integrate_rk4(int n_quad, int n_quad1d, int n_p, int n, int num_elem, 
                      d_left_elem, d_J, dt, n_p, num_sides, num_elem);
 
         rk4_tempstorage(d_c, d_kstar, d_k1, 0.5, n_p, num_elem);
-
 
         // stage 2
         eval_surface(d_kstar, d_left_riemann_rhs, d_right_riemann_rhs, 
@@ -330,15 +328,33 @@ void eval_rhs_fe(double *c, double *quad_rhs, double *left_riemann_rhs, double *
 }
 
 // forward eulers
-void time_integrate_fe(double dt, int n_quad, int n_quad1d, int n_p, int n, 
-              int num_elem, int num_sides, int timesteps) {
-    int n_threads = 256;
+void time_integrate_fe(int n_quad, int n_quad1d, int n_p, int n, 
+              int num_elem, int num_sides, double endtime, double min_r) {
     int i;
-    double t;
+    double t, dt;
+    double *max_lambda;
+    double max_l;
 
-    for (i = 0; i < timesteps; i++) {
-        t = i * dt;
-        printf(" > t = %lf\n", t);
+    t = 0;
+    while (t < endtime) {
+        eval_global_lambda(d_c, d_lambda, n_quad, n_p, num_elem);
+
+        // find the max value of lambda
+        max_lambda = (double *) malloc(num_elem * sizeof(double));
+        memcpy(max_lambda, d_lambda, num_elem * sizeof(double));
+        max_l = max_lambda[0];
+        for (i = 0; i < num_elem; i++) {
+            max_l = (max_lambda[i] > max_l) ? max_lambda[i] : max_l;
+        }
+        free(max_lambda);
+
+        // keep CFL condition
+        dt  = 0.7 * min_r / max_l /  (2. * n + 1.);
+
+        // add to total time
+        t += dt;
+        printf(" > (%lf), t = %lf\n", max_l, t);
+
         eval_surface(d_c, d_left_riemann_rhs, d_right_riemann_rhs, 
                          d_s_length, 
                          d_V1x, d_V1y,

@@ -156,10 +156,10 @@ __device__ double pressure(double rho, double u, double v, double E) {
     // This happens because 
     //     E < 0.5 rho (u^2 + v^2) 
     // which shouldn't ever be possible...
-    if ((E - (u*u + v*v) / 2. / rho) < 0) {
+    if ((E - (u*u + v*v) / 2. * rho) < 0) {
         return 0.0001;
     }
-    return (GAMMA - 1.) * (E - (u*u + v*v) / 2. / rho);
+    return (GAMMA - 1.) * (E - (u*u + v*v) / 2. * rho);
 }
 
 /* evaluate c
@@ -188,14 +188,16 @@ __device__ double rho0(double x, double y) {
 }
 __device__ double u0(double x, double y) {
     double r = sqrtf(x * x + y * y);
-    return cos(PI/2. * x/1.384) * MACH / r;
+    double theta = atan(y/x);
+    return sin(theta) * MACH / r;
 }
 __device__ double v0(double x, double y) {
     double r = sqrtf(x * x + y * y);
-    return -sin(PI/2. * x/1.384) * MACH / r;
+    double theta = atan(y/x);
+    return -cos(theta) * MACH / r;
 }
 __device__ double E0(double x, double y) {
-    return powf(rho0(x,y),GAMMA) / (GAMMA * (GAMMA - 1)) + (powf(u0(x, y), 2) + powf(v0(x, y), 2)) / 2. / rho0(x, y);
+    return powf(rho0(x,y),GAMMA) / (GAMMA * (GAMMA - 1)) + (powf(u0(x, y), 2) + powf(v0(x, y), 2)) / 2. * rho0(x, y);
 }
 
 /* boundary exact
@@ -231,11 +233,15 @@ __device__ void reflecting_boundary(double rho_left, double *rho_right,
     //*v_right   = v_left - 2 * dot * ny;
 
     // taken from lilia's code:
-    double vn = -(u_left * nx + v_left * ny);
-    double vt = u_left * ny - v_left * nx;
+    //double vn = -(u_left * nx + v_left * ny);
+    //double vt = u_left * ny - v_left * nx;
 
-    *u_right = vn * nx + vt * ny;
-    *v_right = vn * ny - vt * nx;
+    //*u_right = vn * nx + vt * ny;
+    //*v_right = vn * ny - vt * nx;
+
+    // taken from algorithm 1
+    *u_right = (u_left * ny - v_left * nx)*ny;
+    *v_right = -(u_left * ny - v_left * nx)*nx;
 }
 
 __device__ void outflow_boundary(double rho_left, double *rho_right,
