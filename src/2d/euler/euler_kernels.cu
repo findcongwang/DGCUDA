@@ -183,15 +183,15 @@ __device__ double eval_c(double rho, double u, double v, double E) {
  * returns the value of the intial condition at point x
  */
 __device__ double rho0(double x, double y) {
-    double r = x*x + y*y;
+    double r = x * x + y * y;
     return powf(1 + (GAMMA - 1)/ 2. * MACH * MACH * (1 - powf(1. / r, 2)), 1./(GAMMA - 1));
 }
 __device__ double u0(double x, double y) {
-    double r = x*x + y*y;
+    double r = x * x + y * y;
     return cos(PI/2. * x/1.384) * MACH / r;
 }
 __device__ double v0(double x, double y) {
-    double r = x*x + y*y;
+    double r = x * x + y * y;
     return -sin(PI/2. * x/1.384) * MACH / r;
 }
 __device__ double E0(double x, double y) {
@@ -769,11 +769,6 @@ __device__ void eval_left_right(double *c_rho_left, double *c_rho_right,
         *rho_left = c_rho_left[0];
     }
 
-    // in case rho_left comes back nonphysical
-    if (*rho_left <= 0) {
-        *rho_left = c_rho_left[0];
-    }
-
     // in case E_left comes back nonphysical
     if (*E_left <= 0) {
         *E_left = c_E_left[0];
@@ -802,15 +797,15 @@ __device__ void eval_left_right(double *c_rho_left, double *c_rho_right,
     // outflow 
     ///////////////////////
     } else if (right_idx == -2) {
-        //inflow_boundary(rho_right, u_right, v_right, E_right,
-                        //v1x, v1y, v2x, v2y, v3x, v3y, 
-                        //j, 
-                        //left_side, n_quad1d);
-        outflow_boundary(*rho_left, rho_right,
-                         *u_left,   u_right,
-                         *v_left,   v_right,
-                         *E_left,   E_right,
-                         nx, ny);
+        inflow_boundary(rho_right, u_right, v_right, E_right,
+                        v1x, v1y, v2x, v2y, v3x, v3y, 
+                        j, 
+                        left_side, n_quad1d);
+        //outflow_boundary(*rho_left, rho_right,
+                         //*u_left,   u_right,
+                         //*v_left,   v_right,
+                         //*E_left,   E_right,
+                         //nx, ny);
 
     ///////////////////////
     // inflow 
@@ -835,6 +830,11 @@ __device__ void eval_left_right(double *c_rho_left, double *c_rho_right,
         // in case rho_right comes back nonphysical
         if (*rho_right <= 0) {
             *rho_right = c_rho_right[0];
+        }
+
+        // in case E_right comes back nonphysical
+        if (*E_right <= 0) {
+            *E_right = c_E_right[0];
         }
 
         // again, since we have coefficients for rho * u and rho * v

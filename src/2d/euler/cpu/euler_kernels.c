@@ -127,11 +127,11 @@ double pressure(double rho, double u, double v, double E, int side_type, int idx
     // apparently it only happens when the outflow boundary conditions are set wrong.
     // OK, this should SERIOUSLY not be happening here...
     if( (GAMMA - 1.) * (E - (u*u + v*v) / 2. / rho) < 0) {
-        printf("ALERT: pressure negative!\n");
-        printf(" > idx %i\n", idx);
-        printf(" > side %i\n", side_type);
-        printf(" > (%lf, %lf, %lf, %lf)\n", rho, u, v, E);
-        printf(" > p = %lf\n", (GAMMA - 1.) * (E - (u*u + v*v) / 2. / rho));
+        //printf("ALERT: pressure negative!\n");
+        //printf(" > idx %i\n", idx);
+        //printf(" > side %i\n", side_type);
+        //printf(" > (%lf, %lf, %lf, %lf)\n", rho, u, v, E);
+        //printf(" > p = %lf\n", (GAMMA - 1.) * (E - (u*u + v*v) / 2. / rho));
         //exit(0);
         return 0.0001;
     }
