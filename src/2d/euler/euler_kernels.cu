@@ -21,6 +21,7 @@
  ***********************/
 /* These are always prefixed with d_ for "device" */
 double *d_c;                 // coefficients for [rho, rho * u, rho * v, E]
+double *d_c_prev;            // coefficients for [rho, rho * u, rho * v, E]
 double *d_quad_rhs;          // the right hand side containing the quadrature contributions
 double *d_left_riemann_rhs;  // the right hand side containing the left riemann contributions
 double *d_right_riemann_rhs; // the right hand side containing the right riemann contributions
@@ -156,7 +157,7 @@ __device__ double pressure(double rho, double u, double v, double E) {
     // This happens because 
     //     E < 0.5 rho (u^2 + v^2) 
     // which shouldn't ever be possible...
-    if ((E - (u*u + v*v) / 2. * rho) < 0) {
+    if ((GAMMA - 1) * (E - (u*u + v*v) / 2. * rho) < 0) {
         return 0.0001;
     }
     return (GAMMA - 1.) * (E - (u*u + v*v) / 2. * rho);
@@ -200,23 +201,6 @@ __device__ double E0(double x, double y) {
     return powf(rho0(x,y),GAMMA) / (GAMMA * (GAMMA - 1)) + (powf(u0(x, y), 2) + powf(v0(x, y), 2)) / 2. * rho0(x, y);
 }
 
-/* boundary exact
- *
- * returns the exact boundary conditions
- */
-__device__ double boundary_exact_rho(double x, double y, double t) {
-    return rho0(x, y);
-}
-__device__ double boundary_exact_u(double x, double y, double t) {
-    return u0(x, y);
-}
-__device__ double boundary_exact_v(double x, double y, double t) {
-    return v0(x, y);
-}
-__device__ double boundary_exact_E(double x, double y, double t) {
-    return E0(x, y);
-}
-
 __device__ void reflecting_boundary(double rho_left, double *rho_right,
                          double u_left,   double *u_right,
                          double v_left,   double *v_right,
@@ -235,8 +219,8 @@ __device__ void reflecting_boundary(double rho_left, double *rho_right,
             r2_eval = 0.;
             break;
         case 1: 
-            r1_eval = (1. - r_oned[j]) / 2.;
-            r2_eval = (1. + r_oned[j]) / 2.;
+            r1_eval = (1. + r_oned[j]) / 2.;
+            r2_eval = (1. - r_oned[j]) / 2.;
             break;
         case 2: 
             r1_eval = 0.;
@@ -281,8 +265,8 @@ __device__ void reflecting_boundary(double rho_left, double *rho_right,
         Ny *= -1;
     }
 
-    *u_right = (u_left * ny - v_left * nx)*Ny;
-    *v_right = -(u_left * ny - v_left * nx)*Nx;
+    *u_right = (u_left * Ny - v_left * Nx)*Ny;
+    *v_right = -(u_left * Ny - v_left * Nx)*Nx;
 
 }
 
@@ -1244,3 +1228,101 @@ __device__ void eval_u_velocity(double *c, double *c_rho,
     Uv2[idx] = uv2;
     Uv3[idx] = uv3;
 }
+
+/* check for convergence
+ *
+ * see if the difference in coefficients is less than the tolerance
+ */
+__global__ void check_convergence(double *c_prev, double *c, int num_elem, int n_p) {
+    int idx = blockDim.x * blockIdx.x + threadIdx.x;
+
+    c_prev[idx] = powf(c[idx] - c_prev[idx], 2);
+}
+
+
+__global__ void measure_error(double *c,
+                       double *Uv1, double *Uv2, double *Uv3,
+                       double *V1x, double *V1y,
+                       double *V2x, double *V2y,
+                       double *V3x, double *V3y,
+                       int num_elem, int n_p) {
+    int idx = blockDim.x * blockIdx.x + threadIdx.x;
+    int i;
+    double rho, u, v, E;
+    double v1x, v1y, v2x, v2y, v3x, v3y;
+    double error1, error2, error3;
+    double p1, p_exact1;
+    double p2, p_exact2;
+    double p3, p_exact3;
+
+    // x = x2 * r + x3 * s + x1 * (1 - r - s)
+    v1x = V1x[idx];
+    v1y = V1y[idx];
+    v2x = V2x[idx];
+    v2y = V2y[idx];
+    v3x = V3x[idx];
+    v3y = V3y[idx];
+
+    // vertex 1 (r = 0, s = 0)
+    rho = 0.;
+    u = 0.;
+    v = 0.;
+    E = 0.;
+    for (i = 0; i < n_p; i++) {
+        rho += c[num_elem * n_p * 0 + i * num_elem + idx] * basis_vertex[i * 3 + 0];
+        u   += c[num_elem * n_p * 1 + i * num_elem + idx] * basis_vertex[i * 3 + 0];
+        v   += c[num_elem * n_p * 2 + i * num_elem + idx] * basis_vertex[i * 3 + 0];
+        E   += c[num_elem * n_p * 3 + i * num_elem + idx] * basis_vertex[i * 3 + 0];
+    }
+
+    u = u / rho;
+    v = v / rho;
+
+    p1 = pressure(rho, u, v, E);
+    p_exact1 = pressure(rho0(v1x, v1y), u0(v1x, v1y), v0(v1x, v2y), E0(v1x, v1y));
+    error1 = powf(p1 - p_exact1, 2);
+
+    // vertex 2 (r = 1, s = 0)
+    rho = 0.;
+    u = 0.;
+    v = 0.;
+    E = 0.;
+    for (i = 0; i < n_p; i++) {
+        rho += c[num_elem * n_p * 0 + i * num_elem + idx] * basis_vertex[i * 3 + 1];
+        u   += c[num_elem * n_p * 1 + i * num_elem + idx] * basis_vertex[i * 3 + 1];
+        v   += c[num_elem * n_p * 2 + i * num_elem + idx] * basis_vertex[i * 3 + 1];
+        E   += c[num_elem * n_p * 3 + i * num_elem + idx] * basis_vertex[i * 3 + 1];
+    }
+
+    u = u / rho;
+    v = v / rho;
+
+    p2 = pressure(rho, u, v, E);
+    p_exact2 = pressure(rho0(v2x, v2y), u0(v2x, v2y), v0(v2x, v2y), E0(v2x, v2y));
+    error2 = powf(p2 - p_exact2, 2);
+
+     // vertex 3 (r = 0, s = 1)
+    rho = 0.;
+    u = 0.;
+    v = 0.;
+    E = 0.;
+    for (i = 0; i < n_p; i++) {
+        rho += c[num_elem * n_p * 0 + i * num_elem + idx] * basis_vertex[i * 3 + 2];
+        u   += c[num_elem * n_p * 1 + i * num_elem + idx] * basis_vertex[i * 3 + 2];
+        v   += c[num_elem * n_p * 2 + i * num_elem + idx] * basis_vertex[i * 3 + 2];
+        E   += c[num_elem * n_p * 3 + i * num_elem + idx] * basis_vertex[i * 3 + 2];
+    }
+
+    u = u / rho;
+    v = v / rho;
+
+    p3 = pressure(rho, u, v, E);
+    p_exact3 = pressure(rho0(v3x, v3y), u0(v3x, v3y), v0(v3x, v3y), E0(v3x, v3y));
+    error3 = powf(p3 - p_exact3, 2);
+
+    // store result
+    Uv1[idx] = p1;
+    Uv2[idx] = p2;
+    Uv3[idx] = p3;
+}
+

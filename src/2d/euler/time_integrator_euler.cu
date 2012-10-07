@@ -7,6 +7,8 @@
 void checkCudaError(const char*);
 #endif
 
+#define TOL 10e-15
+
 /***********************
  * RK4 
  ***********************/
@@ -177,8 +179,9 @@ void time_integrate_rk4(int n_quad, int n_quad1d, int n_p, int n, int num_elem, 
     }
 
     t = 0;
+    double convergence = 1 + TOL;
 
-    while (t < endtime) {
+    while (t < endtime && convergence > TOL) {
         // compute all the lambda values over each cell
         eval_global_lambda_ftn<<<n_blocks_elem, n_threads>>>(d_c, d_lambda, n_quad, n_p, num_elem);
 
@@ -342,6 +345,23 @@ void time_integrate_rk4(int n_quad, int n_quad1d, int n_p, int n, int num_elem, 
         // final stage
         rk4<<<n_blocks_rk4, n_threads>>>(d_c, d_k1, d_k2, d_k3, d_k4, n_p, num_elem);
         cudaThreadSynchronize();
+
+        if (t > 0.) {
+            check_convergence<<<n_blocks_rk4_temp, n_threads>>>(d_c_prev, d_c, num_elem, n_p);
+            double *c = (double *) malloc(num_elem * n_p * 4 * sizeof(double));
+            cudaMemcpy(c, d_c_prev, num_elem * n_p * 4 * sizeof(double), cudaMemcpyDeviceToHost);
+
+            convergence = 0.;
+            for (i = 0; i < num_elem * n_p * 4; i++) {
+                convergence += c[i];
+            }
+
+            convergence = sqrtf(convergence);
+
+            printf(" > convergence = %.015lf\n", convergence);
+        }
+
+        cudaMemcpy(d_c_prev, d_c, num_elem * n_p * 4 * sizeof(double), cudaMemcpyDeviceToDevice);
 
         checkCudaError("error after final stage.");
 

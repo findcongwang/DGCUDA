@@ -6,6 +6,8 @@
 #define TIMEINTEGRATOR_H_GUARD
 #endif
 
+#define TOL 10e-15
+
 /***********************
  * RK4 
  ***********************/
@@ -144,7 +146,9 @@ void time_integrate_rk4(int n_quad, int n_quad1d, int n_p, int n, int num_elem, 
 
     t = 0;
 
-    while (t < endtime) {
+    double convergence = 1 + TOL;
+
+    while (t < endtime && convergence > TOL) {
         sanity_check(d_c, num_elem, n_p);
         // compute all the lambda values over each cell
         eval_global_lambda(d_c, d_lambda, n_quad, n_p, num_elem);
@@ -251,6 +255,24 @@ void time_integrate_rk4(int n_quad, int n_quad1d, int n_p, int n, int num_elem, 
 
         // combine them all
         rk4(d_c, d_k1, d_k2, d_k3, d_k4, n_p, num_elem);
+
+        if (t > 0.) {
+            check_convergence(d_c_prev, d_c, num_elem, n_p);
+            double *c = (double *) malloc(num_elem * n_p * 4 * sizeof(double));
+            memcpy(c, d_c_prev, num_elem * n_p * 4 * sizeof(double));
+
+            convergence = 0.;
+            for (i = 0; i < num_elem * n_p * 4; i++) {
+                convergence += c[i];
+            }
+
+            convergence = sqrtf(convergence);
+
+            printf(" > convergence = %.015lf\n", convergence);
+        }
+
+        memcpy(d_c_prev, d_c, num_elem * n_p * 4 * sizeof(double));
+ 
     }
 }
 

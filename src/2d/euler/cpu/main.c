@@ -263,6 +263,22 @@ int main(int argc, char *argv[]) {
     fprintf(out_file,"};");
     fclose(out_file);
 
+    measure_error(d_c, d_Uv1, d_Uv2, d_Uv3, 
+                  d_V1x, d_V1y, d_V2x, d_V2y, d_V3x, d_V3y,
+                  num_elem, n_p);
+
+    memcpy(Uv1, d_Uv1, num_elem * sizeof(double));
+    memcpy(Uv2, d_Uv2, num_elem * sizeof(double));
+    memcpy(Uv3, d_Uv3, num_elem * sizeof(double));
+    out_file  = fopen("output/p_error.out" , "w");
+    fprintf(out_file, "View \"p \" {\n");
+    for (i = 0; i < num_elem; i++) {
+        fprintf(out_file, "ST (%lf,%lf,0,%lf,%lf,0,%lf,%lf,0) {%lf,%lf,%lf};\n", 
+                               V1x[i], V1y[i], V2x[i], V2y[i], V3x[i], V3y[i],
+                               Uv1[i], Uv2[i], Uv3[i]);
+    }
+    fprintf(out_file,"};");
+    fclose(out_file);
 
     // free variables
     free_gpu();

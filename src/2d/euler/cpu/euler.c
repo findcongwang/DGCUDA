@@ -301,6 +301,7 @@ void init_gpu(int num_elem, int num_sides, int n_p,
     int reduction_size = (num_elem  / 256) + ((num_elem  % 256) ? 1 : 0);
 
     d_c = (double *) malloc(4 * num_elem * n_p * sizeof(double)); 
+    d_c_prev = (double *) malloc(4 * num_elem * n_p * sizeof(double)); 
     d_quad_rhs = (double *) malloc(4 * num_elem * n_p * sizeof(double));
     d_left_riemann_rhs = (double *) malloc(4 * num_sides * n_p * sizeof(double));
     d_right_riemann_rhs = (double *) malloc(4 * num_sides * n_p * sizeof(double));
@@ -376,6 +377,7 @@ void init_gpu(int num_elem, int num_sides, int n_p,
 
 void free_gpu() {
     free(d_c);
+    free(d_c_prev);
     free(d_quad_rhs);
     free(d_left_riemann_rhs);
     free(d_right_riemann_rhs);

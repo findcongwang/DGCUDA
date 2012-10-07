@@ -313,6 +313,7 @@ void init_gpu(int num_elem, int num_sides, int n_p,
     cudaDeviceReset();
 
     cudaMalloc((void **) &d_c,        4 * num_elem * n_p * sizeof(double));
+    cudaMalloc((void **) &d_c_prev,   4 * num_elem * n_p * sizeof(double));
     cudaMalloc((void **) &d_quad_rhs, 4 * num_elem * n_p * sizeof(double));
     cudaMalloc((void **) &d_left_riemann_rhs,  4 * num_sides * n_p * sizeof(double));
     cudaMalloc((void **) &d_right_riemann_rhs, 4 * num_sides * n_p * sizeof(double));
@@ -389,6 +390,7 @@ void init_gpu(int num_elem, int num_sides, int n_p,
 
 void free_gpu() {
     cudaFree(d_c);
+    cudaFree(d_c_prev);
     cudaFree(d_quad_rhs);
     cudaFree(d_left_riemann_rhs);
     cudaFree(d_right_riemann_rhs);

@@ -21,6 +21,7 @@
  ***********************/
 /* These are always prefixed with d_ for "device" */
 double *d_c;                 // coefficients for [rho, rho * u, rho * v, E]
+double *d_c_prev;            // coefficients for [rho, rho * u, rho * v, E]
 double *d_quad_rhs;          // the right hand side containing the quadrature contributions
 double *d_left_riemann_rhs;  // the right hand side containing the left riemann contributions
 double *d_right_riemann_rhs; // the right hand side containing the right riemann contributions
@@ -240,8 +241,8 @@ void reflecting_boundary(double rho_left, double *rho_right,
         Ny *= -1;
     }
 
-    *u_right = (u_left * ny - v_left * nx)*Ny;
-    *v_right = -(u_left * ny - v_left * nx)*Nx;
+    *u_right = (u_left * Ny - v_left * Nx)*Ny;
+    *v_right = -(u_left * Ny - v_left * Nx)*Nx;
 
 }
 
@@ -673,16 +674,16 @@ void eval_left_right(double *c_rho_left, double *c_rho_right,
     // reflecting 
     ///////////////////////
     if (right_idx == -1) {
-        //inflow_boundary(rho_right, u_right, v_right, E_right,
-                        //v1x, v1y, v2x, v2y, v3x, v3y, 
-                        //j, 
-                        //left_side, n_quad1d);
-        reflecting_boundary(*rho_left, rho_right, 
-                            *u_left,   u_right, 
-                            *v_left,   v_right, 
-                            *E_left,   E_right,
-                            v1x, v1y, v2x, v2y, v3x, v3y, 
-                            nx, ny, j, left_side, n_quad1d);
+        inflow_boundary(rho_right, u_right, v_right, E_right,
+                        v1x, v1y, v2x, v2y, v3x, v3y, 
+                        j, 
+                        left_side, n_quad1d);
+        //reflecting_boundary(*rho_left, rho_right, 
+                            //*u_left,   u_right, 
+                            //*v_left,   v_right, 
+                            //*E_left,   E_right,
+                            //v1x, v1y, v2x, v2y, v3x, v3y, 
+                            //nx, ny, j, left_side, n_quad1d);
 
     ///////////////////////
     // outflow 
@@ -1261,5 +1262,105 @@ void eval_p(double *c,
         Uv1[idx] = pressure(rhov1, uv1, vv1, Ev1, -10, idx);
         Uv2[idx] = pressure(rhov2, uv2, vv2, Ev2, -10, idx);
         Uv3[idx] = pressure(rhov3, uv3, vv3, Ev3, -10, idx);
+    }
+}
+
+/* check for convergence
+ *
+ * see if the difference in coefficients is less than the tolerance
+ */
+void check_convergence(double *c_prev, double *c, int num_elem, int n_p) {
+    int idx;
+    for (idx = 0; idx < num_elem * n_p * 4; idx++) {
+        c_prev[idx] = powf(c[idx] - c_prev[idx], 2);
+    }
+}
+
+
+void measure_error(double *c,
+                       double *Uv1, double *Uv2, double *Uv3,
+                       double *V1x, double *V1y,
+                       double *V2x, double *V2y,
+                       double *V3x, double *V3y,
+                       int num_elem, int n_p) {
+    int idx;
+    for (idx = 0; idx < num_elem; idx++) {
+        int i;
+        double rho, u, v, E;
+        double v1x, v1y, v2x, v2y, v3x, v3y;
+        double error1, error2, error3;
+        double p1, p_exact1;
+        double p2, p_exact2;
+        double p3, p_exact3;
+
+        // x = x2 * r + x3 * s + x1 * (1 - r - s)
+        v1x = V1x[idx];
+        v1y = V1y[idx];
+        v2x = V2x[idx];
+        v2y = V2y[idx];
+        v3x = V3x[idx];
+        v3y = V3y[idx];
+
+        // vertex 1 (r = 0, s = 0)
+        rho = 0.;
+        u = 0.;
+        v = 0.;
+        E = 0.;
+        for (i = 0; i < n_p; i++) {
+            rho += c[num_elem * n_p * 0 + i * num_elem + idx] * basis_vertex[i * 3 + 0];
+            u   += c[num_elem * n_p * 1 + i * num_elem + idx] * basis_vertex[i * 3 + 0];
+            v   += c[num_elem * n_p * 2 + i * num_elem + idx] * basis_vertex[i * 3 + 0];
+            E   += c[num_elem * n_p * 3 + i * num_elem + idx] * basis_vertex[i * 3 + 0];
+        }
+
+        u = u / rho;
+        v = v / rho;
+
+        p1 = pressure(rho, u, v, E, 99, idx);
+        p_exact1 = pressure(rho0(v1x, v1y), u0(v1x, v1y), v0(v1x, v2y), E0(v1x, v1y), 99, idx);
+        error1 = powf(p1 - p_exact1, 2);
+
+        // vertex 2 (r = 1, s = 0)
+        rho = 0.;
+        u = 0.;
+        v = 0.;
+        E = 0.;
+        for (i = 0; i < n_p; i++) {
+            rho += c[num_elem * n_p * 0 + i * num_elem + idx] * basis_vertex[i * 3 + 1];
+            u   += c[num_elem * n_p * 1 + i * num_elem + idx] * basis_vertex[i * 3 + 1];
+            v   += c[num_elem * n_p * 2 + i * num_elem + idx] * basis_vertex[i * 3 + 1];
+            E   += c[num_elem * n_p * 3 + i * num_elem + idx] * basis_vertex[i * 3 + 1];
+        }
+
+        u = u / rho;
+        v = v / rho;
+
+        p2 = pressure(rho, u, v, E, 99, idx);
+        p_exact2 = pressure(rho0(v2x, v2y), u0(v2x, v2y), v0(v2x, v2y), E0(v2x, v2y), 99, idx);
+        error2 = powf(p2 - p_exact2, 2);
+
+         // vertex 3 (r = 0, s = 1)
+        rho = 0.;
+        u = 0.;
+        v = 0.;
+        E = 0.;
+        for (i = 0; i < n_p; i++) {
+            rho += c[num_elem * n_p * 0 + i * num_elem + idx] * basis_vertex[i * 3 + 2];
+            u   += c[num_elem * n_p * 1 + i * num_elem + idx] * basis_vertex[i * 3 + 2];
+            v   += c[num_elem * n_p * 2 + i * num_elem + idx] * basis_vertex[i * 3 + 2];
+            E   += c[num_elem * n_p * 3 + i * num_elem + idx] * basis_vertex[i * 3 + 2];
+        }
+
+        u = u / rho;
+        v = v / rho;
+
+        p3 = pressure(rho, u, v, E, 99, idx);
+        p_exact3 = pressure(rho0(v3x, v3y), u0(v3x, v3y), v0(v3x, v3y), E0(v3x, v3y), 99, idx);
+        error3 = powf(p3 - p_exact3, 2);
+
+        // store result
+        Uv1[idx] = p1;
+        Uv2[idx] = p2;
+        Uv3[idx] = p3;
     }
 }
