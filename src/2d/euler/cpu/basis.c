@@ -217,6 +217,18 @@ void preval_basis(double *r1_local, double *r2_local, double *s_r, double *w_loc
     memcpy(r2, r2_local, n_quad * sizeof(double));
     memcpy(r_oned, s_r, n_quad1d * sizeof(double));
 
+    for (i = 0; i < n_p; i++) {
+        for (j = 0; j < n_p; j++) {
+            double sum = 0.;
+            int k;
+            for (k = 0; k < n_quad; k++) {
+                //sum += w[k] * basis[i * n_quad + k] * basis[j * n_quad + k];
+                //sum += w[k] * phi(r1[k], r2[k], i) * phi(r1[k], r2[k], j);
+            }
+            //printf("%i, %i, %lf\n", i, j, sum);
+        }
+    }
+
     free(basis_local);
     free(basis_grad_x_local);
     free(basis_grad_y_local);

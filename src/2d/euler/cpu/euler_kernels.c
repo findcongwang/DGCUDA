@@ -180,7 +180,33 @@ void reflecting_boundary(double rho_left, double *rho_right,
                          double u_left,   double *u_right,
                          double v_left,   double *v_right,
                          double E_left,   double *E_right,
-                         double nx,       double ny) {
+                         double v1x,      double v1y, 
+                         double v2x,      double v2y,
+                         double v3x,      double v3y,
+                         double nx,       double ny,
+                         int j, int left_side, int n_quad1d) {
+
+    double r1_eval, r2_eval;
+    // we need the mapping back to the grid space
+    switch (left_side) {
+        case 0: 
+            r1_eval = 0.5 + 0.5 * r_oned[j];
+            r2_eval = 0.;
+            break;
+        case 1: 
+            r1_eval = (1. - r_oned[j]) / 2.;
+            r2_eval = (1. + r_oned[j]) / 2.;
+            break;
+        case 2: 
+            r1_eval = 0.;
+            r2_eval = 0.5 + 0.5 * r_oned[n_quad1d - 1 - j];
+            break;
+    }
+
+    // x = x2 * r + x3 * s + x1 * (1 - r - s)
+    double x = v2x * r1_eval + v3x * r2_eval + v1x * (1 - r1_eval - r2_eval);
+    double y = v2y * r1_eval + v3y * r2_eval + v1y * (1 - r1_eval - r2_eval);
+
     // set the sides to reflect
     *rho_right = rho_left;
     *E_right   = E_left;
@@ -199,8 +225,23 @@ void reflecting_boundary(double rho_left, double *rho_right,
     //*v_right = vn * ny - vt * nx;
 
     // taken from algorithm 1
-    *u_right = (u_left * ny - v_left * nx)*ny;
-    *v_right = -(u_left * ny - v_left * nx)*nx;
+    //*u_right = (u_left * ny - v_left * nx)*ny;
+    //*v_right = -(u_left * ny - v_left * nx)*nx;
+
+    //*u_right = u0(x,y);
+    //*v_right = v0(x,y);
+
+    double dot = sqrtf(x*x + y*y);
+    double Nx = x / dot;
+    double Ny = y / dot;
+
+    if (Nx * nx + Ny * ny < 0) {
+        Nx *= -1;
+        Ny *= -1;
+    }
+
+    *u_right = (u_left * ny - v_left * nx)*Ny;
+    *v_right = -(u_left * ny - v_left * nx)*Nx;
 
 }
 
@@ -294,12 +335,22 @@ void init_conditions(double *c, double *J,
                 u   += w[j] * u0(x, y) * rho0(x, y) * basis[i * n_quad + j];
                 v   += w[j] * v0(x, y) * rho0(x, y) * basis[i * n_quad + j];
                 E   += w[j] * E0(x, y) * basis[i * n_quad + j];
+                //printf("%i\n", n_quad);
+                //printf("i * n_quad + j = %i\n", i * n_quad + j);
+                //printf("basis = %lf\n", basis[i*n_quad + j]);
             }
 
             c[num_elem * n_p * 0 + i * num_elem + idx] = rho;
             c[num_elem * n_p * 1 + i * num_elem + idx] = u; // we actually calculate rho * u
             c[num_elem * n_p * 2 + i * num_elem + idx] = v; // we actually calculate rho * v
             c[num_elem * n_p * 3 + i * num_elem + idx] = E;
+
+            if (idx != 0) {
+                //c[num_elem * n_p * 0 + i * num_elem + idx] = 0;
+                //c[num_elem * n_p * 1 + i * num_elem + idx] = 0;
+                //c[num_elem * n_p * 2 + i * num_elem + idx] = 0;
+                //c[num_elem * n_p * 3 + i * num_elem + idx] = 0;
+            }
 
        } 
     }
@@ -630,7 +681,8 @@ void eval_left_right(double *c_rho_left, double *c_rho_right,
                             *u_left,   u_right, 
                             *v_left,   v_right, 
                             *E_left,   E_right,
-                            nx, ny);
+                            v1x, v1y, v2x, v2y, v3x, v3y, 
+                            nx, ny, j, left_side, n_quad1d);
 
     ///////////////////////
     // outflow 
