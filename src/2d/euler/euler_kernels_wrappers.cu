@@ -648,7 +648,7 @@ __global__ void eval_volume_wrapper5(double *c, double *quad_rhs,
 //*
 //* wrapper function for the eval_global_lambda device function.
 //* THREADS: num_sides
- __global__ void eval_global_lambda_wrapper5(double *c, double *lambda, int n_p, int n_quad, int num_elem) {
+ __global__ void eval_global_lambda_wrapper5(double *c, double *lambda, int n_quad, int n_p, int num_elem) {
     int idx = blockDim.x * blockIdx.x + threadIdx.x;
 
     if (idx < num_elem) {
@@ -972,7 +972,7 @@ __global__ void eval_u_wrapper5(double *c,
         // get the coefficients for this element
         for (i = 0; i < 21; i++) {
             c_u[i] = c[num_elem * n_p + i * num_elem + idx];
-            c_rho[i] = c[num_elem * n_p + i * num_elem + idx];
+            c_rho[i] = c[i * num_elem + idx];
         }
 
         eval_u_velocity(c_u, c_rho, Uv1, Uv2, Uv3, num_elem, n_p, idx);

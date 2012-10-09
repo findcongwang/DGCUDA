@@ -58,7 +58,7 @@ __device__ __constant__ double basis_side[1024];
 __device__ __constant__ double basis_vertex[256];
 
 // weights for 2d and 1d quadrature rules
-__device__ __constant__ double w[32];
+__device__ __constant__ double w[64];
 __device__ __constant__ double w_oned[16];
 
 __device__ __constant__ double r1[32];
@@ -184,26 +184,22 @@ __device__ double eval_c(double rho, double u, double v, double E) {
  * returns the value of the intial condition at point x
  */
 __device__ double rho0(double x, double y) {
-    double r = sqrtf(x * x + y * y);
-    double r_inv = 1./r;
-    return powf(1+1.0125*(1.-r_inv*r_inv),2.5);
+    double r = sqrt(x*x + y*y);
+    return powf(1+1.0125*(1.- 1./(r * r)),2.5);
     //return powf(1 + (GAMMA - 1)/ 2. * MACH * MACH * (1 - powf(1. / r, 2)), 1./(GAMMA - 1));
 }
 __device__ double u0(double x, double y) {
-    double r = sqrtf(x * x + y * y);
-    double theta = atan(y/x);
-    return sin(theta) * MACH / r;
+    double r = sqrt(x*x + y*y);
+    return sin(atan(y / x)) * MACH / r;
 }
 __device__ double v0(double x, double y) {
-    double r = sqrtf(x * x + y * y);
-    double theta = atan(y/x);
-    return -cos(theta) * MACH / r;
+    double r = sqrt(x*x + y*y);
+    return -cos(atan(y / x)) * MACH / r;
 }
 __device__ double E0(double x, double y) {
-    double r = sqrtf(x * x + y * y);
-    double p = (1.0/GAMMA)*powf(rho0(x,y),GAMMA);
-    double vel = MACH / r;
-    return  0.5 * rho0(x,y) * (vel*vel) + p * (1./(GAMMA - 1.));
+    double r = sqrt(x*x + y*y);
+    double p = (1.0 / GAMMA) * powf(rho0(x, y), GAMMA);
+    return  0.5 * rho0(x,y) * (MACH*MACH/(r * r)) + p * (1./(GAMMA - 1.));
     //return powf(rho0(x,y),GAMMA) / (GAMMA * (GAMMA - 1)) + (powf(u0(x, y), 2) + powf(v0(x, y), 2)) / 2. * rho0(x, y);
 }
 
@@ -323,14 +319,6 @@ __device__ void inflow_boundary(double *rho_right, double *u_right, double *v_ri
     *u_right   = u0(x, y);
     *v_right   = v0(x, y);
     *E_right   = E0(x, y);
-}
-
-/* u exact
- *
- * returns the exact value of u for error measurement.
- */
-__device__ double uexact(double x, double y, double t) {
-    return u0(x, y);
 }
 
 /* initial conditions

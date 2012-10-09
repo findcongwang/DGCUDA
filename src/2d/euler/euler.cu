@@ -65,7 +65,8 @@ void set_quadrature(int n,
     // allocate integration points
     *r1_local = (double *)  malloc(*n_quad * sizeof(double));
     *r2_local = (double *)  malloc(*n_quad * sizeof(double));
-    *w_local  =  (double *) malloc(*n_quad * sizeof(double));
+    *w_local  = (double *) malloc(*n_quad * sizeof(double));
+    printf("n_quad = %i\n", *n_quad);
 
     *s_r = (double *) malloc(*n_quad1d * sizeof(double));
     *oned_w_local = (double *) malloc(*n_quad1d * sizeof(double));

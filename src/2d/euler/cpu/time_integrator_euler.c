@@ -151,6 +151,7 @@ void time_integrate_rk4(int n_quad, int n_quad1d, int n_p, int n, int num_elem, 
 
     while (t < endtime && convergence > TOL) {
         sanity_check(d_c, num_elem, n_p);
+        //printf("starting rk4...\n");
         // compute all the lambda values over each cell
         eval_global_lambda(d_c, d_lambda, n_quad, n_p, num_elem);
 
@@ -170,9 +171,10 @@ void time_integrate_rk4(int n_quad, int n_quad1d, int n_p, int n, int num_elem, 
             t += dt;
         }
 
-        //printf(" > (%lf), t = %lf\n", max_l, t);
+        printf(" > (%lf), t = %lf\n", max_l, t);
 
         // stage 1
+        //printf("stage 1 ...\n");
         eval_surface(d_c, d_left_riemann_rhs, d_right_riemann_rhs, 
                      d_s_length, 
                      d_V1x, d_V1y,

@@ -178,10 +178,10 @@ double v0(double x, double y) {
 double E0(double x, double y) {
     double r = sqrtf(x*x + y*y);
     double r_inv = 1./r;
-    //return powf(rho0(x,y),GAMMA) / (GAMMA * (GAMMA - 1)) + 0.5 * (u0(x,y) * u0(x,y) + v0(x,y) * v0(x,y)) * rho0(x,y);
     double p = (1.0/GAMMA)*powf(rho0(x,y),GAMMA);
     double vel = MACH / r;
     return  0.5 * rho0(x,y) * (vel*vel) + p * (1./(GAMMA - 1.));
+    //return powf(rho0(x,y),GAMMA) / (GAMMA * (GAMMA - 1)) + 0.5 * (u0(x,y) * u0(x,y) + v0(x,y) * v0(x,y)) * rho0(x,y);
 }
 
 void reflecting_boundary(double rho_left, double *rho_right,
