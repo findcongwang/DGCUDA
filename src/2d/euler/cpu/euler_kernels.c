@@ -134,7 +134,7 @@ double pressure(double rho, double u, double v, double E, int side_type, int idx
         printf(" > (%lf, %lf, %lf, %lf)\n", rho, u, v, E);
         printf(" > p = %lf\n", (GAMMA - 1.) * (E - (u*u + v*v) / 2. * rho));
         exit(0);
-        //return 0.0001;
+        return 0.0001;
     }
     return (GAMMA - 1.) * (E - (u*u + v*v) / 2. * rho);
 }
@@ -161,7 +161,9 @@ double eval_c(double rho, double u, double v, double E, int side_type, int idx) 
  */
 double rho0(double x, double y) {
     double r = sqrtf(x*x + y*y);
-    return powf(1 + 0.5 * (GAMMA - 1) * MACH * MACH * (1 - powf(1. / r, 2)), 1./(GAMMA - 1));
+    double r_inv = 1./r;
+    return powf(1+1.0125*(1.-r_inv*r_inv),2.5);
+    //return powf(1 + 0.5 * (GAMMA - 1) * MACH * MACH * (1 - powf(1. / r, 2)), 1./(GAMMA - 1));
 }
 double u0(double x, double y) {
     double r = sqrtf(x*x + y*y);
@@ -174,7 +176,12 @@ double v0(double x, double y) {
     return -cos(theta) * MACH / r;
 }
 double E0(double x, double y) {
-    return powf(rho0(x,y),GAMMA) / (GAMMA * (GAMMA - 1)) + 0.5 * (u0(x,y) * u0(x,y) + v0(x,y) * v0(x,y)) * rho0(x,y);
+    double r = sqrtf(x*x + y*y);
+    double r_inv = 1./r;
+    //return powf(rho0(x,y),GAMMA) / (GAMMA * (GAMMA - 1)) + 0.5 * (u0(x,y) * u0(x,y) + v0(x,y) * v0(x,y)) * rho0(x,y);
+    double p = (1.0/GAMMA)*powf(rho0(x,y),GAMMA);
+    double vel = MACH / r;
+    return  0.5 * rho0(x,y) * (vel*vel) + p * (1./(GAMMA - 1.));
 }
 
 void reflecting_boundary(double rho_left, double *rho_right,
@@ -336,23 +343,12 @@ void init_conditions(double *c, double *J,
                 u   += w[j] * u0(x, y) * rho0(x, y) * basis[i * n_quad + j];
                 v   += w[j] * v0(x, y) * rho0(x, y) * basis[i * n_quad + j];
                 E   += w[j] * E0(x, y) * basis[i * n_quad + j];
-                //printf("%i\n", n_quad);
-                //printf("i * n_quad + j = %i\n", i * n_quad + j);
-                //printf("basis = %lf\n", basis[i*n_quad + j]);
             }
 
             c[num_elem * n_p * 0 + i * num_elem + idx] = rho;
             c[num_elem * n_p * 1 + i * num_elem + idx] = u; // we actually calculate rho * u
             c[num_elem * n_p * 2 + i * num_elem + idx] = v; // we actually calculate rho * v
             c[num_elem * n_p * 3 + i * num_elem + idx] = E;
-
-            if (idx != 0) {
-                //c[num_elem * n_p * 0 + i * num_elem + idx] = 0;
-                //c[num_elem * n_p * 1 + i * num_elem + idx] = 0;
-                //c[num_elem * n_p * 2 + i * num_elem + idx] = 0;
-                //c[num_elem * n_p * 3 + i * num_elem + idx] = 0;
-            }
-
        } 
     }
 }
@@ -589,10 +585,10 @@ void eval_global_lambda(double *c,
 
     for (idx = 0; idx < num_elem; idx++) {
         // get cell averages
-        rho = c[num_elem * n_p * 0 + idx] * 1.414213562373095E+00;
-        u   = c[num_elem * n_p * 1 + idx] * 1.414213562373095E+00;
-        v   = c[num_elem * n_p * 2 + idx] * 1.414213562373095E+00;
-        E   = c[num_elem * n_p * 3 + idx] * 1.414213562373095E+00;
+        rho = c[num_elem * n_p * 0 + idx] * basis[0];
+        u   = c[num_elem * n_p * 1 + idx] * basis[0];
+        v   = c[num_elem * n_p * 2 + idx] * basis[0];
+        E   = c[num_elem * n_p * 3 + idx] * basis[0];
 
         u = u / rho;
         v = v / rho;
@@ -801,30 +797,27 @@ double eval_lambda(double rho_left, double rho_right,
  * NOTE: this needs the ACTUAL values for u and v, NOT rho * u, rho * v.
  */
 void eval_flux(double rho, double u, double v, double E, 
-               double *flux_x1, double *flux_y1,
-               double *flux_x2, double *flux_y2,
-               double *flux_x3, double *flux_y3,
-               double *flux_x4, double *flux_y4,
+               double *flux_x, double *flux_y,
                int side_type, int idx) {
 
     // evaluate pressure
     double p = pressure(rho, u, v, E, side_type, idx);
 
-    // flux_1 
-    *flux_x1 = rho * u;
-    *flux_y1 = rho * v;
+    // flux 1
+    flux_x[0] = rho * u;
+    flux_y[0] = rho * v;
 
     // flux_2
-    *flux_x2 = rho * u * u + p;
-    *flux_y2 = rho * u * v;
+    flux_x[1] = rho * u * u + p;
+    flux_y[1] = rho * u * v;
 
     // flux_3
-    *flux_x3 = rho * u * v;
-    *flux_y3 = rho * v * v + p;
+    flux_x[2] = rho * u * v;
+    flux_y[2] = rho * v * v + p;
 
     // flux_4
-    *flux_x4 = u * (E + p);
-    *flux_y4 = v * (E + p);
+    flux_x[3] = u * (E + p);
+    flux_y[3] = v * (E + p);
 }
 
 void eval_surface(double *c,
@@ -877,10 +870,8 @@ void eval_surface(double *c,
         double left_sum2, right_sum2;
         double left_sum3, right_sum3;
         double left_sum4, right_sum4;
-        double flux_x1_l, flux_x2_l, flux_x3_l, flux_x4_l;
-        double flux_x1_r, flux_x2_r, flux_x3_r, flux_x4_r;
-        double flux_y1_l, flux_y2_l, flux_y3_l, flux_y4_l;
-        double flux_y1_r, flux_y2_r, flux_y3_r, flux_y4_r;
+        double flux_x_l[4], flux_y_l[4];
+        double flux_x_r[4], flux_y_r[4];
         double rho_left, u_left, v_left, E_left;
         double rho_right, u_right, v_right, E_right;
 
@@ -924,22 +915,14 @@ void eval_surface(double *c,
                                 left_idx, right_idx,
                                 n_p, n_quad1d, num_sides, t);
 
-                //printf(" (%i, %i)\n", left_idx, right_idx);
-                //printf("  ? (%lf, %lf)\n", rho_left, rho_right);
-                //printf("  ? (%lf, %lf)\n", u_left, u_right);
-                //printf("  ? (%lf, %lf)\n", v_left, v_right);
-                //printf("  ? (%lf, %lf)\n", E_left, E_right);
-
                 // calculate the left fluxes
                 eval_flux(rho_left, u_left, v_left, E_left,
-                          &flux_x1_l, &flux_y1_l, &flux_x2_l, &flux_y2_l,
-                          &flux_x3_l, &flux_y3_l, &flux_x4_l, &flux_y4_l, 
+                          flux_x_l, flux_y_l,
                           left_side, idx);
 
                 // calculate the right fluxes
                 eval_flux(rho_right, u_right, v_right, E_right,
-                          &flux_x1_r, &flux_y1_r, &flux_x2_r, &flux_y2_r,
-                          &flux_x3_r, &flux_y3_r, &flux_x4_r, &flux_y4_r,
+                          flux_x_r, flux_y_r,
                           right_side, idx);
 
                 // need these local max values
@@ -951,26 +934,32 @@ void eval_surface(double *c,
                                      left_side, right_side,
                                      idx);
 
+                // reconstruct primitive variables
+                u_left *= rho_left;
+                u_right *= rho_right;
+                v_left *= rho_left;
+                v_right *= rho_right;
+
                 // 1st equation
-                s = 0.5 * ((flux_x1_l + flux_x1_r) * nx + (flux_y1_l + flux_y1_r) * ny 
+                s = 0.5 * ((flux_x_l[0] + flux_x_r[0]) * nx + (flux_y_l[0] + flux_y_r[0]) * ny 
                             + lambda * (rho_left - rho_right));
                 left_sum1  += w_oned[j] * s * basis_side[left_side  * n_p * n_quad1d + i * n_quad1d + j];
                 right_sum1 += w_oned[j] * s * basis_side[right_side * n_p * n_quad1d + i * n_quad1d + n_quad1d - 1 - j];
 
                 // 2nd equation
-                s = 0.5 * ((flux_x2_l + flux_x2_r) * nx + (flux_y2_l + flux_y2_r) * ny 
+                s = 0.5 * ((flux_x_l[1] + flux_x_r[1]) * nx + (flux_y_l[1] + flux_y_r[1]) * ny 
                             + lambda * (u_left - u_right));
                 left_sum2  += w_oned[j] * s * basis_side[left_side  * n_p * n_quad1d + i * n_quad1d + j];
                 right_sum2 += w_oned[j] * s * basis_side[right_side * n_p * n_quad1d + i * n_quad1d + n_quad1d - 1 - j];
 
                 // 3rd equation
-                s = 0.5 * ((flux_x3_l + flux_x3_r) * nx + (flux_y3_l + flux_y3_r) * ny 
+                s = 0.5 * ((flux_x_l[2] + flux_x_r[2]) * nx + (flux_y_l[2] + flux_y_r[2]) * ny 
                             + lambda * (v_left - v_right));
                 left_sum3  += w_oned[j] * s * basis_side[left_side  * n_p * n_quad1d + i * n_quad1d + j];
                 right_sum3 += w_oned[j] * s * basis_side[right_side * n_p * n_quad1d + i * n_quad1d + n_quad1d - 1 - j];
 
                 // 4th equation
-                s = 0.5 * ((flux_x4_l + flux_x4_r) * nx + (flux_y4_l + flux_y4_r) * ny 
+                s = 0.5 * ((flux_x_l[3] + flux_x_r[3]) * nx + (flux_y_l[3] + flux_y_r[3]) * ny 
                             + lambda * (E_left - E_right));
                 left_sum4  += w_oned[j] * s * basis_side[left_side  * n_p * n_quad1d + i * n_quad1d + j];
                 right_sum4 += w_oned[j] * s * basis_side[right_side * n_p * n_quad1d + i * n_quad1d + n_quad1d - 1 - j];
@@ -1008,6 +997,7 @@ void eval_volume(double *c,
         double x_s = X_s[idx];
         double y_s = Y_s[idx];
 
+        double flux_x[4], flux_y[4];
         double c_rho[n_p];
         double c_u[n_p];
         double c_v[n_p];
@@ -1066,42 +1056,34 @@ void eval_volume(double *c,
                 u = u / rho;
                 v = v / rho;
 
-                //printf(" %i\n", idx);
-                //printf("  ? %lf\n", rho);
-                //printf("  ? %lf\n", u);
-                //printf("  ? %lf\n", v);
-                //printf("  ? %lf\n", E);
-
                 // evaluate flux
-                eval_flux(rho, u, v, E,
-                     &flux_x1, &flux_y1, &flux_x2, &flux_y2,
-                     &flux_x3, &flux_y3, &flux_x4, &flux_y4, 1000, idx);
+                eval_flux(rho, u, v, E, flux_x, flux_y, 1000, idx);
                      
                 // Add to the sum
                 // [fx fy] * [y_s, -y_r; -x_s, x_r] * [phi_x phi_y]
 
                 // 1st equation
-                sum1 +=   flux_x1 * ( basis_grad_x[n_quad * i + j] * y_s
+                sum1 +=   flux_x[0] * ( basis_grad_x[n_quad * i + j] * y_s
                                      -basis_grad_y[n_quad * i + j] * y_r)
-                        + flux_y1 * (-basis_grad_x[n_quad * i + j] * x_s 
+                        + flux_y[0] * (-basis_grad_x[n_quad * i + j] * x_s 
                                     + basis_grad_y[n_quad * i + j] * x_r);
 
                 // 2nd equation
-                sum2 +=   flux_x2 * ( basis_grad_x[n_quad * i + j] * y_s
+                sum2 +=   flux_x[1] * ( basis_grad_x[n_quad * i + j] * y_s
                                      -basis_grad_y[n_quad * i + j] * y_r)
-                        + flux_y2 * (-basis_grad_x[n_quad * i + j] * x_s 
+                        + flux_y[1] * (-basis_grad_x[n_quad * i + j] * x_s 
                                     + basis_grad_y[n_quad * i + j] * x_r);
 
                 // 3rd equation
-                sum3 +=   flux_x3 * ( basis_grad_x[n_quad * i + j] * y_s
+                sum3 +=   flux_x[2] * ( basis_grad_x[n_quad * i + j] * y_s
                                      -basis_grad_y[n_quad * i + j] * y_r)
-                        + flux_y3 * (-basis_grad_x[n_quad * i + j] * x_s 
+                        + flux_y[2] * (-basis_grad_x[n_quad * i + j] * x_s 
                                     + basis_grad_y[n_quad * i + j] * x_r);
 
                 // 4th equation
-                sum4 +=   flux_x4 * ( basis_grad_x[n_quad * i + j] * y_s
+                sum4 +=   flux_x[3] * ( basis_grad_x[n_quad * i + j] * y_s
                                      -basis_grad_y[n_quad * i + j] * y_r)
-                        + flux_y4 * (-basis_grad_x[n_quad * i + j] * x_s 
+                        + flux_y[3] * (-basis_grad_x[n_quad * i + j] * x_s 
                                     + basis_grad_y[n_quad * i + j] * x_r);
             }
 

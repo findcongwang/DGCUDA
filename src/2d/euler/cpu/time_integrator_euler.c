@@ -55,7 +55,7 @@ void sanity_check(double *c, int num_elem, int n_p) {
         u_avg = u_avg / rho_avg;
         v_avg = v_avg / rho_avg;
 
-        p = pressure(rho_avg, u_avg, v_avg, E_avg, 30000, idx);
+        //p = pressure(rho_avg, u_avg, v_avg, E_avg, 30000, idx);
     }
 }
 
@@ -141,8 +141,9 @@ void time_integrate_rk4(int n_quad, int n_quad1d, int n_p, int n, int num_elem, 
     int i;
     double dt, t;
 
-    double *max_lambda;
     double max_l;
+    double *max_lambda = (double *) malloc(num_elem * sizeof(double));
+    double *c = (double *) malloc(num_elem * n_p * 4 * sizeof(double));
 
     t = 0;
 
@@ -154,20 +155,22 @@ void time_integrate_rk4(int n_quad, int n_quad1d, int n_p, int n, int num_elem, 
         eval_global_lambda(d_c, d_lambda, n_quad, n_p, num_elem);
 
         // find the max value of lambda
-        max_lambda = (double *) malloc(num_elem * sizeof(double));
         memcpy(max_lambda, d_lambda, num_elem * sizeof(double));
         max_l = max_lambda[0];
         for (i = 0; i < num_elem; i++) {
             max_l = (max_lambda[i] > max_l) ? max_lambda[i] : max_l;
         }
-        free(max_lambda);
 
         // keep CFL condition
-        dt  = 0.7 * min_r / max_l /  (2. * n + 1.);
+        if (t + dt > endtime) {
+            dt = endtime - t;
+            t = endtime;
+        } else {
+            dt  = 0.7 * min_r / max_l /  (2. * n + 1.);
+            t += dt;
+        }
 
-        // add to total time
-        t += dt;
-        printf(" > (%lf), t = %lf\n", max_l, t);
+        //printf(" > (%lf), t = %lf\n", max_l, t);
 
         // stage 1
         eval_surface(d_c, d_left_riemann_rhs, d_right_riemann_rhs, 
@@ -256,24 +259,25 @@ void time_integrate_rk4(int n_quad, int n_quad1d, int n_p, int n, int num_elem, 
         // combine them all
         rk4(d_c, d_k1, d_k2, d_k3, d_k4, n_p, num_elem);
 
-        if (t > 0.) {
-            check_convergence(d_c_prev, d_c, num_elem, n_p);
-            double *c = (double *) malloc(num_elem * n_p * 4 * sizeof(double));
-            memcpy(c, d_c_prev, num_elem * n_p * 4 * sizeof(double));
+        //if (t - dt > 0.) {
+            //check_convergence(d_c_prev, d_c, num_elem, n_p);
+            //memcpy(c, d_c_prev, num_elem * n_p * 4 * sizeof(double));
 
-            convergence = 0.;
-            for (i = 0; i < num_elem * n_p * 4; i++) {
-                convergence += c[i];
-            }
+            //convergence = 0.;
+            //for (i = 0; i < num_elem * n_p * 4; i++) {
+                //convergence += c[i];
+            //}
 
-            convergence = sqrtf(convergence);
+            //convergence = sqrtf(convergence);
 
-            printf(" > convergence = %.015lf\n", convergence);
-        }
+            //printf(" > convergence = %.015lf\n", convergence);
+        //}
 
-        memcpy(d_c_prev, d_c, num_elem * n_p * 4 * sizeof(double));
- 
+        //memcpy(d_c_prev, d_c, num_elem * n_p * 4 * sizeof(double));
     }
+
+    free(c);
+    free(max_lambda);
 }
 
 /***********************

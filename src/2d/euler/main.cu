@@ -323,6 +323,19 @@ int main(int argc, char *argv[]) {
     fprintf(out_file,"};");
     fclose(out_file);
 
+    eval_error_L2<<<n_blocks_elem, n_threads>>>(d_c, d_Uv1, 
+                  d_V1x, d_V1y, d_V2x, d_V2y, d_V3x, d_V3y,
+                  n_quad, num_elem, n_p);
+
+    cudaMemcpy(Uv1, d_Uv1, num_elem * sizeof(double), cudaMemcpyDeviceToHost);
+
+    double error = 0.;
+    for (i = 0; i < num_elem; i++) {
+        error += Uv1[i];
+    }
+    error = sqrtf(error);
+    printf("L2 error for rho = %lf\n", error);
+
     // free variables
     free_gpu();
     
