@@ -5,9 +5,6 @@
  * and    H = number of sides
  */
 
-#include "basis_eval.cu"
-
-
 #define PI 3.14159
 
 /***********************
