@@ -85,14 +85,14 @@ __global__ void eval_surface_wrapper1_1(double *c, double *left_riemann_rhs, dou
         if (right_elem[idx] != -1) {
             for (i = 0; i < 3; i++) {
                 for (n = 0; n < N; n++) {
-                    C_left[n*n_p + i] = c[num_elem * n_p * n + left_elem[idx]];
-                    C_right[n*n_p + i] = c[num_elem * n_p * n + left_elem[idx]];
+                    C_left[n*n_p + i] = c[num_elem * n_p * n + i * num_elem + left_elem[idx]];
+                    C_right[n*n_p + i] = c[num_elem * n_p * n + i * num_elem + right_elem[idx]];
                 }
             }
         } else {
             for (i = 0; i < 3; i++) {
                 for (n = 0; n < N; n++) {
-                    C_left[n*n_p + i] = c[num_elem * n_p * n + left_elem[idx]];
+                    C_left[n*n_p + i] = c[num_elem * n_p * n + i * num_elem + left_elem[idx]];
                 }
             }
         }
@@ -586,14 +586,14 @@ __global__ void eval_surface_wrapper2_1(double *c, double *left_riemann_rhs, dou
         if (right_elem[idx] != -1) {
             for (i = 0; i < 3; i++) {
                 for (n = 0; n < N; n++) {
-                    C_left[n*n_p + i] = c[num_elem * n_p * n + left_elem[idx]];
-                    C_right[n*n_p + i] = c[num_elem * n_p * n + left_elem[idx]];
+                    C_left[n*n_p + i] = c[num_elem * n_p * n + i * num_elem + left_elem[idx]];
+                    C_right[n*n_p + i] = c[num_elem * n_p * n + i * num_elem + right_elem[idx]];
                 }
             }
         } else {
             for (i = 0; i < 3; i++) {
                 for (n = 0; n < N; n++) {
-                    C_left[n*n_p + i] = c[num_elem * n_p * n + left_elem[idx]];
+                    C_left[n*n_p + i] = c[num_elem * n_p * n + i * num_elem + left_elem[idx]];
                 }
             }
         }
@@ -1086,14 +1086,14 @@ __global__ void eval_surface_wrapper3_1(double *c, double *left_riemann_rhs, dou
         if (right_elem[idx] != -1) {
             for (i = 0; i < 3; i++) {
                 for (n = 0; n < N; n++) {
-                    C_left[n*n_p + i] = c[num_elem * n_p * n + left_elem[idx]];
-                    C_right[n*n_p + i] = c[num_elem * n_p * n + left_elem[idx]];
+                    C_left[n*n_p + i] = c[num_elem * n_p * n + i * num_elem + left_elem[idx]];
+                    C_right[n*n_p + i] = c[num_elem * n_p * n + i * num_elem + right_elem[idx]];
                 }
             }
         } else {
             for (i = 0; i < 3; i++) {
                 for (n = 0; n < N; n++) {
-                    C_left[n*n_p + i] = c[num_elem * n_p * n + left_elem[idx]];
+                    C_left[n*n_p + i] = c[num_elem * n_p * n + i * num_elem + left_elem[idx]];
                 }
             }
         }
@@ -1586,14 +1586,14 @@ __global__ void eval_surface_wrapper4_1(double *c, double *left_riemann_rhs, dou
         if (right_elem[idx] != -1) {
             for (i = 0; i < 3; i++) {
                 for (n = 0; n < N; n++) {
-                    C_left[n*n_p + i] = c[num_elem * n_p * n + left_elem[idx]];
-                    C_right[n*n_p + i] = c[num_elem * n_p * n + left_elem[idx]];
+                    C_left[n*n_p + i] = c[num_elem * n_p * n + i * num_elem + left_elem[idx]];
+                    C_right[n*n_p + i] = c[num_elem * n_p * n + i * num_elem + right_elem[idx]];
                 }
             }
         } else {
             for (i = 0; i < 3; i++) {
                 for (n = 0; n < N; n++) {
-                    C_left[n*n_p + i] = c[num_elem * n_p * n + left_elem[idx]];
+                    C_left[n*n_p + i] = c[num_elem * n_p * n + i * num_elem + left_elem[idx]];
                 }
             }
         }
@@ -1877,6 +1877,7 @@ __global__ void eval_volume_wrapper4_1(double *c, double *quad_rhs,
                 C[n*n_p + i] = c[num_elem * n_p * n + i * num_elem + idx];
             }
         }
+
 
         eval_volume(C, quad_rhs,
                 xr[idx], yr[idx],

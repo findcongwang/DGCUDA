@@ -153,6 +153,9 @@ double *d_Uv1;
 double *d_Uv2;
 double *d_Uv3;
 
+// for computing the error
+double *d_error;
+
 // normal vectors for the sides
 double *d_Nx;
 double *d_Ny;
@@ -933,6 +936,61 @@ __global__ void eval_u(double *C,
         Uv1[idx] = uv1;
         Uv2[idx] = uv2;
         Uv3[idx] = uv3;
+    }
+}
+
+/* evaluate error
+ * 
+ * evaluates rho and E at the three vertex points for output
+ * THREADS: num_elem
+ */
+__global__ void eval_error(double *C, double *error,
+                       double *V1x, double *V1y,
+                       double *V2x, double *V2y,
+                       double *V3x, double *V3y,
+                       int num_elem, int n_p, int n_quad, int n) {
+    int idx = blockIdx.x * blockDim.x + threadIdx.x;
+    if (idx < num_elem) {
+        int i, j;
+        double e;
+        double x, y;
+        double U;
+
+        double v1x, v1y, v2x, v2y, v3x, v3y;
+        v1x = V1x[idx];
+        v1y = V1y[idx];
+        v2x = V2x[idx];
+        v2y = V2y[idx];
+        v3x = V3x[idx];
+        v3y = V3y[idx];
+
+        e = 0;
+        for (j = 0; j < n_quad; j++) {
+            // get the actual point on the mesh
+            x = r1[j] * v2x + r2[j] * v3x + (1 - r1[j] - r2[j]) * v1x;
+            y = r1[j] * v2y + r2[j] * v3y + (1 - r1[j] - r2[j]) * v1y;
+            
+            // evaluate U at the integration point
+            U = 0.;
+            for (i = 0; i < n_p; i++) {
+                U += C[num_elem * n_p * n + i * num_elem + idx] * basis[i * n_quad + j];
+            }
+
+            e += w[j] * powf((U0(x, y) - U),2); 
+            // evaluate exact conditions at the integration point
+            //if (n == 0) {
+                //e += w[j] * powf((U0(x, y) - U),2); 
+            //} else if (n == 1) {
+                //e += w[j] * powf((U1(x, y) - U),2);
+            //} else if (n == 2) {
+                //e += w[j] * powf((U2(x, y) - U),2);
+            //} else if (n == 3) {
+                //e += w[j] * powf((U3(x, y) - U),2);
+            //}
+        }
+
+        // store the result
+        error[idx] = e;
     }
 }
 

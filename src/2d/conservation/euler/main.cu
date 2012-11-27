@@ -33,6 +33,7 @@ int main(int argc, char *argv[]) {
 
     double *Uu1, *Uu2, *Uu3;
     double *Uv1, *Uv2, *Uv3;
+    double *error;
 
     //void (*eval_rho_ftn)(double*, double*, double*, double*, int, int) = NULL;
     //void (*eval_u_ftn)(double*, double*, double*, double*, int, int) = NULL;
@@ -299,18 +300,22 @@ int main(int argc, char *argv[]) {
     //fprintf(out_file,"};");
     //fclose(out_file);
 
-    //eval_error_L2<<<n_blocks_elem, n_threads>>>(d_c, d_Uv1, 
-                  //d_V1x, d_V1y, d_V2x, d_V2y, d_V3x, d_V3y,
-                  //n_quad, num_elem, n_p);
+    error = (double *) malloc(num_elem * sizeof(double));
+    eval_error<<<n_blocks_elem, n_threads>>>(d_c, d_error, 
+                                             d_V1x, d_V1y,
+                                             d_V2x, d_V2y,
+                                             d_V3x, d_V3y,
+                                             num_elem, n_p,n_quad, 0);
+    cudaMemcpy(error, d_error, num_elem * sizeof(double), cudaMemcpyDeviceToHost);
 
     //cudaMemcpy(Uv1, d_Uv1, num_elem * sizeof(double), cudaMemcpyDeviceToHost);
 
-    //double error = 0.;
-    //for (i = 0; i < num_elem; i++) {
-        //error += Uv1[i];
-    //}
-    //error = sqrtf(error);
-    //printf("L2 error for rho = %lf\n", error);
+    double total_error = 0.;
+    for (i = 0; i < num_elem; i++) {
+        total_error += error[i];
+    }
+    total_error = sqrtf(total_error);
+    printf("error for rho = %.015lf\n", total_error);
 
     // free variables
     free_gpu();
@@ -348,7 +353,6 @@ int main(int argc, char *argv[]) {
     free(w_local);
     free(s_r);
     free(oned_w_local);
-
 
     return 0;
 }

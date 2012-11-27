@@ -346,6 +346,8 @@ void init_gpu(int num_elem, int num_sides, int n_p,
     cudaMalloc((void **) &d_Uv2, num_elem * sizeof(double));
     cudaMalloc((void **) &d_Uv3, num_elem * sizeof(double));
 
+    cudaMalloc((void **) &d_error, num_elem * sizeof(double));
+
     cudaMalloc((void **) &d_V1x, num_elem * sizeof(double));
     cudaMalloc((void **) &d_V1y, num_elem * sizeof(double));
     cudaMalloc((void **) &d_V2x, num_elem * sizeof(double));
