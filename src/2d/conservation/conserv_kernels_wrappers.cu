@@ -31,7 +31,7 @@ __global__ void eval_surface_wrapper1_0(double *c, double *left_riemann_rhs, dou
         // grab the coefficients for the left & right elements
         // TODO: group all the boundary sides together so they are in the same warp;
         //       means no warp divergence
-        if (right_elem[idx] != -1) {
+        if (right_elem[idx] > -1) {
             for (n = 0; n < N; n++) {
                 C_left[n*n_p + 0] = c[num_elem * n_p * n + left_elem[idx]];
                 C_right[n*n_p + 0] = c[num_elem * n_p * n + right_elem[idx]];
@@ -82,7 +82,7 @@ __global__ void eval_surface_wrapper1_1(double *c, double *left_riemann_rhs, dou
         // grab the coefficients for the left & right elements
         // TODO: group all the boundary sides together so they are in the same warp;
         //       means no warp divergence
-        if (right_elem[idx] != -1) {
+        if (right_elem[idx] > -1) {
             for (i = 0; i < 3; i++) {
                 for (n = 0; n < N; n++) {
                     C_left[n*n_p + i] = c[num_elem * n_p * n + i * num_elem + left_elem[idx]];
@@ -136,7 +136,7 @@ __global__ void eval_surface_wrapper1_2(double *c, double *left_riemann_rhs, dou
         // grab the coefficients for the left & right elements
         // TODO: group all the boundary sides together so they are in the same warp;
         //       means no warp divergence
-        if (right_elem[idx] != -1) {
+        if (right_elem[idx] > -1) {
             for (i = 0; i < 6; i++) {
                 for (n = 0; n < N; n++) {
                     C_left[n*n_p + i] = c[num_elem * n_p * n + i * num_elem + left_elem[idx]];
@@ -191,7 +191,7 @@ __global__ void eval_surface_wrapper1_3(double *c, double *left_riemann_rhs, dou
         // grab the coefficients for the left & right elements
         // TODO: group all the boundary sides together so they are in the same warp;
         //       means no warp divergence
-        if (right_elem[idx] != -1) {
+        if (right_elem[idx] > -1) {
             for (i = 0; i < 10; i++) {
                 for (n = 0; n < N; n++) {
                     C_left[n*n_p + i] = c[num_elem * n_p * n + i * num_elem + left_elem[idx]];
@@ -246,7 +246,7 @@ __global__ void eval_surface_wrapper1_4(double *c, double *left_riemann_rhs, dou
         // grab the coefficients for the left & right elements
         // TODO: group all the boundary sides together so they are in the same warp;
         //       means no warp divergence
-        if (right_elem[idx] != -1) {
+        if (right_elem[idx] > -1) {
             for (i = 0; i < 15; i++) {
                 for (n = 0; n < N; n++) {
                     C_left[n*n_p + i] = c[num_elem * n_p * n + i * num_elem + left_elem[idx]];
@@ -301,7 +301,7 @@ __global__ void eval_surface_wrapper1_5(double *c, double *left_riemann_rhs, dou
         // grab the coefficients for the left & right elements
         // TODO: group all the boundary sides together so they are in the same warp;
         //       means no warp divergence
-        if (right_elem[idx] != -1) {
+        if (right_elem[idx] > -1) {
             for (i = 0; i < 21; i++) {
                 for (n = 0; n < N; n++) {
                     C_left[n*n_p + i] = c[num_elem * n_p * n + i * num_elem + left_elem[idx]];
@@ -532,7 +532,7 @@ __global__ void eval_surface_wrapper2_0(double *c, double *left_riemann_rhs, dou
         // grab the coefficients for the left & right elements
         // TODO: group all the boundary sides together so they are in the same warp;
         //       means no warp divergence
-        if (right_elem[idx] != -1) {
+        if (right_elem[idx] > -1) {
             for (n = 0; n < N; n++) {
                 C_left[n*n_p + 0] = c[num_elem * n_p * n + left_elem[idx]];
                 C_right[n*n_p + 0] = c[num_elem * n_p * n + right_elem[idx]];
@@ -583,7 +583,7 @@ __global__ void eval_surface_wrapper2_1(double *c, double *left_riemann_rhs, dou
         // grab the coefficients for the left & right elements
         // TODO: group all the boundary sides together so they are in the same warp;
         //       means no warp divergence
-        if (right_elem[idx] != -1) {
+        if (right_elem[idx] > -1) {
             for (i = 0; i < 3; i++) {
                 for (n = 0; n < N; n++) {
                     C_left[n*n_p + i] = c[num_elem * n_p * n + i * num_elem + left_elem[idx]];
@@ -637,7 +637,7 @@ __global__ void eval_surface_wrapper2_2(double *c, double *left_riemann_rhs, dou
         // grab the coefficients for the left & right elements
         // TODO: group all the boundary sides together so they are in the same warp;
         //       means no warp divergence
-        if (right_elem[idx] != -1) {
+        if (right_elem[idx] > -1) {
             for (i = 0; i < 6; i++) {
                 for (n = 0; n < N; n++) {
                     C_left[n*n_p + i] = c[num_elem * n_p * n + i * num_elem + left_elem[idx]];
@@ -692,7 +692,7 @@ __global__ void eval_surface_wrapper2_3(double *c, double *left_riemann_rhs, dou
         // grab the coefficients for the left & right elements
         // TODO: group all the boundary sides together so they are in the same warp;
         //       means no warp divergence
-        if (right_elem[idx] != -1) {
+        if (right_elem[idx] > -1) {
             for (i = 0; i < 10; i++) {
                 for (n = 0; n < N; n++) {
                     C_left[n*n_p + i] = c[num_elem * n_p * n + i * num_elem + left_elem[idx]];
@@ -747,7 +747,7 @@ __global__ void eval_surface_wrapper2_4(double *c, double *left_riemann_rhs, dou
         // grab the coefficients for the left & right elements
         // TODO: group all the boundary sides together so they are in the same warp;
         //       means no warp divergence
-        if (right_elem[idx] != -1) {
+        if (right_elem[idx] > -1) {
             for (i = 0; i < 15; i++) {
                 for (n = 0; n < N; n++) {
                     C_left[n*n_p + i] = c[num_elem * n_p * n + i * num_elem + left_elem[idx]];
@@ -802,7 +802,7 @@ __global__ void eval_surface_wrapper2_5(double *c, double *left_riemann_rhs, dou
         // grab the coefficients for the left & right elements
         // TODO: group all the boundary sides together so they are in the same warp;
         //       means no warp divergence
-        if (right_elem[idx] != -1) {
+        if (right_elem[idx] > -1) {
             for (i = 0; i < 21; i++) {
                 for (n = 0; n < N; n++) {
                     C_left[n*n_p + i] = c[num_elem * n_p * n + i * num_elem + left_elem[idx]];
@@ -1032,7 +1032,7 @@ __global__ void eval_surface_wrapper3_0(double *c, double *left_riemann_rhs, dou
         // grab the coefficients for the left & right elements
         // TODO: group all the boundary sides together so they are in the same warp;
         //       means no warp divergence
-        if (right_elem[idx] != -1) {
+        if (right_elem[idx] > -1) {
             for (n = 0; n < N; n++) {
                 C_left[n*n_p + 0] = c[num_elem * n_p * n + left_elem[idx]];
                 C_right[n*n_p + 0] = c[num_elem * n_p * n + right_elem[idx]];
@@ -1083,7 +1083,7 @@ __global__ void eval_surface_wrapper3_1(double *c, double *left_riemann_rhs, dou
         // grab the coefficients for the left & right elements
         // TODO: group all the boundary sides together so they are in the same warp;
         //       means no warp divergence
-        if (right_elem[idx] != -1) {
+        if (right_elem[idx] > -1) {
             for (i = 0; i < 3; i++) {
                 for (n = 0; n < N; n++) {
                     C_left[n*n_p + i] = c[num_elem * n_p * n + i * num_elem + left_elem[idx]];
@@ -1137,7 +1137,7 @@ __global__ void eval_surface_wrapper3_2(double *c, double *left_riemann_rhs, dou
         // grab the coefficients for the left & right elements
         // TODO: group all the boundary sides together so they are in the same warp;
         //       means no warp divergence
-        if (right_elem[idx] != -1) {
+        if (right_elem[idx] > -1) {
             for (i = 0; i < 6; i++) {
                 for (n = 0; n < N; n++) {
                     C_left[n*n_p + i] = c[num_elem * n_p * n + i * num_elem + left_elem[idx]];
@@ -1192,7 +1192,7 @@ __global__ void eval_surface_wrapper3_3(double *c, double *left_riemann_rhs, dou
         // grab the coefficients for the left & right elements
         // TODO: group all the boundary sides together so they are in the same warp;
         //       means no warp divergence
-        if (right_elem[idx] != -1) {
+        if (right_elem[idx] > -1) {
             for (i = 0; i < 10; i++) {
                 for (n = 0; n < N; n++) {
                     C_left[n*n_p + i] = c[num_elem * n_p * n + i * num_elem + left_elem[idx]];
@@ -1247,7 +1247,7 @@ __global__ void eval_surface_wrapper3_4(double *c, double *left_riemann_rhs, dou
         // grab the coefficients for the left & right elements
         // TODO: group all the boundary sides together so they are in the same warp;
         //       means no warp divergence
-        if (right_elem[idx] != -1) {
+        if (right_elem[idx] > -1) {
             for (i = 0; i < 15; i++) {
                 for (n = 0; n < N; n++) {
                     C_left[n*n_p + i] = c[num_elem * n_p * n + i * num_elem + left_elem[idx]];
@@ -1302,7 +1302,7 @@ __global__ void eval_surface_wrapper3_5(double *c, double *left_riemann_rhs, dou
         // grab the coefficients for the left & right elements
         // TODO: group all the boundary sides together so they are in the same warp;
         //       means no warp divergence
-        if (right_elem[idx] != -1) {
+        if (right_elem[idx] > -1) {
             for (i = 0; i < 21; i++) {
                 for (n = 0; n < N; n++) {
                     C_left[n*n_p + i] = c[num_elem * n_p * n + i * num_elem + left_elem[idx]];
@@ -1532,7 +1532,7 @@ __global__ void eval_surface_wrapper4_0(double *c, double *left_riemann_rhs, dou
         // grab the coefficients for the left & right elements
         // TODO: group all the boundary sides together so they are in the same warp;
         //       means no warp divergence
-        if (right_elem[idx] != -1) {
+        if (right_elem[idx] > -1) {
             for (n = 0; n < N; n++) {
                 C_left[n*n_p + 0] = c[num_elem * n_p * n + left_elem[idx]];
                 C_right[n*n_p + 0] = c[num_elem * n_p * n + right_elem[idx]];
@@ -1583,7 +1583,7 @@ __global__ void eval_surface_wrapper4_1(double *c, double *left_riemann_rhs, dou
         // grab the coefficients for the left & right elements
         // TODO: group all the boundary sides together so they are in the same warp;
         //       means no warp divergence
-        if (right_elem[idx] != -1) {
+        if (right_elem[idx] > -1) {
             for (i = 0; i < 3; i++) {
                 for (n = 0; n < N; n++) {
                     C_left[n*n_p + i] = c[num_elem * n_p * n + i * num_elem + left_elem[idx]];
@@ -1637,7 +1637,7 @@ __global__ void eval_surface_wrapper4_2(double *c, double *left_riemann_rhs, dou
         // grab the coefficients for the left & right elements
         // TODO: group all the boundary sides together so they are in the same warp;
         //       means no warp divergence
-        if (right_elem[idx] != -1) {
+        if (right_elem[idx] > -1) {
             for (i = 0; i < 6; i++) {
                 for (n = 0; n < N; n++) {
                     C_left[n*n_p + i] = c[num_elem * n_p * n + i * num_elem + left_elem[idx]];
@@ -1692,7 +1692,7 @@ __global__ void eval_surface_wrapper4_3(double *c, double *left_riemann_rhs, dou
         // grab the coefficients for the left & right elements
         // TODO: group all the boundary sides together so they are in the same warp;
         //       means no warp divergence
-        if (right_elem[idx] != -1) {
+        if (right_elem[idx] > -1) {
             for (i = 0; i < 10; i++) {
                 for (n = 0; n < N; n++) {
                     C_left[n*n_p + i] = c[num_elem * n_p * n + i * num_elem + left_elem[idx]];
@@ -1747,7 +1747,7 @@ __global__ void eval_surface_wrapper4_4(double *c, double *left_riemann_rhs, dou
         // grab the coefficients for the left & right elements
         // TODO: group all the boundary sides together so they are in the same warp;
         //       means no warp divergence
-        if (right_elem[idx] != -1) {
+        if (right_elem[idx] > -1) {
             for (i = 0; i < 15; i++) {
                 for (n = 0; n < N; n++) {
                     C_left[n*n_p + i] = c[num_elem * n_p * n + i * num_elem + left_elem[idx]];
@@ -1802,7 +1802,7 @@ __global__ void eval_surface_wrapper4_5(double *c, double *left_riemann_rhs, dou
         // grab the coefficients for the left & right elements
         // TODO: group all the boundary sides together so they are in the same warp;
         //       means no warp divergence
-        if (right_elem[idx] != -1) {
+        if (right_elem[idx] > -1) {
             for (i = 0; i < 21; i++) {
                 for (n = 0; n < N; n++) {
                     C_left[n*n_p + i] = c[num_elem * n_p * n + i * num_elem + left_elem[idx]];

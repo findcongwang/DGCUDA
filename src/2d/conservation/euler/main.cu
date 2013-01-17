@@ -27,7 +27,6 @@ int main(int argc, char *argv[]) {
 
     FILE *mesh_file, *out_file;
 
-    char line[100];
     char out_filename[100];
     char *mesh_filename;
 
@@ -61,82 +60,17 @@ int main(int argc, char *argv[]) {
         printf("\nERROR: mesh file not found.\n");
         return 1;
     }
-    fgets(line, 100, mesh_file);
-    sscanf(line, "%i", &num_elem);
-
-    // get the correct functions for this scheme
-    /*
-    switch (n) {
-        case 0: eval_rho_ftn = eval_rho_wrapper0;
-                eval_u_ftn = eval_u_wrapper0;
-                eval_v_ftn = eval_v_wrapper0;
-                eval_E_ftn = eval_E_wrapper0;
-                break;
-        case 1: eval_rho_ftn = eval_rho_wrapper1;
-                eval_u_ftn = eval_u_wrapper1;
-                eval_v_ftn = eval_v_wrapper1;
-                eval_E_ftn = eval_E_wrapper1;
-                break;
-        case 2: eval_rho_ftn = eval_rho_wrapper2;
-                eval_u_ftn = eval_u_wrapper2;
-                eval_v_ftn = eval_v_wrapper2;
-                eval_E_ftn = eval_E_wrapper2;
-                break;
-        case 3: eval_rho_ftn = eval_rho_wrapper3;
-                eval_u_ftn = eval_u_wrapper3;
-                eval_v_ftn = eval_v_wrapper3;
-                eval_E_ftn = eval_E_wrapper3;
-                break;
-        case 4: eval_rho_ftn = eval_rho_wrapper4;
-                eval_u_ftn = eval_u_wrapper4;
-                eval_v_ftn = eval_v_wrapper4;
-                eval_E_ftn = eval_E_wrapper4;
-                break;
-        case 5: eval_rho_ftn = eval_rho_wrapper5;
-                eval_u_ftn = eval_u_wrapper5;
-                eval_v_ftn = eval_v_wrapper5;
-                eval_E_ftn = eval_E_wrapper5;
-                break;
-    }
-    */
-
-
-    // allocate vertex points
-    V1x = (double *) malloc(num_elem * sizeof(double));
-    V1y = (double *) malloc(num_elem * sizeof(double));
-    V2x = (double *) malloc(num_elem * sizeof(double));
-    V2y = (double *) malloc(num_elem * sizeof(double));
-    V3x = (double *) malloc(num_elem * sizeof(double));
-    V3y = (double *) malloc(num_elem * sizeof(double));
-
-    elem_s1 = (int *) malloc(num_elem * sizeof(int));
-    elem_s2 = (int *) malloc(num_elem * sizeof(int));
-    elem_s3 = (int *) malloc(num_elem * sizeof(int));
-
-    // TODO: these are too big; should be a way to figure out how many we actually need
-    left_side_number  = (int *)   malloc(3*num_elem * sizeof(int));
-    right_side_number = (int *)   malloc(3*num_elem * sizeof(int));
-
-    sides_x1    = (double *) malloc(3*num_elem * sizeof(double));
-    sides_x2    = (double *) malloc(3*num_elem * sizeof(double));
-    sides_y1    = (double *) malloc(3*num_elem * sizeof(double));
-    sides_y2    = (double *) malloc(3*num_elem * sizeof(double)); 
-    left_elem   = (int *) malloc(3*num_elem * sizeof(int));
-    right_elem  = (int *) malloc(3*num_elem * sizeof(int));
-
-    for (i = 0; i < 3*num_elem; i++) {
-        right_elem[i] = -1;
-    }
 
     // read in the mesh and make all the mappings
-    read_mesh(mesh_file, &num_sides, num_elem,
-                         V1x, V1y, V2x, V2y, V3x, V3y,
-                         left_side_number, right_side_number,
-                         sides_x1, sides_y1, 
-                         sides_x2, sides_y2, 
-                         elem_s1, elem_s2, elem_s3,
-                         left_elem, right_elem);
+    read_mesh(mesh_file, &num_sides, &num_elem,
+                         &V1x, &V1y, &V2x, &V2y, &V3x, &V3y,
+                         &left_side_number, &right_side_number,
+                         &sides_x1, &sides_y1, 
+                         &sides_x2, &sides_y2, 
+                         &elem_s1, &elem_s2, &elem_s3,
+                         &left_elem, &right_elem);
 
+                
     // close the file
     fclose(mesh_file);
 

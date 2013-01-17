@@ -7,7 +7,7 @@
 void checkCudaError(const char*);
 #endif
 
-#define TOL 10e-9
+#define TOL 5.0e-8
 #define N_MAX 10
 
 extern int local_N;
@@ -425,6 +425,7 @@ void time_integrate_rk4(int n_quad, int n_quad1d, int n_p, int n, int num_elem, 
             convergence = sqrtf(convergence);
 
             printf(" > convergence = %.015lf\n", convergence);
+            printf(" > TOL         = %.015lf\n", TOL);
         }
 
         timestep++;
