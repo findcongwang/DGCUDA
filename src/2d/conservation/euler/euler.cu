@@ -11,7 +11,7 @@
 
 #define PI 3.14159
 #define GAMMA 1.4
-#define MACH 2.25
+#define MACH .38
 
 // Size of the system
 int local_N = 4;
@@ -27,21 +27,25 @@ int local_N = 4;
  * returns the value of the intial condition at point x,y
  */
 __device__ double U0(double x, double y) {
-    double r = sqrt(x*x + y*y);
-    return powf(1+1.0125*(1.- 1./(r * r)),2.5);
+    //double r = sqrt(x*x + y*y);
+    //return powf(1+1.0125*(1.- 1./(r * r)),2.5);
+    return GAMMA;
 }
 __device__ double U1(double x, double y) {
-    double r = sqrt(x*x + y*y);
-    return sin(atan(y / x)) * MACH / r * U0(x, y);
+    //double r = sqrt(x*x + y*y);
+    //return sin(atan(y / x)) * MACH / r * U0(x, y);
+    return U0(x, y) * MACH;
 }
 __device__ double U2(double x, double y) {
-    double r = sqrt(x*x + y*y);
-    return -cos(atan(y / x)) * MACH / r * U0(x, y);
+    //double r = sqrt(x*x + y*y);
+    //return -cos(atan(y / x)) * MACH / r * U0(x, y);
+    return U0(x, y) * 0.;
 }
 __device__ double U3(double x, double y) {
-    double r = sqrt(x*x + y*y);
-    double p = (1.0 / GAMMA) * powf(U0(x, y), GAMMA);
-    return  0.5 * U0(x,y) * (MACH*MACH/(r * r)) + p * (1./(GAMMA - 1.));
+    //double r = sqrt(x*x + y*y);
+    //double p = (1.0 / GAMMA) * powf(U0(x, y), GAMMA);
+    //return  0.5 * U0(x,y) * (MACH*MACH/(r * r)) + p * (1./(GAMMA - 1.));
+    return 0.5 * U0(x ,y) * MACH * MACH + 1./ (GAMMA - 1.0);
 }
 
 __device__ void evalU0(double *U, 
@@ -269,6 +273,9 @@ __device__ void reflecting_boundary(double *U_left, double *U_right,
     // x = x2 * r + x3 * s + x1 * (1 - r - s)
     x = v2x * r1_eval + v3x * r2_eval + v1x * (1 - r1_eval - r2_eval);
     y = v2y * r1_eval + v3y * r2_eval + v1y * (1 - r1_eval - r2_eval);
+
+    x = x - 0.5;
+    y = y - 0.5;
 
     // set rho and E to be the same in the ghost cell
     U_right[0] = U_left[0];
