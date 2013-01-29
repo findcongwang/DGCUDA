@@ -244,7 +244,8 @@ void time_integrate_rk4(int n_quad, int n_quad1d, int n_p, int n, int num_elem, 
     double convergence = 1 + TOL;
     int timestep = 0;
 
-    while (t < endtime && convergence > TOL) {
+    //while (t < endtime && convergence > TOL) {
+    while (t < endtime) {
         // compute all the lambda values over each cell
         eval_global_lambda<<<n_blocks_elem, n_threads>>>(d_c, d_lambda, n_quad, n_p, num_elem);
 
@@ -411,6 +412,7 @@ void time_integrate_rk4(int n_quad, int n_quad1d, int n_p, int n, int num_elem, 
         rk4<<<n_blocks_rk4, n_threads>>>(d_c, d_k1, d_k2, d_k3, d_k4, n_p, num_elem);
         cudaThreadSynchronize();
 
+        /*
         if (timestep > 0.) {
             check_convergence<<<n_blocks_rk4, n_threads>>>(d_c_prev, d_c, num_elem, n_p);
             cudaMemcpy(c, d_c_prev, num_elem * n_p * 4 * sizeof(double), cudaMemcpyDeviceToHost);
@@ -431,6 +433,7 @@ void time_integrate_rk4(int n_quad, int n_quad1d, int n_p, int n, int num_elem, 
         timestep++;
 
         cudaMemcpy(d_c_prev, d_c, num_elem * n_p * 4 * sizeof(double), cudaMemcpyDeviceToDevice);
+        */
 
         cudaThreadSynchronize();
         checkCudaError("error after final stage.");

@@ -12,6 +12,7 @@ def genmesh(inFilename, outFilename):
     inFile  = open(inFilename, "rb")
     outFile = open(outFilename, "wb")
 
+    print "Reading file: %s..." % inFilename
     line = inFile.readline()
     while "$Nodes" not in line:
         line = inFile.readline()
@@ -35,25 +36,11 @@ def genmesh(inFilename, outFilename):
     elem_list = []
     boundary_list = []
     # add the vertices for each element into elem_list
+    print num_elements, "elements..."
     for i in xrange(0,num_elements):
+
         s = inFile.readline().split()
 
-        """
-        # these are sides
-        if len(s) == 7:
-            boundary = int(s[3])
-            v1 = int(s[5]) - 1
-            v2 = int(s[6]) - 1
-            side_list.append((vertex_list[v1], vertex_list[v2]))
-            boundary_list.append(boundary)
-
-        # and these are elements
-        if len(s) == 8:
-            v1 = int(s[5]) - 1
-            v2 = int(s[6]) - 1
-            v3 = int(s[7]) - 1
-            elem_list.append((vertex_list[v1], vertex_list[v2], vertex_list[v3]))
-        """
         # these are sides
         if len(s) == 7:
             boundary = int(s[3])
@@ -88,16 +75,15 @@ def genmesh(inFilename, outFilename):
     right_elem = [0] * (num_elements * 3)
 
     # links to side [0, 1, 2] of the element
-    elem_s1 = [0] * num_elements
-    elem_s2 = [0] * num_elements
-    elem_s3 = [0] * num_elements
+    elem_sides = [[0] * 3 for x in xrange(0,num_elements)]
 
-    side1 = [0] * (num_elements * 3)
-    side2 = [0] * (num_elements * 3)
-    side3 = [0] * (num_elements * 3)
+    sidelist = [0] * (num_elements * 3)
 
-    # these three vertices define the element
+    sidemap = {}
+
+    print "Creating mappings..."
     for i, e in enumerate(elem_list):
+        # these three vertices define the element
         V1x = vertex_list[e[0]][0]
         V1y = vertex_list[e[0]][1]
         V2x = vertex_list[e[1]][0]
@@ -106,9 +92,7 @@ def genmesh(inFilename, outFilename):
         V3y = vertex_list[e[2]][1]
 
         # determine whether we should add these three sides or not
-        s1 = 1
-        s2 = 1
-        s3 = 1
+        sides = [1, 1, 1]
 
         # enforce strictly positive jacobian
         J = (V2x - V1x) * (V3y - V1y) - (V3x - V1x) * (V2y - V1y)
@@ -118,7 +102,28 @@ def genmesh(inFilename, outFilename):
             vertex_list[e[0]] = vertex_list[e[1]]
             vertex_list[e[1]] = tmp
 
-        # scan through the existing sides to see if we already added it
+        # look up the hash for each side
+        for k, side in enumerate([(e[0], e[1]), (e[1], e[2]), (e[2], e[0])]):
+            hash1 = hash(side[:])
+            hash2 = hash(side[::-1])
+            
+            # check to see if (0,1) is a side
+            if hash1 in sidemap:
+                sides[k] = 0 # this is not a new side
+                j = sidemap[hash1]        # get the index of that edge
+                right_elem[j] = i         # link that edge to this element
+                elem_sides[i][k] = j      # link this element to that edge
+                right_side_number[j] = k  # map this edge to the same side
+
+            # check to see if (1,0) is a side
+            if hash2 in sidemap:
+                sides[k] = 0 # this is not a new side
+                j = sidemap[hash2]        # get the index of that edge
+                right_elem[j] = i         # link that edge to this element
+                elem_sides[i][k] = j      # link this element to that edge
+                right_side_number[j] = k  # map this edge to the same side
+
+        """
         for j in xrange(0, numsides):
             # side 1
             if (s1 == 1 and ((side1[j] == e[0] and side2[j] == e[1])
@@ -151,16 +156,18 @@ def genmesh(inFilename, outFilename):
                 # link the added side to this element
                 elem_s3[i] = j
                 right_side_number[j] = 2
+        """
 
         # if we haven't added the side already, add it
-        if (s1 == 1):
-            side1[numsides] = e[0]
-            side2[numsides] = e[1]
+        if (sides[0] == 1):
+            key = hash((e[0], e[1]))
+            sidemap[key] = numsides
+
+            sidelist[numsides] = (e[0], e[1])
 
             # the side number of this side
             left_side_number[numsides] = 0
 
-            # see if this is a boundary side
             # see if this is a boundary side
             for j, s in enumerate(side_list):
                 # side 0 is at this index
@@ -173,15 +180,17 @@ def genmesh(inFilename, outFilename):
                         right_elem[numsides] = -3
 
             # and link the element to this side
-            elem_s1[i] = numsides
+            elem_sides[i][0] = numsides
 
             # make this the left element
             left_elem[numsides] = i
             numsides += 1
 
-        if (s2 == 1):
-            side1[numsides] = e[1]
-            side2[numsides] = e[2]
+        if (sides[1] == 1):
+            key = hash((e[1], e[2]))
+            sidemap[key] = numsides
+
+            sidelist[numsides] = (e[1], e[2])
 
             # the side number of this side
             left_side_number[numsides] = 1
@@ -198,15 +207,17 @@ def genmesh(inFilename, outFilename):
                         right_elem[numsides] = -3
 
             # and link the element to this side
-            elem_s2[i] = numsides
+            elem_sides[i][1] = numsides
 
             # make this the left element
             left_elem[numsides] = i
             numsides += 1
             
-        if (s3 == 1):
-            side1[numsides] = e[2]
-            side2[numsides] = e[0]
+        if (sides[2] == 1):
+            key = hash((e[2], e[0]))
+            sidemap[key] = numsides
+
+            sidelist[numsides] = (e[2], e[0])
 
             # the side number of this side
             left_side_number[numsides] = 2
@@ -223,133 +234,61 @@ def genmesh(inFilename, outFilename):
                         right_elem[numsides] = -3
 
             # and link the element to this side
-            elem_s3[i] = numsides
+            elem_sides[i][2] = numsides
 
             # make this the left element
             left_elem[numsides] = i
             numsides += 1
 
-
-    # sort the mesh so that right element items are first
+    print numsides, "sides..."
+    print "Sorting mesh..."
+    # sort the mesh so that right element = -1 items are first, -2 second, -3 third
     j = 0 # location after the latest right element
-    for i in xrange(0, numsides):
-        if right_elem[i] == -1:
+    for N in [-1, -2, -3]:
+        for i in xrange(0, numsides):
+            if right_elem[i] == N:
 
-            # update index for left_elem[j]
-            if left_side_number[j] == 0:
-                elem_s1[left_elem[j]] = i
-            elif left_side_number[j] == 1:
-                elem_s2[left_elem[j]] = i
-            elif left_side_number[j] == 2:
-                elem_s3[left_elem[j]] = i
+                # update index for left_elem[j]
+                if left_side_number[j] == 0:
+                    elem_sides[left_elem[j]][0] = i
+                elif left_side_number[j] == 1:
+                    elem_sides[left_elem[j]][1] = i
+                elif left_side_number[j] == 2:
+                    elem_sides[left_elem[j]][2] = i
 
-            # update index for right_elem[j]
-            if right_side_number[j] != -1:
-                if right_side_number[j] == 0:
-                    elem_s1[right_elem[j]] = i
-                elif right_side_number[j] == 1:
-                    elem_s2[right_elem[j]] = i
-                elif right_side_number[j] == 2:
-                    elem_s3[right_elem[j]] = i
+                # update index for right_elem[j]
+                if right_side_number[j] != -1:
+                    if right_side_number[j] == 0:
+                        elem_sides[right_elem[j]][0] = i
+                    elif right_side_number[j] == 1:
+                        elem_sides[right_elem[j]][1] = i
+                    elif right_side_number[j] == 2:
+                        elem_sides[right_elem[j]][2] = i
 
-            # update index for left_elem[i]
-            if left_side_number[i] == 0:
-                elem_s1[left_elem[i]] = j
-            if left_side_number[i] == 1:
-                elem_s2[left_elem[i]] = j
-            if left_side_number[i] == 2:
-                elem_s3[left_elem[i]] = j
+                # update index for left_elem[i]
+                if left_side_number[i] == 0:
+                    elem_sides[left_elem[i]][0] = j
+                if left_side_number[i] == 1:
+                    elem_sides[left_elem[i]][1] = j
+                if left_side_number[i] == 2:
+                    elem_sides[left_elem[i]][2] = j
 
-            # swap sides i and j
-            side1[i], side1[j] = side1[j], side1[i]
-            side2[i], side2[j] = side2[j], side2[i]
-            left_elem[i] , left_elem[j]  = left_elem[j] , left_elem[i]
-            right_elem[i], right_elem[j] = right_elem[j], right_elem[i]
-            left_side_number[i] , left_side_number[j]  = left_side_number[j] , left_side_number[i]
-            right_side_number[i], right_side_number[j] = right_side_number[j], right_side_number[i]
+                # swap sides i and j
+                sidelist[i], sidelist[j] = sidelist[j], sidelist[i]
+                left_elem[i] , left_elem[j]  = left_elem[j] , left_elem[i]
+                right_elem[i], right_elem[j] = right_elem[j], right_elem[i]
+                left_side_number[i] , left_side_number[j]  = left_side_number[j] , left_side_number[i]
+                right_side_number[i], right_side_number[j] = right_side_number[j], right_side_number[i]
 
-            # increment j
-            j += 1
+                # increment j
+                j += 1
 
-    for i in xrange(0, numsides):
-        if right_elem[i] == -2:
-
-            # update index for left_elem[j]
-            if left_side_number[j] == 0:
-                elem_s1[left_elem[j]] = i
-            elif left_side_number[j] == 1:
-                elem_s2[left_elem[j]] = i
-            elif left_side_number[j] == 2:
-                elem_s3[left_elem[j]] = i
-
-            # update index for right_elem[j]
-            if right_side_number[j] != -1:
-                if right_side_number[j] == 0:
-                    elem_s1[right_elem[j]] = i
-                elif right_side_number[j] == 1:
-                    elem_s2[right_elem[j]] = i
-                elif right_side_number[j] == 2:
-                    elem_s3[right_elem[j]] = i
-
-            # update index for left_elem[i]
-            if left_side_number[i] == 0:
-                elem_s1[left_elem[i]] = j
-            if left_side_number[i] == 1:
-                elem_s2[left_elem[i]] = j
-            if left_side_number[i] == 2:
-                elem_s3[left_elem[i]] = j
-
-            # swap sides i and j
-            side1[i], side1[j] = side1[j], side1[i]
-            side2[i], side2[j] = side2[j], side2[i]
-            left_elem[i] , left_elem[j]  = left_elem[j] , left_elem[i]
-            right_elem[i], right_elem[j] = right_elem[j], right_elem[i]
-            left_side_number[i] , left_side_number[j]  = left_side_number[j] , left_side_number[i]
-            right_side_number[i], right_side_number[j] = right_side_number[j], right_side_number[i]
-
-            # increment j
-            j += 1
-
-    for i in xrange(0, numsides):
-        if right_elem[i] == -3:
-
-            # update index for left_elem[j]
-            if left_side_number[j] == 0:
-                elem_s1[left_elem[j]] = i
-            elif left_side_number[j] == 1:
-                elem_s2[left_elem[j]] = i
-            elif left_side_number[j] == 2:
-                elem_s3[left_elem[j]] = i
-
-            # update index for right_elem[j]
-            if right_side_number[j] != -1:
-                if right_side_number[j] == 0:
-                    elem_s1[right_elem[j]] = i
-                elif right_side_number[j] == 1:
-                    elem_s2[right_elem[j]] = i
-                elif right_side_number[j] == 2:
-                    elem_s3[right_elem[j]] = i
-
-            # update index for left_elem[i]
-            if left_side_number[i] == 0:
-                elem_s1[left_elem[i]] = j
-            if left_side_number[i] == 1:
-                elem_s2[left_elem[i]] = j
-            if left_side_number[i] == 2:
-                elem_s3[left_elem[i]] = j
-
-            # swap sides i and j
-            side1[i], side1[j] = side1[j], side1[i]
-            side2[i], side2[j] = side2[j], side2[i]
-            left_elem[i] , left_elem[j]  = left_elem[j] , left_elem[i]
-            right_elem[i], right_elem[j] = right_elem[j], right_elem[i]
-            left_side_number[i] , left_side_number[j]  = left_side_number[j] , left_side_number[i]
-            right_side_number[i], right_side_number[j] = right_side_number[j], right_side_number[i]
-
-            # increment j
-            j += 1
+    elem_s1 = [elem_sides[t][0] for t in xrange(0, num_elements)]
+    elem_s2 = [elem_sides[t][1] for t in xrange(0, num_elements)]
+    elem_s3 = [elem_sides[t][2] for t in xrange(0, num_elements)]
 
     # write the mesh to file
+    print "Writing file: %s..." % outFilename
     outFile.write(str(len(elem_list)) + "\n")
     for elem, s1, s2, s3 in zip(elem_list, elem_s1, elem_s2, elem_s3):
         outFile.write("%lf %lf %lf %lf %lf %lf %i %i %i\n" % (vertex_list[elem[0]][0],
@@ -363,14 +302,18 @@ def genmesh(inFilename, outFilename):
     outFile.write(str(numsides) + "\n")
     for i in xrange(0, numsides):
         outFile.write("%lf %lf %lf %lf %i %i %i %i\n" % 
-                                        (vertex_list[side1[i]][0], vertex_list[side1[i]][1],
-                                         vertex_list[side2[i]][0], vertex_list[side2[i]][1],
+                                        (vertex_list[sidelist[i][0]][0], vertex_list[sidelist[i][0]][1],
+                                         vertex_list[sidelist[i][1]][0], vertex_list[sidelist[i][1]][1],
                                          left_elem[i], right_elem[i], 
                                          left_side_number[i], right_side_number[i]))
 
     outFile.close()
 
 if __name__ == "__main__":
-    inFilename  = argv[1] 
-    outFilename = argv[2]
-    genmesh(inFilename, outFilename)
+    try:
+        inFilename  = argv[1] 
+        outFilename = argv[2]
+        genmesh(inFilename, outFilename)
+    except Exception:
+        print "Usage: genmesh [infile] [outfile]"
+

@@ -12,11 +12,6 @@
 
 #include "conserv_headers.cuh"
 
-#define PI 3.14159
-#define GAMMA 1.4
-#define MACH 2.25
-#define N_MAX 10
-
 /***********************
  *
  * DEVICE VARIABLES
@@ -352,7 +347,7 @@ __global__ void init_conditions(double *c, double *J,
                                 int n_quad, int n_p, int num_elem) {
     int idx = blockDim.x * blockIdx.x + threadIdx.x;
     int i, n;
-    double U[N_MAX];
+    double U[4];
 
     if (idx < num_elem) {
         for (i = 0; i < n_p; i++) {
