@@ -244,6 +244,7 @@ void time_integrate_rk4(int n_quad, int n_quad1d, int n_p, int n, int num_elem, 
     double convergence = 1 + TOL;
     int timestep = 0;
 
+    printf("Computing...\n");
     //while (t < endtime && convergence > TOL) {
     while (t < endtime) {
         // compute all the lambda values over each cell
@@ -282,6 +283,8 @@ void time_integrate_rk4(int n_quad, int n_quad1d, int n_p, int n, int num_elem, 
             dt  = 0.7 * min_r / max_l /  (2. * n + 1.);
             t += dt;
         }
+
+        printf("\rt = %lf", t);
 
         //printf(" > (%lf) t = %lf\n", max_l, t);
         // stage 1
@@ -430,15 +433,19 @@ void time_integrate_rk4(int n_quad, int n_quad1d, int n_p, int n, int num_elem, 
             printf(" > TOL         = %.015lf\n", TOL);
         }
 
-        timestep++;
 
         cudaMemcpy(d_c_prev, d_c, num_elem * n_p * 4 * sizeof(double), cudaMemcpyDeviceToDevice);
         */
+
+        timestep++;
+
 
         cudaThreadSynchronize();
         checkCudaError("error after final stage.");
 
     }
+
+    printf("\n");
     free(max_lambda);
     free(c);
 }

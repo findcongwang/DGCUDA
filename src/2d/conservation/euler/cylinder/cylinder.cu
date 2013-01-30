@@ -1,3 +1,5 @@
+#include "../../main.cu"
+
 /* euler_system.cu
  *
  * This file contains the relevant information for making a system to solve
@@ -27,25 +29,35 @@ int local_N = 4;
  * returns the value of the intial condition at point x,y
  */
 __device__ double U0(double x, double y) {
-    //double r = sqrt(x*x + y*y);
-    //return powf(1+1.0125*(1.- 1./(r * r)),2.5);
     return GAMMA;
 }
 __device__ double U1(double x, double y) {
-    //double r = sqrt(x*x + y*y);
-    //return sin(atan(y / x)) * MACH / r * U0(x, y);
     return U0(x, y) * MACH;
 }
 __device__ double U2(double x, double y) {
-    //double r = sqrt(x*x + y*y);
-    //return -cos(atan(y / x)) * MACH / r * U0(x, y);
     return U0(x, y) * 0.;
 }
 __device__ double U3(double x, double y) {
-    //double r = sqrt(x*x + y*y);
-    //double p = (1.0 / GAMMA) * powf(U0(x, y), GAMMA);
-    //return  0.5 * U0(x,y) * (MACH*MACH/(r * r)) + p * (1./(GAMMA - 1.));
     return 0.5 * U0(x ,y) * MACH * MACH + 1./ (GAMMA - 1.0);
+}
+
+/***********************
+*
+* INFLOW CONDITIONS
+*
+************************/
+
+__device__ double U0_inflow(double x, double y) {
+    return U0(x, y);
+}
+__device__ double U1_inflow(double x, double y) {
+    return U1(x, y);
+}
+__device__ double U2_inflow(double x, double y) {
+    return U2(x, y);
+}
+__device__ double U3_inflow(double x, double y) {
+    return U3(x, y);
 }
 
 __device__ void evalU0(double *U, 
@@ -225,10 +237,10 @@ __device__ void inflow_boundary(double *U_left, double *U_right,
     x = v2x * r1_eval + v3x * r2_eval + v1x * (1 - r1_eval - r2_eval);
     y = v2y * r1_eval + v3y * r2_eval + v1y * (1 - r1_eval - r2_eval);
         
-    U_right[0] = U0(x, y);
-    U_right[1] = U1(x, y);
-    U_right[2] = U2(x, y);
-    U_right[3] = U3(x, y);
+    U_right[0] = U0_inflow(x, y);
+    U_right[1] = U1_inflow(x, y);
+    U_right[2] = U2_inflow(x, y);
+    U_right[3] = U3_inflow(x, y);
 }
 
 __device__ void outflow_boundary(double *U_left, double *U_right,
@@ -237,12 +249,35 @@ __device__ void outflow_boundary(double *U_left, double *U_right,
                                 double v3x, double v3y,
                                 double nx, double ny,
                                 int j, int left_side, int n_quad1d) {
-    // just call inflow_boundary from here
-    inflow_boundary(U_left, U_right, v1x, v1y, v2x, v2y, v3x, v3y,
-                    nx, ny, j, left_side, n_quad1d);
+    double r1_eval, r2_eval;
+    double x, y;
+
+    // we need the mapping back to the grid space
+    switch (left_side) {
+        case 0: 
+            r1_eval = 0.5 + 0.5 * r_oned[j];
+            r2_eval = 0.;
+            break;
+        case 1: 
+            r1_eval = (1. - r_oned[j]) / 2.;
+            r2_eval = (1. + r_oned[j]) / 2.;
+            break;
+        case 2: 
+            r1_eval = 0.;
+            r2_eval = 0.5 + 0.5 * r_oned[n_quad1d - 1 - j];
+            break;
+    }
+
+    // x = x2 * r + x3 * s + x1 * (1 - r - s)
+    x = v2x * r1_eval + v3x * r2_eval + v1x * (1 - r1_eval - r2_eval);
+    y = v2y * r1_eval + v3y * r2_eval + v1y * (1 - r1_eval - r2_eval);
+    
+    // just use initial conditions
+    U_right[0] = U0(x, y);
+    U_right[1] = U1(x, y);
+    U_right[2] = U2(x, y);
+    U_right[3] = U3(x, y);
 }
-
-
 
 __device__ void reflecting_boundary(double *U_left, double *U_right,
                          double v1x,      double v1y, 
@@ -254,6 +289,11 @@ __device__ void reflecting_boundary(double *U_left, double *U_right,
     double r1_eval, r2_eval;
     double x, y;
     double Nx, Ny, dot;
+
+    // set rho and E to be the same in the ghost cell
+    U_right[0] = U_left[0];
+    U_right[3] = U_left[3];
+
     // we need the mapping back to the grid space
     switch (left_side) {
         case 0: 
@@ -273,14 +313,10 @@ __device__ void reflecting_boundary(double *U_left, double *U_right,
     // x = x2 * r + x3 * s + x1 * (1 - r - s)
     x = v2x * r1_eval + v3x * r2_eval + v1x * (1 - r1_eval - r2_eval);
     y = v2y * r1_eval + v3y * r2_eval + v1y * (1 - r1_eval - r2_eval);
-
-    x = x - 0.5;
-    y = y - 0.5;
-
-    // set rho and E to be the same in the ghost cell
-    U_right[0] = U_left[0];
-    U_right[3] = U_left[3];
-
+    
+    // our mesh is centered at (0.5, 0.5)
+    x -= 0.5;
+    y -= 0.5;
 
     // taken from algorithm 2 from lilia's code
     dot = sqrtf(x*x + y*y);
@@ -295,6 +331,7 @@ __device__ void reflecting_boundary(double *U_left, double *U_right,
     // set the velocities to reflect
     U_right[1] =  (U_left[1] * Ny - U_left[2] * Nx)*Ny;
     U_right[2] = -(U_left[1] * Ny - U_left[2] * Nx)*Nx;
+
 }
 
 /***********************
@@ -332,4 +369,14 @@ __global__ void eval_global_lambda(double *C, double *lambda,
             lambda[idx] = -s + c;
         }
     }
+}
+
+/***********************
+ *
+ * MAIN FUNCTION
+ *
+ ***********************/
+
+int main(int argc, char *argv[]) {
+    run_dgcuda(argc, argv);
 }
