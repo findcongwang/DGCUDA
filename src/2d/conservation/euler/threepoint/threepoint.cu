@@ -14,17 +14,21 @@
 #define MACH 0.25
 #define THETA 5
 
+int limiter = NO_LIMITER;  // no limiter
+int time_integrator = RK4; // time integrator to use
+int riemann_solver = LLF;  // local lax friedrichs riemann solver
+
 /***********************
  *
  * SHOCK CONDITIONS
  *
  ***********************/
 
-__device__ double U_shock(double *U, double x, double y) {
+__device__ void U_shock(double *U, double x, double y) {
     U[0] = GAMMA;
-    U[1] = MACH * cos(THETA * PI / 180.) * U0_shock(x, y);
-    U[2] = MACH * sin(THETA * PI / 180.) * U0_shock(x, y);
-    U[3] = 0.5 * U0(x ,y) * MACH * MACH + 1./ (GAMMA - 1.0);
+    U[1] = MACH * cos(THETA * PI / 180.) * U[0];
+    U[2] = MACH * sin(THETA * PI / 180.) * U[0];
+    U[3] = 0.5 * U[0] * MACH * MACH + 1./ (GAMMA - 1.0);
 }
 
 /***********************
@@ -37,7 +41,7 @@ __device__ double U_shock(double *U, double x, double y) {
  *
  * returns the value of the intial condition at point x,y
  */
-__device__ double U0(double *U, double x, double y) {
+__device__ void U0(double *U, double x, double y) {
     double angle = atan(x / y);
     if (angle < THETA * PI / 180) {
         U_shock(U, x, y);
@@ -45,7 +49,7 @@ __device__ double U0(double *U, double x, double y) {
         U[0] = 0.5 * GAMMA;
         U[1] = 0.;
         U[2] = 0.;
-        U[3] = 0.5 * U0(x ,y) * MACH * MACH + 1./ (GAMMA - 1.0);
+        U[3] = 0.5 * U[0] * MACH * MACH + 1./ (GAMMA - 1.0);
     }
 }
 
@@ -56,7 +60,7 @@ __device__ double U0(double *U, double x, double y) {
 ************************/
 
 __device__ void U_inflow(double *U, double x, double y, double t) {
-    if (x < MACH * t * cos(THETA * PI / 180.) + sin(THETA * PI / 180.)) {
+    if (x < MACH * t * cos(THETA * PI / 180.) + tan(THETA * PI / 180.)) {
         U_shock(U, x, y);
     } else {
         U0(U, x, y);
@@ -69,7 +73,7 @@ __device__ void U_inflow(double *U, double x, double y, double t) {
 *
 ************************/
 
-__device__ double U_outflow(double *U, double x, double y, double t) {
+__device__ void U_outflow(double *U, double x, double y, double t) {
     U_shock(U, x, y);
 }
 

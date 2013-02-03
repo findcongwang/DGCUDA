@@ -120,34 +120,6 @@ typedef void (*volume_ftn)(double*, double*,
             break;
     }
 }
-/***********************
- * RK4 
- ***********************/
-
-/* tempstorage for RK4
- * 
- * I need to store u + alpha * k_i into some temporary variable called k*.
- */
-__global__ void rk4_tempstorage(double *c, double *kstar, double*k, double alpha, int n_p, int num_elem) {
-    int idx = blockDim.x * blockIdx.x + threadIdx.x;
-
-    if (idx < N * n_p * num_elem) {
-        kstar[idx] = c[idx] + alpha * k[idx];
-    }
-}
-
-/* rk4
- *
- * computes the runge-kutta solution 
- * u_n+1 = u_n + k1/6 + k2/3 + k3/3 + k4/6
- */
-__global__ void rk4(double *c, double *k1, double *k2, double *k3, double *k4, int n_p, int num_elem) {
-    int idx = blockDim.x * blockIdx.x + threadIdx.x;
-
-    if (idx < N * n_p * num_elem) {
-        c[idx] += k1[idx]/6. + k2[idx]/3. + k3[idx]/3. + k4[idx]/6.;
-    }
-}
 
 /* right hand side
  *
@@ -155,7 +127,7 @@ __global__ void rk4(double *c, double *k1, double *k2, double *k3, double *k4, i
  * coefficients for each element
  * THREADS: num_elem
  */
-__global__ void eval_rhs_rk4(double *c, double *quad_rhs, double *left_riemann_rhs, double *right_riemann_rhs, 
+__global__ void eval_rhs(double *c, double *quad_rhs, double *left_riemann_rhs, double *right_riemann_rhs, 
                          int *elem_s1, int *elem_s2, int *elem_s3,
                          int *left_elem, double *J, 
                          double dt, int n_p, int num_sides, int num_elem) {
@@ -215,6 +187,37 @@ __global__ void eval_rhs_rk4(double *c, double *quad_rhs, double *left_riemann_r
     }
 }
 
+/* tempstorage for RK
+ * 
+ * I need to store u + alpha * k_i into some temporary variable called k*.
+ */
+__global__ void rk_tempstorage(double *c, double *kstar, double*k, double alpha, int n_p, int num_elem) {
+    int idx = blockDim.x * blockIdx.x + threadIdx.x;
+
+    if (idx < N * n_p * num_elem) {
+        kstar[idx] = c[idx] + alpha * k[idx];
+    }
+}
+
+
+/***********************
+ * RK4 
+ ***********************/
+
+/* rk4
+ *
+ * computes the runge-kutta solution 
+ * u_n+1 = u_n + k1/6 + k2/3 + k3/3 + k4/6
+ */
+__global__ void rk4(double *c, double *k1, double *k2, double *k3, double *k4, int n_p, int num_elem) {
+    int idx = blockDim.x * blockIdx.x + threadIdx.x;
+
+    if (idx < N * n_p * num_elem) {
+        c[idx] += k1[idx]/6. + k2[idx]/3. + k3[idx]/3. + k4[idx]/6.;
+    }
+}
+
+
 void time_integrate_rk4(int n_quad, int n_quad1d, int n_p, int n, int num_elem, int num_sides,
                         double endtime, double min_r) {
     int n_threads = 128;
@@ -227,7 +230,7 @@ void time_integrate_rk4(int n_quad, int n_quad1d, int n_p, int n, int num_elem, 
 
     int n_blocks_elem  = (num_elem  / n_threads) + ((num_elem  % n_threads) ? 1 : 0);
     int n_blocks_sides = (num_sides / n_threads) + ((num_sides % n_threads) ? 1 : 0);
-    int n_blocks_rk4   = ((4 * n_p * num_elem) / n_threads) + (((4 * n_p * num_elem) % n_threads) ? 1 : 0);
+    int n_blocks_rk    = ((local_N * n_p * num_elem) / n_threads) + (((local_N * n_p * num_elem) % n_threads) ? 1 : 0);
 
     surface_ftn eval_surface_ftn = NULL;
     volume_ftn  eval_volume_ftn  = NULL;
@@ -250,43 +253,23 @@ void time_integrate_rk4(int n_quad, int n_quad1d, int n_p, int n, int num_elem, 
         // compute all the lambda values over each cell
         eval_global_lambda<<<n_blocks_elem, n_threads>>>(d_c, d_lambda, n_quad, n_p, num_elem);
 
-        /*
-        // find the max value of lambda. do it on the gpu if there are at least 256 elements
-        if (num_elem >= 256) {
-            max_reduction<<<n_blocks_reduction, 256>>>(d_lambda, d_reduction, num_elem);
-            cudaThreadSynchronize();
-            checkCudaError("error after max_reduction.");
+        // just grab all the lambdas and sort them since there are so few of them
+        cudaMemcpy(max_lambda, d_lambda, num_elem * sizeof(double), cudaMemcpyDeviceToHost);
+        max_l = max_lambda[0];
+        for (i = 0; i < num_elem; i++) {
+            max_l = (max_lambda[i] > max_l) ? max_lambda[i] : max_l;
+        }
 
-            // each block finds the smallest value, so need to sort through n_blocks_reduction
-            // TODO:
-            max_lambda = (double *) malloc(n_blocks_reduction * sizeof(double));
-            cudaMemcpy(max_lambda, d_reduction, n_blocks_reduction * sizeof(double), cudaMemcpyDeviceToHost);
-            max_l = max_lambda[0];
-            for (i = 0; i < n_blocks_reduction-  1; i++) {
-                max_l = (max_lambda[i] > max_l) ? max_lambda[i] : max_l;
-            }
-            free(max_lambda);
-        } else {
-            */
-            // just grab all the lambdas and sort them since there are so few of them
-            cudaMemcpy(max_lambda, d_lambda, num_elem * sizeof(double), cudaMemcpyDeviceToHost);
-            max_l = max_lambda[0];
-            for (i = 0; i < num_elem; i++) {
-                max_l = (max_lambda[i] > max_l) ? max_lambda[i] : max_l;
-            }
-        //}
-
+        dt  = 0.7 * min_r / max_l /  (2. * n + 1.);
+        // get next timestep
         if (t + dt > endtime) {
             dt = endtime - t;
             t = endtime;
         } else {
-            dt  = 0.7 * min_r / max_l /  (2. * n + 1.);
             t += dt;
         }
-
         printf("\rt = %lf", t);
 
-        //printf(" > (%lf) t = %lf\n", max_l, t);
         // stage 1
         cudaThreadSynchronize();
         checkCudaError("error before stage 1: eval_surface");
@@ -311,7 +294,7 @@ void time_integrate_rk4(int n_quad, int n_quad1d, int n_p, int n, int num_elem, 
 
         checkCudaError("error after stage 1: eval_volume");
 
-        eval_rhs_rk4<<<n_blocks_elem, n_threads>>>(d_k1, d_quad_rhs, d_left_riemann_rhs, d_right_riemann_rhs, 
+        eval_rhs<<<n_blocks_elem, n_threads>>>(d_k1, d_quad_rhs, d_left_riemann_rhs, d_right_riemann_rhs, 
                                               d_elem_s1, d_elem_s2, d_elem_s3, 
                                               d_left_elem, d_J, dt, n_p, num_sides, num_elem);
         cudaThreadSynchronize();
@@ -319,7 +302,7 @@ void time_integrate_rk4(int n_quad, int n_quad1d, int n_p, int n, int num_elem, 
         //limit_c<<<n_blocks_elem, n_threads>>>(d_k1, n_p, num_elem);
         cudaThreadSynchronize();
 
-        rk4_tempstorage<<<n_blocks_rk4, n_threads>>>(d_c, d_kstar, d_k1, 0.5, n_p, num_elem);
+        rk_tempstorage<<<n_blocks_rk, n_threads>>>(d_c, d_kstar, d_k1, 0.5, n_p, num_elem);
         cudaThreadSynchronize();
         checkCudaError("error after stage 1.");
 
@@ -333,7 +316,7 @@ void time_integrate_rk4(int n_quad, int n_quad1d, int n_p, int n, int num_elem, 
                          d_left_elem, d_right_elem,
                          d_left_side_number, d_right_side_number,
                          d_Nx, d_Ny, 
-                         n_quad1d, n_quad, n_p, num_sides, num_elem, t);
+                         n_quad1d, n_quad, n_p, num_sides, num_elem, t + 0.5*dt);
 
         eval_volume_ftn<<<n_blocks_elem, n_threads>>>
                         (d_kstar, d_quad_rhs, 
@@ -341,7 +324,7 @@ void time_integrate_rk4(int n_quad, int n_quad1d, int n_p, int n, int num_elem, 
                          n_quad, n_p, num_elem);
         cudaThreadSynchronize();
 
-        eval_rhs_rk4<<<n_blocks_elem, n_threads>>>(d_k2, d_quad_rhs, d_left_riemann_rhs, d_right_riemann_rhs,
+        eval_rhs<<<n_blocks_elem, n_threads>>>(d_k2, d_quad_rhs, d_left_riemann_rhs, d_right_riemann_rhs,
                                               d_elem_s1, d_elem_s2, d_elem_s3, 
                                               d_left_elem, d_J, dt, n_p, num_sides, num_elem);
         cudaThreadSynchronize();
@@ -349,7 +332,7 @@ void time_integrate_rk4(int n_quad, int n_quad1d, int n_p, int n, int num_elem, 
         //limit_c<<<n_blocks_elem, n_threads>>>(d_k2, n_p, num_elem);
         cudaThreadSynchronize();
 
-        rk4_tempstorage<<<n_blocks_rk4, n_threads>>>(d_c, d_kstar, d_k2, 0.5, n_p, num_elem);
+        rk_tempstorage<<<n_blocks_rk, n_threads>>>(d_c, d_kstar, d_k2, 0.5, n_p, num_elem);
         cudaThreadSynchronize();
 
         checkCudaError("error after stage 2.");
@@ -364,7 +347,7 @@ void time_integrate_rk4(int n_quad, int n_quad1d, int n_p, int n, int num_elem, 
                          d_left_elem, d_right_elem,
                          d_left_side_number, d_right_side_number,
                          d_Nx, d_Ny, 
-                         n_quad1d, n_quad, n_p, num_sides, num_elem, t);
+                         n_quad1d, n_quad, n_p, num_sides, num_elem, t + 0.5*dt);
 
         eval_volume_ftn<<<n_blocks_elem, n_threads>>>
                         (d_kstar, d_quad_rhs, 
@@ -372,14 +355,14 @@ void time_integrate_rk4(int n_quad, int n_quad1d, int n_p, int n, int num_elem, 
                          n_quad, n_p, num_elem);
         cudaThreadSynchronize();
 
-        eval_rhs_rk4<<<n_blocks_elem, n_threads>>>(d_k3, d_quad_rhs, d_left_riemann_rhs, d_right_riemann_rhs, 
+        eval_rhs<<<n_blocks_elem, n_threads>>>(d_k3, d_quad_rhs, d_left_riemann_rhs, d_right_riemann_rhs, 
                                               d_elem_s1, d_elem_s2, d_elem_s3, 
                                               d_left_elem, d_J, dt, n_p, num_sides, num_elem);
         cudaThreadSynchronize();
 
         //limit_c<<<n_blocks_elem, n_threads>>>(d_k3, n_p, num_elem);
 
-        rk4_tempstorage<<<n_blocks_rk4, n_threads>>>(d_c, d_kstar, d_k3, 1.0, n_p, num_elem);
+        rk_tempstorage<<<n_blocks_rk, n_threads>>>(d_c, d_kstar, d_k3, 1.0, n_p, num_elem);
         cudaThreadSynchronize();
 
         checkCudaError("error after stage 3.");
@@ -394,7 +377,7 @@ void time_integrate_rk4(int n_quad, int n_quad1d, int n_p, int n, int num_elem, 
                          d_left_elem, d_right_elem,
                          d_left_side_number, d_right_side_number,
                          d_Nx, d_Ny, 
-                         n_quad1d, n_quad, n_p, num_sides, num_elem, t);
+                         n_quad1d, n_quad, n_p, num_sides, num_elem, t + dt);
 
         eval_volume_ftn<<<n_blocks_elem, n_threads>>>
                         (d_kstar, d_quad_rhs, 
@@ -402,7 +385,7 @@ void time_integrate_rk4(int n_quad, int n_quad1d, int n_p, int n, int num_elem, 
                          n_quad, n_p, num_elem);
         cudaThreadSynchronize();
 
-        eval_rhs_rk4<<<n_blocks_elem, n_threads>>>(d_k4, d_quad_rhs, d_left_riemann_rhs, d_right_riemann_rhs, 
+        eval_rhs<<<n_blocks_elem, n_threads>>>(d_k4, d_quad_rhs, d_left_riemann_rhs, d_right_riemann_rhs, 
                                               d_elem_s1, d_elem_s2, d_elem_s3, 
                                               d_left_elem, d_J, dt, n_p, num_sides, num_elem);
         cudaThreadSynchronize();
@@ -412,7 +395,7 @@ void time_integrate_rk4(int n_quad, int n_quad1d, int n_p, int n, int num_elem, 
         checkCudaError("error after stage 4.");
         
         // final stage
-        rk4<<<n_blocks_rk4, n_threads>>>(d_c, d_k1, d_k2, d_k3, d_k4, n_p, num_elem);
+        rk4<<<n_blocks_rk, n_threads>>>(d_c, d_k1, d_k2, d_k3, d_k4, n_p, num_elem);
         cudaThreadSynchronize();
 
         /*
@@ -449,6 +432,188 @@ void time_integrate_rk4(int n_quad, int n_quad1d, int n_p, int n, int num_elem, 
     free(max_lambda);
     free(c);
 }
+
+
+/***********************
+ * RK2 
+ ***********************/
+
+/* tempstorage for RK2
+ * 
+ * I need to store u + alpha * k_i into some temporary variable called k*.
+ */
+__global__ void rk2_tempstorage(double *c, double *kstar, double*k, double alpha, int n_p, int num_elem) {
+    int idx = blockDim.x * blockIdx.x + threadIdx.x;
+
+    if (idx < N * n_p * num_elem) {
+        kstar[idx] = c[idx] + alpha * k[idx];
+    }
+}
+
+/* rk2
+ *
+ * computes the runge-kutta solution 
+ * u_n+1 = u_n + k1/6 + k2/3 + k3/3 + k4/6
+ */
+__global__ void rk2(double *c, double *k, int n_p, int num_elem) {
+    int idx = blockDim.x * blockIdx.x + threadIdx.x;
+
+    if (idx < N * n_p * num_elem) {
+        c[idx] += k[idx];
+    }
+}
+
+void time_integrate_rk2(int n_quad, int n_quad1d, int n_p, int n, int num_elem, int num_sides,
+                        double endtime, double min_r) {
+    int n_threads = 128;
+    int i;
+    double dt, t;
+
+    double *c = (double *) malloc(num_elem * n_p * 4 * sizeof(double));
+    double *max_lambda = (double *) malloc(num_elem * sizeof(double));
+    double max_l;
+
+    int n_blocks_elem  = (num_elem  / n_threads) + ((num_elem  % n_threads) ? 1 : 0);
+    int n_blocks_sides = (num_sides / n_threads) + ((num_sides % n_threads) ? 1 : 0);
+    int n_blocks_rk    = ((local_N * n_p * num_elem) / n_threads) + (((local_N * n_p * num_elem) % n_threads) ? 1 : 0);
+
+    surface_ftn eval_surface_ftn = NULL;
+    volume_ftn  eval_volume_ftn  = NULL;
+
+    dispatch_functions(eval_surface_ftn, eval_volume_ftn, n);
+
+    if ((eval_surface_ftn == NULL) || 
+        (eval_volume_ftn == NULL)) {
+        printf("ERROR: dispatched kernel functions in rk4 were NULL.\n");
+        exit(0);
+    }
+
+    t = 0;
+    double convergence = 1 + TOL;
+    int timestep = 0;
+
+    printf("Computing...\n");
+    //while (t < endtime && convergence > TOL) {
+    while (t < endtime) {
+        // compute all the lambda values over each cell
+        eval_global_lambda<<<n_blocks_elem, n_threads>>>(d_c, d_lambda, n_quad, n_p, num_elem);
+
+        // just grab all the lambdas and sort them since there are so few of them
+        cudaMemcpy(max_lambda, d_lambda, num_elem * sizeof(double), cudaMemcpyDeviceToHost);
+        max_l = max_lambda[0];
+        for (i = 0; i < num_elem; i++) {
+            max_l = (max_lambda[i] > max_l) ? max_lambda[i] : max_l;
+        }
+
+        dt  = 0.7 * min_r / max_l /  (2. * n + 1.);
+        if (t + dt > endtime) {
+            dt = endtime - t;
+            t = endtime;
+        } else {
+            t += dt;
+        }
+
+        printf("\rt = %lf", t);
+
+        // stage 1
+        cudaThreadSynchronize();
+        checkCudaError("error before stage 1: eval_surface");
+        eval_surface_ftn<<<n_blocks_sides, n_threads>>>
+                        (d_c, d_left_riemann_rhs, d_right_riemann_rhs, 
+                         d_s_length, 
+                         d_V1x, d_V1y,
+                         d_V2x, d_V2y,
+                         d_V3x, d_V3y,
+                         d_left_elem, d_right_elem,
+                         d_left_side_number, d_right_side_number,
+                         d_Nx, d_Ny, 
+                         n_quad1d, n_quad, n_p, num_sides, num_elem, t);
+
+        checkCudaError("error after stage 1: eval_surface");
+
+        eval_volume_ftn<<<n_blocks_elem, n_threads>>>
+                        (d_c, d_quad_rhs, 
+                         d_xr, d_yr, d_xs, d_ys,
+                         n_quad, n_p, num_elem);
+        cudaThreadSynchronize();
+
+        checkCudaError("error after stage 1: eval_volume");
+
+        eval_rhs<<<n_blocks_elem, n_threads>>>(d_k1, d_quad_rhs, d_left_riemann_rhs, d_right_riemann_rhs, 
+                                              d_elem_s1, d_elem_s2, d_elem_s3, 
+                                              d_left_elem, d_J, dt, n_p, num_sides, num_elem);
+        cudaThreadSynchronize();
+
+        rk_tempstorage<<<n_blocks_rk, n_threads>>>(d_c, d_kstar, d_k1, 0.5, n_p, num_elem);
+        cudaThreadSynchronize();
+        checkCudaError("error after stage 1.");
+
+        // stage 2
+        eval_surface_ftn<<<n_blocks_sides, n_threads>>>
+                        (d_kstar, d_left_riemann_rhs, d_right_riemann_rhs, 
+                         d_s_length, 
+                         d_V1x, d_V1y,
+                         d_V2x, d_V2y,
+                         d_V3x, d_V3y,
+                         d_left_elem, d_right_elem,
+                         d_left_side_number, d_right_side_number,
+                         d_Nx, d_Ny, 
+                         n_quad1d, n_quad, n_p, num_sides, num_elem, t + 0.5*dt);
+
+        eval_volume_ftn<<<n_blocks_elem, n_threads>>>
+                        (d_kstar, d_quad_rhs, 
+                         d_xr, d_yr, d_xs, d_ys,
+                         n_quad, n_p, num_elem);
+        cudaThreadSynchronize();
+
+        eval_rhs<<<n_blocks_elem, n_threads>>>(d_k1, d_quad_rhs, d_left_riemann_rhs, d_right_riemann_rhs,
+                                              d_elem_s1, d_elem_s2, d_elem_s3, 
+                                              d_left_elem, d_J, dt, n_p, num_sides, num_elem);
+        cudaThreadSynchronize();
+
+        //limit_c<<<n_blocks_elem, n_threads>>>(d_k2, n_p, num_elem);
+        checkCudaError("error after stage 2.");
+
+        // final stage
+        rk2<<<n_blocks_rk, n_threads>>>(d_c, d_k1, n_p, num_elem);
+        cudaThreadSynchronize();
+
+        /*
+        if (timestep > 0.) {
+            check_convergence<<<n_blocks_rk4, n_threads>>>(d_c_prev, d_c, num_elem, n_p);
+            cudaMemcpy(c, d_c_prev, num_elem * n_p * 4 * sizeof(double), cudaMemcpyDeviceToHost);
+
+            convergence = c[0];
+            for (i = 1; i < num_elem * n_p * 4; i++) {
+                if (c[i] > convergence) {
+                    convergence = c[i];
+                }
+            }
+
+            convergence = sqrtf(convergence);
+
+            printf(" > convergence = %.015lf\n", convergence);
+            printf(" > TOL         = %.015lf\n", TOL);
+        }
+
+
+        cudaMemcpy(d_c_prev, d_c, num_elem * n_p * 4 * sizeof(double), cudaMemcpyDeviceToDevice);
+        */
+
+        timestep++;
+
+
+        cudaThreadSynchronize();
+        checkCudaError("error after final stage.");
+
+    }
+
+    printf("\n");
+    free(max_lambda);
+    free(c);
+}
+
+
 
 /***********************
  * FORWARD EULER

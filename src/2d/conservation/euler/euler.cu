@@ -13,11 +13,11 @@
 
 __device__ double get_GAMMA();
 
-__device__ double U0(double, double);
+__device__ void U0(double *, double, double);
 
-__device__ double U_inflow(double, double, double);
+__device__ void U_inflow(double *, double, double, double);
 
-__device__ double U_outflow(double, double, double);
+__device__ void U_outflow(double *, double, double, double);
 
 /* size of the system */
 int local_N = 4;
@@ -237,7 +237,7 @@ __device__ void outflow_boundary(double *U_left, double *U_right,
     y = v2y * r1_eval + v3y * r2_eval + v1y * (1 - r1_eval - r2_eval);
     
     // just use initial conditions
-    U_outflow(U, x, y, t);
+    U_outflow(U_right, x, y, t);
 }
 
 /***********************

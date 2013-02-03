@@ -9,6 +9,19 @@
 #include "../basis.cu"
 
 extern int local_N;
+extern int limiter;
+extern int time_integrator;
+
+// limiter optoins
+#define NO_LIMITER 0
+#define LIMITER 1
+
+// time integration options
+#define RK4 1
+#define RK2 2
+
+// riemann solver options
+#define LLF 1
 
 /* 2dadvec_euler.cu
  * 
@@ -69,7 +82,6 @@ void set_quadrature(int n,
     *r1_local = (double *)  malloc(*n_quad * sizeof(double));
     *r2_local = (double *)  malloc(*n_quad * sizeof(double));
     *w_local  = (double *) malloc(*n_quad * sizeof(double));
-    printf("n_quad = %i\n", *n_quad);
 
     *s_r = (double *) malloc(*n_quad1d * sizeof(double));
     *oned_w_local = (double *) malloc(*n_quad1d * sizeof(double));
@@ -188,10 +200,34 @@ void init_gpu(int num_elem, int num_sides, int n_p,
               double *sides_x2, double *sides_y2,
               int *elem_s1, int *elem_s2, int *elem_s3,
               int *left_elem, int *right_elem) {
-    int reduction_size = (num_elem  / 256) + ((num_elem  % 256) ? 1 : 0);
+    //int reduction_size = (num_elem  / 256) + ((num_elem  % 256) ? 1 : 0);
 
     checkCudaError("error before init.");
     cudaDeviceReset();
+
+    double total_memory = num_elem*22*sizeof(double)  +
+                   num_elem*6*sizeof(int)      +
+                   num_sides*11*sizeof(double) + 
+                   num_sides*3*sizeof(int)     +
+                   local_N*num_elem*n_p*3*sizeof(double) +
+                   local_N*num_sides*n_p*2*sizeof(double);
+
+    switch (time_integrator) {
+        case RK4: total_memory += 5*local_N*num_elem*n_p*sizeof(double);
+                  break;
+        case RK2: total_memory += 3*local_N*num_elem*n_p*sizeof(double);
+                  break;
+    }
+
+    if (total_memory < 1e3) {
+        printf("Total memory required: %lf B\n", total_memory);
+    } else if (total_memory >= 1e3 && total_memory < 1e6) {
+        printf("Total memory required: %lf KB\n", total_memory * 1e-3);
+    } else if (total_memory >= 1e6 && total_memory < 1e9) {
+        printf("Total memory required: %lf MB\n", total_memory * 1e-6);
+    } else {
+        printf("Total memory required: %lf GB\n", total_memory * 1e-9);
+    }
 
     cudaMalloc((void **) &d_c,        local_N * num_elem * n_p * sizeof(double));
     cudaMalloc((void **) &d_c_prev,   local_N * num_elem * n_p * sizeof(double));
@@ -199,15 +235,27 @@ void init_gpu(int num_elem, int num_sides, int n_p,
     cudaMalloc((void **) &d_left_riemann_rhs,  local_N * num_sides * n_p * sizeof(double));
     cudaMalloc((void **) &d_right_riemann_rhs, local_N * num_sides * n_p * sizeof(double));
 
-    cudaMalloc((void **) &d_kstar, local_N * num_elem * n_p * sizeof(double));
-    cudaMalloc((void **) &d_k1, local_N * num_elem * n_p * sizeof(double));
-    cudaMalloc((void **) &d_k2, local_N * num_elem * n_p * sizeof(double));
-    cudaMalloc((void **) &d_k3, local_N * num_elem * n_p * sizeof(double));
-    cudaMalloc((void **) &d_k4, local_N * num_elem * n_p * sizeof(double));
+    switch (time_integrator) {
+        case RK4: 
+            cudaMalloc((void **) &d_kstar, local_N * num_elem * n_p * sizeof(double));
+            cudaMalloc((void **) &d_k1,    local_N * num_elem * n_p * sizeof(double));
+            cudaMalloc((void **) &d_k2,    local_N * num_elem * n_p * sizeof(double));
+            cudaMalloc((void **) &d_k3,    local_N * num_elem * n_p * sizeof(double));
+            cudaMalloc((void **) &d_k4,    local_N * num_elem * n_p * sizeof(double));
+            break;
+        case RK2: 
+            cudaMalloc((void **) &d_kstar, local_N * num_elem * n_p * sizeof(double));
+            cudaMalloc((void **) &d_k1,    local_N * num_elem * n_p * sizeof(double));
+            break;
+        default:
+            printf("Error selecting time integrator.\n");
+            exit(0);
+    }
+
+
 
     cudaMalloc((void **) &d_J        , num_elem * sizeof(double));
     cudaMalloc((void **) &d_lambda   , num_elem * sizeof(double));
-    cudaMalloc((void **) &d_reduction, reduction_size * sizeof(double));
     cudaMalloc((void **) &d_s_length , num_sides * sizeof(double));
 
     cudaMalloc((void **) &d_s_V1x, num_sides * sizeof(double));
@@ -245,6 +293,7 @@ void init_gpu(int num_elem, int num_sides, int n_p,
 
     cudaMalloc((void **) &d_right_elem, num_sides * sizeof(int));
     cudaMalloc((void **) &d_left_elem , num_sides * sizeof(int));
+    checkCudaError("error after gpu malloc");
 
     // copy over data
     cudaMemcpy(d_s_V1x, sides_x1, num_sides * sizeof(double), cudaMemcpyHostToDevice);
@@ -258,7 +307,7 @@ void init_gpu(int num_elem, int num_sides, int n_p,
     cudaMemcpy(d_elem_s1, elem_s1, num_elem * sizeof(int), cudaMemcpyHostToDevice);
     cudaMemcpy(d_elem_s2, elem_s2, num_elem * sizeof(int), cudaMemcpyHostToDevice);
     cudaMemcpy(d_elem_s3, elem_s3, num_elem * sizeof(int), cudaMemcpyHostToDevice);
-    checkCudaError("error inside gpu init.");
+    checkCudaError("error after gpu copy");
 
     cudaMemcpy(d_V1x, V1x, num_elem * sizeof(double), cudaMemcpyHostToDevice);
     cudaMemcpy(d_V1y, V1y, num_elem * sizeof(double), cudaMemcpyHostToDevice);
@@ -273,26 +322,29 @@ void init_gpu(int num_elem, int num_sides, int n_p,
 
 void free_gpu() {
     cudaFree(d_c);
-    cudaFree(d_c_prev);
+    //cudaFree(d_c_prev);
     cudaFree(d_quad_rhs);
     cudaFree(d_left_riemann_rhs);
     cudaFree(d_right_riemann_rhs);
 
-    cudaFree(d_kstar);
-    cudaFree(d_k1);
-    cudaFree(d_k2);
-    cudaFree(d_k3);
-    cudaFree(d_k4);
+    switch (time_integrator) {
+        case RK4: 
+            cudaFree(d_kstar);
+            cudaFree(d_k1);
+            cudaFree(d_k2);
+            cudaFree(d_k3);
+            cudaFree(d_k4);
+            break;
+        case RK2:
+            cudaFree(d_kstar);
+            cudaFree(d_k1);
+            break;
+     }
 
     cudaFree(d_J);
     cudaFree(d_lambda);
     cudaFree(d_reduction);
     cudaFree(d_s_length);
-
-    cudaFree(d_s_V1x);
-    cudaFree(d_s_V2x);
-    cudaFree(d_s_V1y);
-    cudaFree(d_s_V2y);
 
     cudaFree(d_elem_s1);
     cudaFree(d_elem_s2);

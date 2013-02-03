@@ -2,6 +2,8 @@
 #include "conserv.cu"
 
 extern int local_N;
+extern int limiter;
+extern int time_integrator;
 
 int run_dgcuda(int argc, char *argv[]) {
     checkCudaError("error before start.");
@@ -29,20 +31,8 @@ int run_dgcuda(int argc, char *argv[]) {
     char out_filename[100];
     char *mesh_filename;
 
-    double *Uu1, *Uu2, *Uu3;
     double *Uv1, *Uv2, *Uv3;
     double *error;
-
-    //void (*eval_rho_ftn)(double*, double*, double*, double*, int, int) = NULL;
-    //void (*eval_u_ftn)(double*, double*, double*, double*, int, int) = NULL;
-    //void (*eval_v_ftn)(double*, double*, double*, double*, int, int) = NULL;
-    //void (*eval_E_ftn)(double*, double*, double*, double*, int, int) = NULL;
-    //void (*eval_error_ftn)(double*, 
-                       //double*, double*,
-                       //double*, double*,
-                       //double*, double*,
-                       //double*, double*, double*, 
-                       //int, int, double, int) = NULL;
 
     // get input 
     endtime = -1;
@@ -82,14 +72,13 @@ int run_dgcuda(int argc, char *argv[]) {
              elem_s1, elem_s2, elem_s3,
              left_elem, right_elem);
 
-    // let the GPU know the size of the system
+    // set constant data
     set_N(local_N);
 
     checkCudaError("error after gpu init.");
     n_threads          = 256;
     n_blocks_elem      = (num_elem  / n_threads) + ((num_elem  % n_threads) ? 1 : 0);
     n_blocks_sides     = (num_sides / n_threads) + ((num_sides % n_threads) ? 1 : 0);
-    //n_blocks_reduction = (num_elem  / 256) + ((num_elem  % 256) ? 1 : 0);
 
     // find the min inscribed circle
     preval_inscribed_circles<<<n_blocks_elem, n_threads>>>
@@ -140,6 +129,13 @@ int run_dgcuda(int argc, char *argv[]) {
                                                   d_V3x, d_V3y, 
                                                   d_left_side_number, num_sides); 
     cudaThreadSynchronize();
+
+    // no longer need sides
+    cudaFree(d_s_V1x);
+    cudaFree(d_s_V2x);
+    cudaFree(d_s_V1y);
+    cudaFree(d_s_V2y);
+
     preval_normals_direction<<<n_blocks_sides, n_threads>>>(d_Nx, d_Ny, 
                                                   d_V1x, d_V1y, 
                                                   d_V2x, d_V2y, 
@@ -167,16 +163,6 @@ int run_dgcuda(int argc, char *argv[]) {
                     n_quad, n_p, num_elem);
     checkCudaError("error after initial conditions.");
 
-    /*
-    double *C = (double *) malloc(4 * num_elem * n_p * sizeof(double));
-    cudaMemcpy(C, d_c, 4*num_elem*n_p *sizeof(double), cudaMemcpyDeviceToHost);
-    for (i = 0; i < 4*num_elem*n_p; i++) {
-        printf("%lf\n", C[i]);
-    }
-    free(C);
-    */
-
-    printf("Computing...\n");
     printf(" ? %i degree polynomial interpolation (n_p = %i)\n", n, n_p);
     printf(" ? %i precomputed basis points\n", n_quad * n_p);
     printf(" ? %i elements\n", num_elem);
@@ -186,13 +172,19 @@ int run_dgcuda(int argc, char *argv[]) {
 
     checkCudaError("error before time integration.");
 
-    time_integrate_rk4(n_quad, n_quad1d, n_p, n, num_elem, num_sides, endtime, min_r);
+    switch (time_integrator) {
+        case RK4:
+            time_integrate_rk4(n_quad, n_quad1d, n_p, n, num_elem, num_sides, endtime, min_r);
+            break;
+        case RK2:
+            time_integrate_rk2(n_quad, n_quad1d, n_p, n, num_elem, num_sides, endtime, min_r);
+            break;
+        default:
+            printf("Error: no time integrator selected.\n");
+            exit(0);
+    }
 
     // evaluate at the vertex points and copy over data
-    Uu1 = (double *) malloc(num_elem * sizeof(double));
-    Uu2 = (double *) malloc(num_elem * sizeof(double));
-    Uu3 = (double *) malloc(num_elem * sizeof(double));
-
     Uv1 = (double *) malloc(num_elem * sizeof(double));
     Uv2 = (double *) malloc(num_elem * sizeof(double));
     Uv3 = (double *) malloc(num_elem * sizeof(double));
@@ -204,6 +196,7 @@ int run_dgcuda(int argc, char *argv[]) {
         cudaMemcpy(Uv2, d_Uv2, num_elem * sizeof(double), cudaMemcpyDeviceToHost);
         cudaMemcpy(Uv3, d_Uv3, num_elem * sizeof(double), cudaMemcpyDeviceToHost);
         sprintf(out_filename, "output/U%d.msh", n);
+        printf("Writing to %s...\n", out_filename);
         out_file  = fopen(out_filename , "w");
         fprintf(out_file, "View \"U%i \" {\n", n);
         for (i = 0; i < num_elem; i++) {
@@ -253,9 +246,6 @@ int run_dgcuda(int argc, char *argv[]) {
     // free variables
     free_gpu();
     
-    free(Uu1);
-    free(Uu2);
-    free(Uu3);
     free(Uv1);
     free(Uv2);
     free(Uv3);

@@ -521,25 +521,103 @@ __global__ void preval_partials(double *V1x, double *V1y,
 
 /* limiter
  *
- * the standard limiter for coefficient values
+ * the standard limiter for p = 1 
+ *
+ * THREADS: N * num_sides
  */
-__global__ void limit_c(double *c_inner, 
-                   double *c_s1, double *c_s2, double *c_s3,
-                   int n_p, int num_elem) {
+__device__ void limit_c(double *C_left, double *C_right,
+                        double *Phi, int left_side,
+                        int n_p, int num_elem, int num_sides,
+                        int n_quad1d, int n, int idx) {
 
-    //int idx = blockIdx.x * blockDim.x + threadIdx.x;
+    int i, j;
+    double U_left;
+    double U_right;
+    double phi, min_phi;
+    double diff, lim, umin, umax;
 
-    // get cell averages
-    //avg_inner = c_inner[0];
-    //avg_s1 = c_s1[0];
-    //avg_s2 = c_s2[0];
-    //avg_s3 = c_s3[0];
+   // right cell average 
+    U_right = C_right[0] * basis[0]; 
 
-    // determine if this is a "troubled" cell
+    // find min_phi
+    min_phi = 1;
 
-    //for (i = n_p; i > 1; i++) {
-        //c_prev = c[i - 1];
-    //}
+    umin = 0;
+    umax = 0;
+
+    // at each integration point
+    for (j = 0; j < n_quad1d; j++) {
+
+        // evaluate U_left
+        U_left  = 0.;
+        for (i = 0; i < n_p; i++) {
+            U_left += C_left[i] * basis_side[left_side * n_p * n_quad1d + i * n_quad1d + j];
+        }
+        
+        // evaluate phi for this edge
+        diff = U_left - U_right;
+
+        if (diff > 0) {
+            lim = umax / (U_left - U_right);
+            phi = (1 < lim) ? 1 : lim;
+        } else if (diff < 0) {
+            lim = umin / (U_left - U_right);
+            phi = (1 < lim) ? 1 : lim;
+        } else {
+            phi = 1;
+        }
+
+        // find min_phi
+        min_phi = (phi < min_phi) ? phi : min_phi;
+    }
+
+    // store min_phi
+    Phi[n*num_sides + idx] = min_phi;
+}
+
+/* limit_c
+ *
+ * uses the values from Phi to limit the coefficients if need be.
+ *
+ * THREADS: num_elem * N
+ */
+__global__ void limit_c(double *C, 
+                        double *Phi,
+                        int *elem_s1, int *elem_s2, int *elem_s3,
+                        int n_p, int num_elem, int num_sides, 
+                        int n_quad1d, int idx) {
+    int s1_idx, s2_idx, s3_idx;
+    double phi1, phi2, phi3;
+    /* NOTE: idx is NOT the index of the element.
+       each element has N equations, so we make N * num_elem threads. */
+
+    /* accessing idx / N WILL introduce bank conflicts, 
+       but only 4 of them at most */
+
+    // get the indicies for the three phis for this element
+    s1_idx = elem_s1[idx / N];
+    s2_idx = elem_s2[idx / N];
+    s3_idx = elem_s3[idx / N];
+
+    // get three phi values from each side
+    phi1 = Phi[idx / N * num_sides + s1_idx]; 
+    phi2 = Phi[idx / N * num_sides + s2_idx]; 
+    phi3 = Phi[idx / N * num_sides + s3_idx]; 
+
+    /* limit the coefficients */
+    // phi1 min
+    if (phi1 <= phi2 && phi1 <= phi3) {
+        C[idx * n_p + 1 * num_elem + idx] *= phi1;
+        C[idx * n_p + 2 * num_elem + idx] *= phi1;
+    // phi2 min
+    } else if (phi2 <= phi1 && phi2 <= phi3) {
+        C[idx * n_p + 1 * num_elem + idx] *= phi2;
+        C[idx * n_p + 2 * num_elem + idx] *= phi2;
+    // phi3 min
+    } else {
+        C[idx * n_p + 1 * num_elem + idx] *= phi3;
+        C[idx * n_p + 2 * num_elem + idx] *= phi3;
+    }
 }
 
 /* left & right evaluator
@@ -589,14 +667,14 @@ __global__ void limit_c(double *c_inner,
             outflow_boundary(U_left, U_right,
                 v1x, v1y, v2x, v2y, v3x, v3y, 
                 nx, ny,
-                j, left_side, n_quad1d);
+                j, left_side, n_quad1d, t);
             break;
         // inflow 
         case -3: 
             inflow_boundary(U_left, U_right,
                 v1x, v1y, v2x, v2y, v3x, v3y, 
                 nx, ny, 
-                j, left_side, n_quad1d);
+                j, left_side, n_quad1d, t);
             break;
         // not a boundary
         default:
@@ -799,7 +877,7 @@ __global__ void eval_error(double *C, double *error,
                 U += C[num_elem * n_p * n + i * num_elem + idx] * basis[i * n_quad + j];
             }
 
-            e += w[j] * powf((U0(x, y) - U),2); 
+            //e += w[j] * powf((U0(x, y) - U),2); 
             // evaluate exact conditions at the integration point
             //if (n == 0) {
                 //e += w[j] * powf((U0(x, y) - U),2); 
