@@ -27,11 +27,13 @@ int riemann_solver = LLF;  // local lax friedrichs riemann solver
 
 __device__ void U0(double *U, double x, double y) {
     double r = sqrt(x*x + y*y);
-    double p = (1.0 / GAMMA) * powf(U0(x, y), GAMMA);
 
     U[0] = powf(1+1.0125*(1.- 1./(r * r)),2.5);
     U[1] = U[0] * sin(atan(y / x)) * MACH / r;
     U[2] = U[0] * -cos(atan(y / x)) * MACH / r;
+
+    double p = (1.0 / GAMMA) * powf(U[0], GAMMA);
+
     U[3] = 0.5 * U[0] * (MACH*MACH/(r * r)) + p * (1./(GAMMA - 1.));
 }
 
@@ -57,7 +59,7 @@ __device__ void U_outflow(double *U, double x, double y, double t) {
 
 /***********************
 *
-* OUTFLOW CONDITIONS
+* REFLECTING CONDITIONS
 *
 ************************/
 
